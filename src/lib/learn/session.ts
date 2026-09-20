@@ -9,10 +9,12 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
+  answerAttempts,
   cardRubrics,
   flashcards,
   studyProgress,
   studySessions,
+  type AnswerAttempt,
   type StudySession,
 } from "@/db/schema";
 import { buildQueue, type QueueFilter } from "@/lib/study/queue";
@@ -29,6 +31,7 @@ import {
   type Step,
 } from "./ladder";
 import { applyLearnResult } from "./progress";
+import type { TypedGrade } from "./typed";
 
 /** Concepts per round, bounded by PRD §5's 5–8. */
 export const MIN_ROUND_SIZE = 5;
@@ -209,7 +212,12 @@ export function submitOutcome(
   }
 
   const state = applyOutcome(session.roundState, step, outcome);
-  save(db, sessionId, { roundState: state });
+  // One step of undo, so an overridden grade can rejoin the ladder where it
+  // would have been rather than re-asking something the student knew.
+  save(db, sessionId, {
+    roundState: state,
+    previousRoundState: session.roundState,
+  });
 
   return {
     state,
@@ -287,4 +295,136 @@ export function loadLearnCards(db: Db, examId: string) {
     .where(and(eq(flashcards.examId, examId), eq(flashcards.excluded, false)))
     .orderBy(flashcards.topic, flashcards.createdAt)
     .all();
+}
+
+/* ----------------------------------------------------------------- Attempts */
+
+export type AttemptInput = {
+  flashcardId: string;
+  sessionId?: string | null;
+  stage?: string | null;
+  answer: string;
+  grade: TypedGrade;
+  countsTowardMastery: boolean;
+  guessed?: boolean;
+  /** A sub-point drill: recorded and graded, never scored. */
+  practice?: boolean;
+};
+
+export function recordAttempt(db: Db, input: AttemptInput): AnswerAttempt {
+  return db
+    .insert(answerAttempts)
+    .values({
+      flashcardId: input.flashcardId,
+      sessionId: input.sessionId ?? null,
+      stage: input.stage ?? null,
+      answer: input.answer,
+      verdict: input.grade.verdict,
+      errorType: input.grade.errorType,
+      metPoints: input.grade.metPoints,
+      missedPoints: input.grade.missedPoints,
+      countsTowardMastery: input.countsTowardMastery,
+      guessed: input.guessed ?? false,
+      practice: input.practice ?? false,
+      provisional: input.grade.provisional,
+    })
+    .returning()
+    .get();
+}
+
+export type OverrideResult = {
+  attempt: AnswerAttempt;
+  ladderRevised: boolean;
+};
+
+/**
+ * "My answer was correct" (PRD §7).
+ *
+ * The student overrules the grade, so everything that grade caused is undone:
+ * the lapse it recorded, the credit it withheld, and the rung it sent them
+ * back to. A practice drill has no score to overturn, and an attempt can only
+ * be overridden once.
+ */
+export function overrideAttempt(
+  db: Db,
+  attemptId: string,
+): OverrideResult | undefined {
+  const attempt = db
+    .select()
+    .from(answerAttempts)
+    .where(eq(answerAttempts.id, attemptId))
+    .get();
+
+  if (!attempt || attempt.overridden || attempt.practice) return undefined;
+
+  const updated = db
+    .update(answerAttempts)
+    .set({ overridden: true, verdict: "correct" })
+    .where(eq(answerAttempts.id, attemptId))
+    .returning()
+    .get();
+
+  const current = db
+    .select()
+    .from(studyProgress)
+    .where(eq(studyProgress.flashcardId, attempt.flashcardId))
+    .get();
+
+  const update = applyLearnResult(current, {
+    stage: (attempt.stage as Step["stage"]) ?? "typed_immediate",
+    correct: true,
+    countsTowardMastery: attempt.countsTowardMastery,
+    // Everything the rubric asked for is credited: the student is asserting
+    // their answer said it.
+    metPoints: [...attempt.metPoints, ...attempt.missedPoints],
+  });
+
+  // The lapse the overturned grade recorded goes with it.
+  const lapses = Math.max((current?.lapses ?? 0) - 1, 0);
+
+  if (current) {
+    db.update(studyProgress)
+      .set({ ...update, lapses })
+      .where(eq(studyProgress.flashcardId, attempt.flashcardId))
+      .run();
+  } else {
+    db.insert(studyProgress)
+      .values({ flashcardId: attempt.flashcardId, ...update, lapses })
+      .run();
+  }
+
+  if (!attempt.sessionId) return { attempt: updated, ladderRevised: false };
+
+  const session = db
+    .select()
+    .from(studySessions)
+    .where(eq(studySessions.id, attempt.sessionId))
+    .get();
+
+  const previous = session?.previousRoundState;
+  if (!previous) return { attempt: updated, ladderRevised: false };
+
+  const step = nextStep(previous);
+  if (!step || step.cardId !== attempt.flashcardId) {
+    return { attempt: updated, ladderRevised: false };
+  }
+
+  save(db, attempt.sessionId, {
+    roundState: applyOutcome(previous, step, { correct: true }),
+    previousRoundState: null,
+  });
+
+  return { attempt: updated, ladderRevised: true };
+}
+
+/** The points a card's most recent scored attempt missed, for drilling. */
+export function lastMissedPoints(db: Db, flashcardId: string): string[] {
+  const attempt = db
+    .select()
+    .from(answerAttempts)
+    .where(eq(answerAttempts.flashcardId, flashcardId))
+    .orderBy(desc(answerAttempts.createdAt))
+    .get();
+
+  return attempt?.practice ? [] : (attempt?.missedPoints ?? []);
 }

@@ -425,6 +425,14 @@ export const studySessions = sqliteTable(
     roundIndex: integer("round_index").notNull().default(0),
     /** The Learn engine's state for the round in progress; null in flashcards mode. */
     roundState: text("round_state", { mode: "json" }).$type<RoundState>(),
+    /**
+     * The round state as it was before the last answer, so a student who
+     * overrides a grade ("my answer was correct") resumes the ladder as if
+     * they had been right, instead of being re-asked something they knew.
+     */
+    previousRoundState: text("previous_round_state", {
+      mode: "json",
+    }).$type<RoundState>(),
     missedCount: integer("missed_count").notNull().default(0),
     difficultCount: integer("difficult_count").notNull().default(0),
     easyCount: integer("easy_count").notNull().default(0),
@@ -436,6 +444,64 @@ export const studySessions = sqliteTable(
     completedAt: text("completed_at"),
   },
   (t) => [index("study_sessions_exam_idx").on(t.examId)],
+);
+
+/* ----------------------------------------------------------- AnswerAttempt */
+
+export const verdicts = ["correct", "partial", "incorrect"] as const;
+
+/**
+ * Every typed answer, kept verbatim (PRD §7, §13).
+ *
+ * Grades are a judgement about the student's words, so the words have to
+ * survive the judgement: it is what makes "my answer was correct" reviewable,
+ * what feeds practising the specific sub-points that were missed, and what a
+ * grading regression is measured against.
+ */
+export const answerAttempts = sqliteTable(
+  "answer_attempts",
+  {
+    id: id(),
+    flashcardId: text("flashcard_id")
+      .notNull()
+      .references(() => flashcards.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").references(() => studySessions.id, {
+      onDelete: "set null",
+    }),
+    /** Which rung of the Learn ladder produced it; null outside Learn. */
+    stage: text("stage"),
+    answer: text("answer").notNull(),
+    verdict: text("verdict", { enum: verdicts }).notNull(),
+    errorType: text("error_type"),
+    metPoints: text("met_points", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    missedPoints: text("missed_points", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** Whether this attempt was eligible to prove recall when it was made. */
+    countsTowardMastery: integer("counts_toward_mastery", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    guessed: integer("guessed", { mode: "boolean" }).notNull().default(false),
+    /** A sub-point drill: graded and recorded, but never scored. */
+    practice: integer("practice", { mode: "boolean" }).notNull().default(false),
+    /** The student overruled the grade. */
+    overridden: integer("overridden", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    /** Graded by the keyword stand-in rather than the semantic grader. */
+    provisional: integer("provisional", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("answer_attempts_card_idx").on(t.flashcardId),
+    index("answer_attempts_session_idx").on(t.sessionId),
+  ],
 );
 
 /* --------------------------------------------------------------- Relations */
@@ -492,6 +558,7 @@ export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
   rubric: one(cardRubrics),
   progress: one(studyProgress),
   coverage: many(coverageMappings),
+  attempts: many(answerAttempts),
 }));
 
 export const cardRubricsRelations = relations(cardRubrics, ({ one }) => ({
@@ -547,8 +614,23 @@ export const contentConflictsRelations = relations(
   }),
 );
 
-export const studySessionsRelations = relations(studySessions, ({ one }) => ({
-  exam: one(exams, { fields: [studySessions.examId], references: [exams.id] }),
+export const studySessionsRelations = relations(
+  studySessions,
+  ({ one, many }) => ({
+    exam: one(exams, { fields: [studySessions.examId], references: [exams.id] }),
+    attempts: many(answerAttempts),
+  }),
+);
+
+export const answerAttemptsRelations = relations(answerAttempts, ({ one }) => ({
+  flashcard: one(flashcards, {
+    fields: [answerAttempts.flashcardId],
+    references: [flashcards.id],
+  }),
+  session: one(studySessions, {
+    fields: [answerAttempts.sessionId],
+    references: [studySessions.id],
+  }),
 }));
 
 export const studyProgressRelations = relations(studyProgress, ({ one }) => ({
@@ -572,6 +654,7 @@ export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
 export type ContentConflict = typeof contentConflicts.$inferSelect;
 export type StudyProgress = typeof studyProgress.$inferSelect;
 export type StudySession = typeof studySessions.$inferSelect;
+export type AnswerAttempt = typeof answerAttempts.$inferSelect;
 
 export type NewCourse = typeof courses.$inferInsert;
 export type NewExam = typeof exams.$inferInsert;

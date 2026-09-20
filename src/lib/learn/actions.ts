@@ -12,19 +12,21 @@ import {
   finishLearnSession,
   loadLearn,
   loadLearnCards,
+  overrideAttempt,
+  recordAttempt,
   skipToRecall,
   startLearnSession,
   startNextRound,
   submitOutcome,
 } from "./session";
-import { createKeywordGrader, type TypedGrade } from "./typed";
+import type { TypedGrade } from "./typed";
+import { getTypedGrader } from "@/lib/grade";
 
 /**
- * Typed answers are graded here, not in the browser: the client never receives
- * the answer it is being asked for. Phase 6 swaps this for the semantic
- * grader without touching any caller.
+ * Typed answers are graded on the server: the client never receives the answer
+ * it is being asked for, and correctness is never the browser's to decide.
  */
-const grader = createKeywordGrader();
+const grader = getTypedGrader();
 
 export type LearnPrompt = {
   cardId: string;
@@ -57,6 +59,8 @@ export type Reveal = {
   debrief?: string;
   grade?: TypedGrade;
   correct: boolean;
+  /** Set for typed answers, so the student can overrule the grade (PRD §7). */
+  attemptId?: string;
 };
 
 /** Stable per card and attempt, so re-rendering does not reshuffle the options. */
@@ -81,6 +85,7 @@ function cardRow(cardId: string) {
       fullExplanation: flashcards.fullExplanation,
       sourceExcerpt: flashcards.sourceExcerpt,
       essentialPoints: cardRubrics.essentialPoints,
+      optionalPoints: cardRubrics.optionalPoints,
       misconceptions: cardRubrics.commonMisconceptions,
     })
     .from(flashcards)
@@ -223,10 +228,16 @@ export async function answerTyped(
   const card = cardRow(cardId);
   if (!card) return null;
 
+  const view = loadLearn(db, sessionId);
+  const step = view?.step;
+  if (!step || step.cardId !== cardId) return null;
+
   const grade = await grader.grade({
     question: card.question,
     expected: card.directAnswer,
     essentialPoints: card.essentialPoints ?? [],
+    optionalPoints: card.optionalPoints ?? [],
+    misconceptions: card.misconceptions ?? [],
     answer,
   });
 
@@ -239,16 +250,71 @@ export async function answerTyped(
   });
   if (!submitted) return null;
 
+  const attempt = recordAttempt(db, {
+    flashcardId: cardId,
+    sessionId,
+    stage: step.stage,
+    answer,
+    grade,
+    countsTowardMastery: step.countsTowardMastery,
+    guessed,
+  });
+
   return {
     reveal: {
       correct,
       grade,
+      attemptId: attempt.id,
       directAnswer: card.directAnswer,
       fullExplanation: card.fullExplanation,
       sourceExcerpt: card.sourceExcerpt,
     },
     status: status(sessionId),
   };
+}
+
+/**
+ * "My answer was correct" (PRD §7): the student overrules the grader, and the
+ * ladder rejoins where it would have been had the answer been marked right.
+ */
+export async function overrideAnswer(sessionId: string, attemptId: string) {
+  const result = overrideAttempt(db, attemptId);
+  return { applied: Boolean(result), status: status(sessionId) };
+}
+
+/**
+ * Drill only the points an answer missed (PRD §7).
+ *
+ * Graded and recorded but never scored: it is deliberate practice on a known
+ * gap, not a fresh claim to know the whole concept.
+ */
+export async function practiceMissedPoints(
+  cardId: string,
+  answer: string,
+  focusPoints: string[],
+): Promise<TypedGrade | null> {
+  const card = cardRow(cardId);
+  if (!card || focusPoints.length === 0) return null;
+
+  const grade = await grader.grade({
+    question: card.question,
+    expected: card.directAnswer,
+    essentialPoints: card.essentialPoints ?? [],
+    optionalPoints: card.optionalPoints ?? [],
+    misconceptions: card.misconceptions ?? [],
+    focusPoints,
+    answer,
+  });
+
+  recordAttempt(db, {
+    flashcardId: cardId,
+    answer,
+    grade,
+    countsTowardMastery: false,
+    practice: true,
+  });
+
+  return grade;
 }
 
 export async function skipToTypedRecall(sessionId: string, cardId: string) {

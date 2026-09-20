@@ -29,6 +29,13 @@
       "when": 1789932394052,
       "tag": "0003_spooky_the_order",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1789933688004,
+      "tag": "0004_bitter_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

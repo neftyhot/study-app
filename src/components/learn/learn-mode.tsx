@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CircleCheck, CircleX, Dices, Loader2 } from "lucide-react";
+import { CircleCheck, CircleX, Dices, Loader2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -30,11 +30,22 @@ import {
   beginLearnSession,
   endLearnSession,
   nextLearnRound,
+  overrideAnswer,
+  practiceMissedPoints,
   skipToTypedRecall,
   type LearnStatus,
   type Reveal,
 } from "@/lib/learn/actions";
+import type { TypedGrade } from "@/lib/learn/typed";
+import { saveCardEdit } from "@/lib/study/actions";
 import type { StudyScope } from "@/lib/study/queue";
+
+const ERROR_LABELS: Record<string, string> = {
+  directionality: "direction reversed",
+  mechanism: "wrong mechanism or site",
+  incomplete: "incomplete",
+  unrelated: "does not answer the question",
+};
 
 const STAGE_LABELS: Record<string, string> = {
   mcq: "Recognize",
@@ -192,7 +203,23 @@ export function LearnMode({
 
         <CardContent className="space-y-4">
           {reveal ? (
-            <RevealPanel reveal={reveal} onContinue={continueAfterReveal} />
+            <RevealPanel
+              reveal={reveal}
+              cardId={prompt.cardId}
+              question={prompt.question}
+              onContinue={continueAfterReveal}
+              onOverride={async () => {
+                if (!sessionId || !reveal.attemptId) return;
+                const result = await overrideAnswer(sessionId, reveal.attemptId);
+                if (!result.applied) {
+                  toast.error("That grade cannot be overridden");
+                  return;
+                }
+                setStatus(result.status);
+                toast.success("Marked correct — the ladder moved on with you");
+                continueAfterReveal();
+              }}
+            />
           ) : prompt.options ? (
             <div className="space-y-2">
               {prompt.options.map((option) => (
@@ -276,14 +303,26 @@ export function LearnMode({
 
 function RevealPanel({
   reveal,
+  cardId,
+  question,
   onContinue,
+  onOverride,
 }: {
   reveal: Reveal;
+  cardId: string;
+  question: string;
   onContinue: () => void;
+  onOverride: () => Promise<void>;
 }) {
+  const [drilling, setDrilling] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const missed = reveal.grade?.missedPoints ?? [];
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
         {reveal.correct ? (
           <>
             <CircleCheck className="size-4" />
@@ -295,7 +334,16 @@ function RevealPanel({
             Not quite
           </>
         )}
+        {reveal.grade && reveal.grade.errorType !== "none" ? (
+          <Badge variant="outline">
+            {ERROR_LABELS[reveal.grade.errorType] ?? reveal.grade.errorType}
+          </Badge>
+        ) : null}
       </div>
+
+      {reveal.grade?.feedback ? (
+        <p className="text-sm">{reveal.grade.feedback}</p>
+      ) : null}
 
       {reveal.debrief ? (
         <p className="text-muted-foreground text-sm">{reveal.debrief}</p>
@@ -304,24 +352,22 @@ function RevealPanel({
       {reveal.grade ? (
         <div className="space-y-2 text-sm">
           {reveal.grade.metPoints.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium">You got</p>
-              <ul className="text-muted-foreground list-disc pl-5 text-xs">
-                {reveal.grade.metPoints.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </div>
+            <PointList title="You got" points={reveal.grade.metPoints} />
           ) : null}
-          {reveal.grade.missedPoints.length > 0 ? (
-            <div>
-              <p className="text-xs font-medium">Still missing</p>
-              <ul className="text-muted-foreground list-disc pl-5 text-xs">
-                {reveal.grade.missedPoints.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </div>
+          {missed.length > 0 ? (
+            <PointList title="Still missing" points={missed} />
+          ) : null}
+          {reveal.grade.creditedOptional.length > 0 ? (
+            <PointList
+              title="Extra credit"
+              points={reveal.grade.creditedOptional}
+            />
+          ) : null}
+          {reveal.grade.provisional ? (
+            <p className="text-muted-foreground text-xs">
+              Matched on keywords, not meaning — set GEMINI_API_KEY for
+              semantic grading.
+            </p>
           ) : null}
         </div>
       ) : null}
@@ -340,7 +386,191 @@ function RevealPanel({
         ) : null}
       </div>
 
-      <Button onClick={onContinue}>Continue</Button>
+      {drilling ? (
+        <PracticeDrill
+          cardId={cardId}
+          points={missed}
+          onClose={() => setDrilling(false)}
+        />
+      ) : null}
+
+      {editing ? (
+        <InlineCardEditor
+          cardId={cardId}
+          question={question}
+          directAnswer={reveal.directAnswer}
+          onClose={() => setEditing(false)}
+        />
+      ) : null}
+
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={onContinue}>Continue</Button>
+
+        {reveal.attemptId && !reveal.correct ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onOverride();
+              setBusy(false);
+            }}
+          >
+            My answer was correct
+          </Button>
+        ) : null}
+
+        {missed.length > 0 && !drilling ? (
+          <Button variant="ghost" onClick={() => setDrilling(true)}>
+            Practice what I missed
+          </Button>
+        ) : null}
+
+        {!editing ? (
+          <Button variant="ghost" onClick={() => setEditing(true)}>
+            <Pencil className="size-3.5" />
+            Edit card
+          </Button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PointList({ title, points }: { title: string; points: string[] }) {
+  return (
+    <div>
+      <p className="text-xs font-medium">{title}</p>
+      <ul className="text-muted-foreground list-disc pl-5 text-xs">
+        {points.map((point) => (
+          <li key={point}>{point}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * Drilling the specific sub-points an answer missed (PRD §7).
+ *
+ * Graded, never scored: it is practice on a known gap, so it cannot promote
+ * the concept — the ladder still has to be climbed.
+ */
+function PracticeDrill({
+  cardId,
+  points,
+  onClose,
+}: {
+  cardId: string;
+  points: string[];
+  onClose: () => void;
+}) {
+  const [answer, setAnswer] = useState("");
+  const [result, setResult] = useState<TypedGrade | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <p className="text-xs font-medium">
+        Just this part — no score either way:
+      </p>
+      <ul className="text-muted-foreground list-disc pl-5 text-xs">
+        {points.map((point) => (
+          <li key={point}>{point}</li>
+        ))}
+      </ul>
+
+      <Textarea
+        value={answer}
+        onChange={(event) => setAnswer(event.target.value)}
+        className="min-h-16 text-sm"
+        placeholder="Try just the missing piece…"
+        disabled={busy}
+      />
+
+      {result ? (
+        <p className="text-sm">
+          {result.verdict === "correct" ? "That's it." : result.feedback}
+        </p>
+      ) : null}
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={busy || answer.trim().length === 0}
+          onClick={async () => {
+            setBusy(true);
+            setResult(await practiceMissedPoints(cardId, answer, points));
+            setBusy(false);
+          }}
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          Check
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Fixing a badly worded card without leaving the session (PRD §7). */
+function InlineCardEditor({
+  cardId,
+  question,
+  directAnswer,
+  onClose,
+}: {
+  cardId: string;
+  question: string;
+  directAnswer: string;
+  onClose: () => void;
+}) {
+  const [editedQuestion, setEditedQuestion] = useState(question);
+  const [editedAnswer, setEditedAnswer] = useState(directAnswer);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <Label className="text-xs">Question</Label>
+      <Textarea
+        value={editedQuestion}
+        onChange={(event) => setEditedQuestion(event.target.value)}
+        className="min-h-16 text-sm"
+      />
+      <Label className="text-xs">Answer</Label>
+      <Textarea
+        value={editedAnswer}
+        onChange={(event) => setEditedAnswer(event.target.value)}
+        className="min-h-16 text-sm"
+      />
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          disabled={
+            busy ||
+            editedQuestion.trim().length === 0 ||
+            editedAnswer.trim().length === 0
+          }
+          onClick={async () => {
+            setBusy(true);
+            await saveCardEdit(cardId, {
+              question: editedQuestion,
+              directAnswer: editedAnswer,
+              fullExplanation: "",
+            });
+            setBusy(false);
+            onClose();
+            toast.success("Card updated");
+          }}
+        >
+          Save
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

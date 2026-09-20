@@ -15,7 +15,8 @@
     "typecheck": "tsc --noEmit",
     "fixtures": "tsx scripts/build-fixtures.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "grade:check": "tsx --env-file=.env.local scripts/grade-check.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",

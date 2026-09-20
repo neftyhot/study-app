@@ -322,17 +322,64 @@ say which kind of attempt the student is making rather than quietly scoring it.
 - A round's concepts come from the deck in order, so a round is usually one topic. Shuffling is
   offered but defaults off.
 
-## Phase 6 — Semantic Typed-Answer Grading (PRD §7, MVP #6)
+## Phase 6 — Semantic Typed-Answer Grading (PRD §7, MVP #6) ✅
 
-- [ ] Grading endpoint: strict JSON verdict against `CardRubric`
-- [ ] Synonym, abbreviation, and minor-typo tolerance
-- [ ] Strict gates: directionality (increase vs. decrease) and mechanism (synthesis vs. secretion) errors fail
-- [ ] Per-criterion rubric feedback: points met vs. missed, mandatory vs. peripheral
-- [ ] "My answer was correct" student override + inline Q/A edit
-- [ ] Practice-missed-sub-points flow
-- [ ] Grading regression fixtures (known answer/verdict pairs)
+**Goal:** Judge what the student meant, and refuse to be charmed by an answer that is
+confidently backwards.
 
----
+- [x] Grading through the `LlmProvider` boundary with a strict JSON verdict against `CardRubric`
+- [x] Synonym, alternative-name, abbreviation, and typo tolerance
+- [x] Strict gates: a directionality or mechanism error forces `incorrect` **in code**
+- [x] Per-criterion feedback: points met, points missed, optional points credited separately
+- [x] "My answer was correct" override — undoes the lapse, the withheld credit, and the rung
+- [x] Inline question/answer editing from inside a Learn session
+- [x] Practice-missed-sub-points drill: graded, recorded, never scored
+- [x] Every typed answer stored verbatim (`answer_attempts`)
+- [x] Regression fixtures: `npm run grade:check` against the live grader
+- [x] Tests: 154 passing (25 new)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 154 tests, and **12/12 live fixtures**
+including the hard ones: a reversed direction wrapped in otherwise-perfect detail (V2 receptors,
+aquaporins, collecting duct) still fails as `directionality`; "hold onto more water" passes as a
+paraphrase; "reabsorbtion in the colecting duct" passes as typos; cortex-vs-medulla fails as
+`mechanism`. End to end against the real database: a wrong answer recorded a lapse and no
+promotion, then the override credited the point, cleared the lapse, and put the concept back on
+`typed_interleaved` with `tier: immediate_recall` — exactly where it would have been.
+
+**The gates are enforced in code, not asked for in the prompt:**
+`reconcileGrade` takes the model's report and derives the verdict itself. A directionality or
+mechanism error forces `incorrect` whatever verdict came back; a "correct" with a missing point
+is downgraded; a hedged "partial" with every point met is upgraded; a point the grader never
+mentioned counts as missed; a point reported both met and missed counts as missed; and a point
+token that was never in the rubric is dropped. Thirteen tests drive those contradictions
+directly, because the model producing a self-consistent answer is not something to rely on.
+
+**Design notes:**
+- Rubric points are handed over as tokens (P1, O2) and resolved back, the same discipline used
+  for slide citations and coverage — a grader cannot credit a criterion that was never supplied.
+- The card's `commonMisconceptions` go into the prompt as known wrong answers. Phase 2 wrote
+  them as the plausible traps for that fact, which makes them the sharpest directionality
+  detector available.
+- An empty answer is graded without spending a call.
+- Typed answers are graded server-side; the browser never receives the answer it is being asked
+  for, and never decides correctness.
+- The student's words are stored with every verdict. A grade is a judgement about what they
+  wrote, so what they wrote has to outlive it — that is what makes an override reviewable and
+  a drill possible.
+- Without an API key the keyword stand-in still runs the session, but marks its grades
+  `provisional` and the UI says the answer was matched on keywords rather than understood.
+- Fixtures run on demand, not in `vitest`: they measure the model's judgement, need a key, and
+  cost money. The code paths they exercise are covered with stubs.
+
+**Known limits (deliberate, deferred):**
+- Overriding revises one step of the ladder. An override on an answer from several steps back
+  credits the card but leaves the ladder where it is.
+- The drill grades the missed points but cannot re-open the rung the student already failed;
+  the ladder still has to be climbed normally.
+- Distinguishing mandatory from peripheral is rubric-driven, so a card whose Phase 2 rubric put
+  a detail in the wrong list grades accordingly. Editing the card is the fix; editing the rubric
+  is not exposed yet.
+- Grading is one model call per typed answer, inline. Batching and caching are Phase 8.
 
 ## Phase 7 — Multi-Day Spaced Review (PRD §6, MVP #7)
 
