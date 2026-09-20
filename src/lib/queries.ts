@@ -1,8 +1,9 @@
 import "server-only";
 
-import { and, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
+import { todayIso } from "@/lib/srs";
 import {
   contentConflicts,
   courses,
@@ -12,6 +13,7 @@ import {
   sourceFiles,
   sourceSlides,
   studyGuideObjectives,
+  studyProgress,
   studySessions,
 } from "@/db/schema";
 
@@ -206,4 +208,38 @@ export async function listTopics(examId: string) {
   return rows
     .map((row) => row.topic)
     .filter((topic): topic is string => Boolean(topic));
+}
+
+/** Cards whose review is due today or overdue (PRD §6). */
+export async function countDueCards(examId: string, today = todayIso()) {
+  const [row] = await db
+    .select({ n: count() })
+    .from(studyProgress)
+    .innerJoin(flashcards, eq(flashcards.id, studyProgress.flashcardId))
+    .where(
+      and(
+        eq(flashcards.examId, examId),
+        eq(flashcards.excluded, false),
+        isNotNull(studyProgress.nextReviewDue),
+        lte(studyProgress.nextReviewDue, today),
+      ),
+    );
+
+  return row?.n ?? 0;
+}
+
+/** Cards per mastery tier, for the overview (PRD §6 tracking axes). */
+export async function getMasteryBreakdown(examId: string) {
+  const rows = await db
+    .select({ state: studyProgress.state })
+    .from(studyProgress)
+    .innerJoin(flashcards, eq(flashcards.id, studyProgress.flashcardId))
+    .where(eq(flashcards.examId, examId));
+
+  return {
+    studied: rows.length,
+    recognition: rows.filter((r) => r.state === "recognition").length,
+    immediateRecall: rows.filter((r) => r.state === "immediate_recall").length,
+    retained: rows.filter((r) => r.state === "retained").length,
+  };
 }

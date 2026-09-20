@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { StudyDeck, type StudyCardView } from "@/components/study/study-deck";
 import {
+  countDueCards,
   getExam,
   getOpenStudySession,
   listStudyCards,
@@ -16,10 +17,11 @@ export default async function StudyPage(
   const exam = await getExam(examId);
   if (!exam) notFound();
 
-  const [cards, topics, session] = await Promise.all([
+  const [cards, topics, session, dueCount] = await Promise.all([
     listStudyCards(examId),
     listTopics(examId),
     getOpenStudySession(examId),
+    countDueCards(examId),
   ]);
 
   // Mapped here rather than passed whole: the client needs a flat view, and
@@ -64,6 +66,7 @@ export default async function StudyPage(
         examId={examId}
         cards={views}
         topics={topics}
+        dueCount={dueCount}
         session={
           session
             ? {

@@ -247,6 +247,7 @@ export async function answerTyped(
     correct,
     guessed,
     metPoints: grade.metPoints,
+    verdict: grade.verdict,
   });
   if (!submitted) return null;
 

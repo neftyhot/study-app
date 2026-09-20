@@ -15,6 +15,8 @@ import {
   type StudySession,
 } from "@/db/schema";
 
+import { qualityForGrade, scheduleFor } from "@/lib/srs";
+
 import { applyFlashcardGrade, type Grade } from "./grade";
 import { buildQueue, type QueueCard, type QueueFilter } from "./queue";
 
@@ -26,6 +28,7 @@ export function loadQueueCards(db: Db, examId: string): QueueCard[] {
       starred: flashcards.starred,
       excluded: flashcards.excluded,
       lastGrade: studyProgress.lastGrade,
+      nextReviewDue: studyProgress.nextReviewDue,
     })
     .from(flashcards)
     .leftJoin(studyProgress, eq(studyProgress.flashcardId, flashcards.id))
@@ -135,14 +138,23 @@ export function gradeCard(
 
   const update = applyFlashcardGrade(current, grade);
 
+  // A flip-card grade is given after the answer was revealed, so it moves the
+  // review schedule but can never establish multi-day retention (PRD §6).
+  const schedule = scheduleFor(current, update.state, {
+    quality: qualityForGrade(grade),
+    retentionEligible: false,
+  });
+
+  const row = { ...update, ...schedule };
+
   if (current) {
     db.update(studyProgress)
-      .set(update)
+      .set(row)
       .where(eq(studyProgress.flashcardId, cardId))
       .run();
   } else {
     db.insert(studyProgress)
-      .values({ flashcardId: cardId, ...update })
+      .values({ flashcardId: cardId, ...row })
       .run();
   }
 

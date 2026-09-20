@@ -381,17 +381,52 @@ directly, because the model producing a self-consistent answer is not something 
   is not exposed yet.
 - Grading is one model call per typed answer, inline. Batching and caching are Phase 8.
 
-## Phase 7 — Multi-Day Spaced Review (PRD §6, MVP #7)
+## Phase 7 — Multi-Day Spaced Review (PRD §6, MVP #7) ✅
 
-- [ ] SRS scheduler: adaptive intervals writing `interval_days` / `next_review_due` / `last_grade`
-- [ ] State machine: unstudied → recognition → immediate_recall → retained
-- [ ] Separate tracking axes: Recognition, Immediate Recall, Multi-Day Retention
-- [ ] Invalid-signal discard: guesses, hints, post-reveal typing excluded from independent-recall credit
-- [ ] Granular partial credit: missing one sub-point does not reset mastered sub-points
-- [ ] Missed-day handling without deck reset
-- [ ] Due-today queue on the exam dashboard
+**Goal:** Decide when a card comes back, and refuse to be fooled about what has been proven.
 
----
+- [x] SRS scheduler writing `interval_days` / `next_review_due` / `ease` / `last_credited_at`
+- [x] Separate tracking axes: recognition, immediate recall, multi-day retention
+- [x] Invalid-signal discard: a guess schedules nothing; post-reveal and MCQ signals move the
+      schedule but never prove retention
+- [x] Granular partial credit: a partial answer holds its spacing instead of counting as a miss
+- [x] Missed-day handling: overdue is simply due, and a miss halves an interval, never resets it
+- [x] Due-today count and "Review now" on the exam overview; a "Due for review" scope in both
+      flashcard and Learn pickers, longest-overdue first
+- [x] Tests: 180 passing (26 new)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 180 tests. Against the real database:
+`easy` scheduled +1 day at ease 2.35 with retention untouched; `difficult` held the interval and
+dropped ease to 2.15 without recording a lapse; `missed` recorded a lapse, dropped ease to 2.10,
+and left the tier alone; two cards backdated six days came back at the head of the due queue.
+
+**Two ideas carry the design:**
+1. **Not every correct answer is evidence.** A guess schedules nothing at all. An answer typed
+   straight after seeing it, or recognized among four options, moves the schedule but can never
+   establish multi-day retention — only unaided recall, on a later day than the last credited
+   one, does that. This is what Phases 4–6 were deferring when they refused to write intervals.
+2. **Being behind is not being wrong.** A card answered late is scheduled from its interval, not
+   from how overdue it was. A miss halves the interval and costs at most one tier. Missing a
+   week of study must not cost a student the deck they built.
+
+**Design notes:**
+- `next_review_due` is a DATE, not a timestamp, so "due today" survives time zones and a late
+  card is simply due rather than late by some number of hours.
+- `addDays` works at local noon, so a daylight-saving change cannot move a due date by a day.
+  A test pins the 2026-03-08 transition.
+- A second success on the same day changes nothing: grinding one card in one sitting must not
+  push it out a month. `last_credited_at` is what makes that checkable, and it is separate from
+  `last_reviewed_at`, which also moves for practice drills.
+- The scheduler owns intervals, ease, retention, and due dates. The graders own tiers and lapse
+  counts, which they already record against the answer that caused them.
+- Ease is clamped to 1.3–3.0; twenty consecutive misses leave a card on a 1-day interval, still
+  scheduled rather than wiped.
+
+**Known limits (deliberate, deferred):**
+- One global schedule per card. Exam-date-aware prioritisation and daily load balancing are
+  PRD §12, deferred past the MVP.
+- No "bury siblings" or daily review cap; a large backlog arrives all at once.
+- The review queue is the ordinary study queue with a `due` scope rather than its own mode.
 
 ## Phase 8 — MVP Hardening
 

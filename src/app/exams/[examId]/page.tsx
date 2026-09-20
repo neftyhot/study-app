@@ -13,9 +13,11 @@ import {
 import { GeneratePanel } from "@/components/generate/generate-panel";
 import {
   countAnswerSlides,
+  countDueCards,
   getCoverageStats,
   getExam,
   getExamStats,
+  getMasteryBreakdown,
 } from "@/lib/queries";
 
 export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
@@ -24,10 +26,12 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
 
   if (!exam) notFound();
 
-  const [stats, slideCount, coverage] = await Promise.all([
+  const [stats, slideCount, coverage, dueCount, mastery] = await Promise.all([
     getExamStats(examId),
     countAnswerSlides(examId),
     getCoverageStats(examId),
+    countDueCards(examId),
+    getMasteryBreakdown(examId),
   ]);
 
   return (
@@ -85,6 +89,33 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
           </Button>
         ) : null}
       </div>
+
+      {stats.flashcards > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {dueCount > 0
+                ? `${dueCount} card${dueCount === 1 ? "" : "s"} due for review`
+                : "Nothing due today"}
+            </CardTitle>
+            <CardDescription>
+              {mastery.studied === 0
+                ? "Reviews are scheduled as you study — nothing has been graded yet."
+                : `${mastery.retained} retained across days · ${mastery.immediateRecall} recalled unaided · ${mastery.recognition} recognized · ${stats.flashcards - mastery.studied} unstudied.`}
+            </CardDescription>
+          </CardHeader>
+          {dueCount > 0 ? (
+            <CardContent className="flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href={`/exams/${examId}/study`}>Review now</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href={`/exams/${examId}/learn`}>Review in Learn</Link>
+              </Button>
+            </CardContent>
+          ) : null}
+        </Card>
+      ) : null}
 
       <GeneratePanel
         examId={examId}

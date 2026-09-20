@@ -58,12 +58,14 @@ export function LearnMode({
   examId,
   topics,
   cardCount,
+  dueCount,
   initialSessionId,
   initialStatus,
 }: {
   examId: string;
   topics: string[];
   cardCount: number;
+  dueCount: number;
   initialSessionId: string | null;
   initialStatus: LearnStatus | null;
 }) {
@@ -79,6 +81,7 @@ export function LearnMode({
       <LearnPicker
         topics={topics}
         cardCount={cardCount}
+        dueCount={dueCount}
         onStart={async (filter) => {
           const started = await beginLearnSession(examId, filter);
           setSessionId(started.sessionId);
@@ -616,10 +619,12 @@ function RoundSummary({
 function LearnPicker({
   topics,
   cardCount,
+  dueCount,
   onStart,
 }: {
   topics: string[];
   cardCount: number;
+  dueCount: number;
   onStart: (filter: {
     scope: StudyScope;
     topic: string | null;
@@ -655,6 +660,9 @@ function LearnPicker({
               <SelectItem value="all">Whole deck</SelectItem>
               <SelectItem value="topic" disabled={topics.length === 0}>
                 By topic
+              </SelectItem>
+              <SelectItem value="due" disabled={dueCount === 0}>
+                Due for review{dueCount > 0 ? ` (${dueCount})` : ""}
               </SelectItem>
               <SelectItem value="starred">Starred</SelectItem>
               <SelectItem value="missed">Missed</SelectItem>

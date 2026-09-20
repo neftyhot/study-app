@@ -94,11 +94,13 @@ export function StudyDeck({
   examId,
   cards,
   topics,
+  dueCount,
   session: initialSession,
 }: {
   examId: string;
   cards: StudyCardView[];
   topics: string[];
+  dueCount: number;
   session: SessionView | null;
 }) {
   const [deck, setDeck] = useState(cards);
@@ -250,7 +252,14 @@ export function StudyDeck({
   }
 
   if (!session) {
-    return <DeckPicker cards={deck} topics={topics} onStart={start} />;
+    return (
+      <DeckPicker
+        cards={deck}
+        topics={topics}
+        dueCount={dueCount}
+        onStart={start}
+      />
+    );
   }
 
   if (!current) {
@@ -585,10 +594,12 @@ function CardEditor({
 function DeckPicker({
   cards,
   topics,
+  dueCount,
   onStart,
 }: {
   cards: StudyCardView[];
   topics: string[];
+  dueCount: number;
   onStart: (filter: {
     scope: StudyScope;
     topic: string | null;
@@ -606,6 +617,7 @@ function DeckPicker({
     topic: testable.filter((card) => card.topic === topic).length,
     starred: testable.filter((card) => card.starred).length,
     missed: testable.filter((card) => card.lastGrade === "missed").length,
+    due: dueCount,
   }[scope];
 
   return (
@@ -630,6 +642,9 @@ function DeckPicker({
               <SelectItem value="all">Whole deck</SelectItem>
               <SelectItem value="topic" disabled={topics.length === 0}>
                 By topic
+              </SelectItem>
+              <SelectItem value="due" disabled={dueCount === 0}>
+                Due for review{dueCount > 0 ? ` (${dueCount})` : ""}
               </SelectItem>
               <SelectItem value="starred">Starred</SelectItem>
               <SelectItem value="missed">Missed</SelectItem>

@@ -37,6 +37,7 @@ function queueCard(overrides: Partial<QueueCard> = {}): QueueCard {
     starred: false,
     excluded: false,
     lastGrade: null,
+    nextReviewDue: null,
     ...overrides,
   };
 }
@@ -139,9 +140,9 @@ describe("applyFlashcardGrade", () => {
     expect(update.recognitionCount).toBe(4);
   });
 
-  it("never returns a scheduling field", () => {
+  it("leaves scheduling to the scheduler", () => {
     const update = applyFlashcardGrade(undefined, "easy");
-    // PRD §6: post-reveal signals must not drive recall intervals.
+    // Grading decides the tier; `@/lib/srs` decides when the card returns.
     expect(update).not.toHaveProperty("intervalDays");
     expect(update).not.toHaveProperty("nextReviewDue");
   });
@@ -209,8 +210,14 @@ describe("sessions", () => {
     expect(progress[0].lastGrade).toBe("missed");
     expect(progress[0].recognitionCount).toBe(1);
     expect(progress[0].lapses).toBe(1);
-    expect(progress[0].intervalDays).toBe(0);
-    expect(progress[0].nextReviewDue).toBeNull();
+
+    // Phase 7: a flip-card grade schedules the next review...
+    expect(progress[0].intervalDays).toBeGreaterThan(0);
+    expect(progress[0].nextReviewDue).not.toBeNull();
+    // ...but is given after the answer was revealed, so it can never prove
+    // multi-day retention (PRD §6).
+    expect(progress[0].retentionCount).toBe(0);
+    expect(progress[0].state).toBe("recognition");
 
     const updated = db
       .select()

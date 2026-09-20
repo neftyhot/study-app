@@ -5,7 +5,7 @@ import { LearnMode } from "@/components/learn/learn-mode";
 import { db } from "@/db";
 import { getLearnStatus, learnTopics } from "@/lib/learn/actions";
 import { openLearnSession } from "@/lib/learn/session";
-import { getExam, getExamStats } from "@/lib/queries";
+import { countDueCards, getExam, getExamStats } from "@/lib/queries";
 
 export default async function LearnPage(
   props: PageProps<"/exams/[examId]/learn">,
@@ -15,10 +15,11 @@ export default async function LearnPage(
   if (!exam) notFound();
 
   const session = openLearnSession(db, examId);
-  const [topics, stats, status] = await Promise.all([
+  const [topics, stats, status, dueCount] = await Promise.all([
     learnTopics(examId),
     getExamStats(examId),
     session ? getLearnStatus(session.id) : Promise.resolve(null),
+    countDueCards(examId),
   ]);
 
   return (
@@ -37,6 +38,7 @@ export default async function LearnPage(
         examId={examId}
         topics={topics}
         cardCount={stats.flashcards}
+        dueCount={dueCount}
         initialSessionId={session?.id ?? null}
         initialStatus={status}
       />

@@ -14,6 +14,7 @@ import type { RoundState } from "@/lib/learn/ladder";
 import {
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -365,8 +366,20 @@ export const studyProgress = sqliteTable(
       .references(() => flashcards.id, { onDelete: "cascade" }),
     state: text("state", { enum: progressStates }).notNull().default("unstudied"),
     intervalDays: integer("interval_days").notNull().default(0),
-    /** ISO date-time; null means "not yet scheduled". */
+    /**
+     * Due DATE (YYYY-MM-DD); null means "not yet scheduled". A date rather
+     * than a timestamp so "due today" survives time zones, and so a card that
+     * is late is simply due rather than late by some number of hours.
+     */
     nextReviewDue: text("next_review_due"),
+    /** Per-card difficulty multiplier (PRD §6: intervals adapt to the card). */
+    ease: real("ease").notNull().default(2.3),
+    /**
+     * Date of the last review that counted toward the schedule. Separate from
+     * `last_reviewed_at`, which moves for practice too — only this one decides
+     * whether a success is new evidence or the same day's again.
+     */
+    lastCreditedAt: text("last_credited_at"),
     lastGrade: text("last_grade", { enum: grades }),
     lastReviewedAt: text("last_reviewed_at"),
     /** Separate tracking axes required by PRD §6. */
@@ -388,7 +401,13 @@ export const studyProgress = sqliteTable(
 
 /* ------------------------------------------------------------ StudySession */
 
-export const sessionScopes = ["all", "topic", "starred", "missed"] as const;
+export const sessionScopes = [
+  "all",
+  "topic",
+  "starred",
+  "missed",
+  "due",
+] as const;
 
 /**
  * One run through a deck, kept so a session resumes exactly (PRD §4).

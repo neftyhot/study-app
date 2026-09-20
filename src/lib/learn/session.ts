@@ -30,6 +30,8 @@ import {
   type RoundState,
   type Step,
 } from "./ladder";
+import { qualityForVerdict, scheduleFor } from "@/lib/srs";
+
 import { applyLearnResult } from "./progress";
 import type { TypedGrade } from "./typed";
 
@@ -176,7 +178,11 @@ export function submitOutcome(
   db: Db,
   sessionId: string,
   cardId: string,
-  outcome: Outcome & { metPoints?: string[] },
+  outcome: Outcome & {
+    metPoints?: string[];
+    /** The grader's verdict, so a partial answer is not scheduled as a miss. */
+    verdict?: "correct" | "partial" | "incorrect";
+  },
 ): SubmitResult | undefined {
   const session = db
     .select()
@@ -202,13 +208,25 @@ export function submitOutcome(
     metPoints: outcome.metPoints,
   });
 
+  const schedule = scheduleFor(current, update.state, {
+    quality: qualityForVerdict(
+      outcome.verdict ?? (outcome.correct ? "correct" : "incorrect"),
+    ),
+    // Only an unaided recall after other concepts intervened can prove
+    // multi-day retention; an MCQ or a just-revealed answer cannot.
+    retentionEligible: step.countsTowardMastery,
+    guessed: outcome.guessed,
+  });
+
+  const row = { ...update, ...schedule };
+
   if (current) {
     db.update(studyProgress)
-      .set(update)
+      .set(row)
       .where(eq(studyProgress.flashcardId, cardId))
       .run();
   } else {
-    db.insert(studyProgress).values({ flashcardId: cardId, ...update }).run();
+    db.insert(studyProgress).values({ flashcardId: cardId, ...row }).run();
   }
 
   const state = applyOutcome(session.roundState, step, outcome);
@@ -382,14 +400,23 @@ export function overrideAttempt(
   // The lapse the overturned grade recorded goes with it.
   const lapses = Math.max((current?.lapses ?? 0) - 1, 0);
 
+  // Reschedule as the pass it is now agreed to have been. The failed grade
+  // already halved the interval, so this re-grows it from there.
+  const schedule = scheduleFor(current, update.state, {
+    quality: "pass",
+    retentionEligible: attempt.countsTowardMastery,
+  });
+
+  const row = { ...update, ...schedule, lapses };
+
   if (current) {
     db.update(studyProgress)
-      .set({ ...update, lapses })
+      .set(row)
       .where(eq(studyProgress.flashcardId, attempt.flashcardId))
       .run();
   } else {
     db.insert(studyProgress)
-      .values({ flashcardId: attempt.flashcardId, ...update, lapses })
+      .values({ flashcardId: attempt.flashcardId, ...row })
       .run();
   }
 

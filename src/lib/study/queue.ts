@@ -7,10 +7,17 @@
  * way losing their place mid-session.
  */
 import { shuffle } from "@/lib/random";
+import { isDue, todayIso } from "@/lib/srs";
 
 export { shuffle };
 
-export const STUDY_SCOPES = ["all", "topic", "starred", "missed"] as const;
+export const STUDY_SCOPES = [
+  "all",
+  "topic",
+  "starred",
+  "missed",
+  "due",
+] as const;
 
 export type StudyScope = (typeof STUDY_SCOPES)[number];
 
@@ -20,6 +27,8 @@ export type QueueFilter = {
   shuffled?: boolean;
   /** Supplied so a shuffle is reproducible in tests; random otherwise. */
   seed?: number;
+  /** Overridden in tests; today's date otherwise. */
+  today?: string;
 };
 
 export type QueueCard = {
@@ -28,6 +37,8 @@ export type QueueCard = {
   starred: boolean;
   excluded: boolean;
   lastGrade: "missed" | "difficult" | "easy" | null;
+  /** Due date (YYYY-MM-DD) from the scheduler; null if never scheduled. */
+  nextReviewDue: string | null;
 };
 
 export function filterCards<T extends QueueCard>(
@@ -44,6 +55,9 @@ export function filterCards<T extends QueueCard>(
       return testable.filter((card) => card.starred);
     case "missed":
       return testable.filter((card) => card.lastGrade === "missed");
+    case "due":
+      // Overdue is just due: a missed study day costs nothing (PRD §6).
+      return testable.filter((card) => isDue(card, filter.today));
     case "all":
     default:
       return testable;
@@ -60,6 +74,18 @@ export function buildQueue(
   filter: QueueFilter,
 ): string[] {
   const selected = filterCards(cards, filter);
-  const ordered = filter.shuffled ? shuffle(selected, filter.seed) : selected;
+
+  // A review queue leads with the longest overdue, so a backlog is worked off
+  // oldest first rather than in whatever order the deck happens to be in.
+  const ordered = filter.shuffled
+    ? shuffle(selected, filter.seed)
+    : filter.scope === "due"
+      ? [...selected].sort((a, b) =>
+          (a.nextReviewDue ?? "").localeCompare(b.nextReviewDue ?? ""),
+        )
+      : selected;
+
   return ordered.map((card) => card.id);
 }
+
+export { todayIso };
