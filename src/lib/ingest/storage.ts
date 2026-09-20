@@ -16,7 +16,11 @@ const EXTENSIONS: Record<string, SourceFile["fileType"]> = {
 };
 
 /** MVP extractors cover these; the rest are rejected at upload time. */
-export const SUPPORTED_TYPES: SourceFile["fileType"][] = ["pdf", "pptx"];
+export const SUPPORTED_TYPES: SourceFile["fileType"][] = [
+  "pdf",
+  "pptx",
+  "docx",
+];
 
 /**
  * Uploads live outside the bundle at a path chosen at runtime, so the

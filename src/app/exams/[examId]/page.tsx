@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { GeneratePanel } from "@/components/generate/generate-panel";
+import { ExamSettings } from "@/components/manage/exam-settings";
 import {
   countAnswerSlides,
   countDueCards,
@@ -142,6 +143,8 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
           </CardContent>
         </Card>
       ) : null}
+
+      <ExamSettings examId={examId} examTitle={exam.title} />
     </div>
   );
 }

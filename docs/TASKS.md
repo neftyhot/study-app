@@ -73,7 +73,8 @@ endpoint: a 12-slide PPTX extracts with notes and a table; an identical re-uploa
 **Known limits (deliberate, deferred):**
 - Extraction runs inline in the request; a very large deck holds the connection. Queue is Phase 8.
 - PDF tables and diagram labels need the vision pass (post-MVP); PDF `tables` is always empty.
-- DOCX and note-image ingestion are rejected at upload with a clear message.
+- ~~DOCX~~ (added later, see Phase 9) and note-image ingestion; images are still rejected at
+  upload with a clear message.
 
 ---
 
@@ -438,6 +439,68 @@ and left the tier alone; two cards backdated six days came back at the head of t
 
 ---
 
+## Phase 9 — DOCX Ingestion & Deck Management ✅
+
+**Goal:** Take Word documents as a first-class source, and let a student create and delete
+their own courses and decks instead of living with whatever the seed script made.
+
+### DOCX ingestion (PRD §1)
+
+- [x] `mammoth` extraction of text, headings, and tables from `.docx`
+- [x] Logical chunking into `SourceSlideOrPage` rows: split at H1/H2 and at explicit page breaks
+- [x] Tables preserved as rows and columns, attached to the section they appear in
+- [x] Upload validator, file-type dispatch, and the source viewer all accept DOCX
+- [x] Tests: 15, against a fixture written by the third-party `docx` package
+
+**Why headings and not pages:** a Word document has no pages until it is laid out, so "page 7"
+depends on the reader's font size. A heading is a place in the document the student can actually
+find again, so a card generated from a Word file cites "Section 2, ADH". Explicit page breaks
+split too, since an author who inserted one meant it as a boundary. A document with no headings
+at all is chunked by paragraph count — one enormous unit would make every card cite "section 1",
+which is the same as citing nothing.
+
+**What the tests caught:** the PDF extractor promotes a short first line to a title, and reusing
+that heuristic here swallowed the first bullet of any heading-less section. Silently moving
+content out of the body would break every excerpt that quoted it, so DOCX sections without a
+heading simply have no title.
+
+### Course and deck management (PRD §15)
+
+- [x] Dashboard: create subject, create deck (modal forms), decks grouped per subject
+- [x] Deck switcher in the header, grouped by subject
+- [x] Delete source file, with its sections and the cards that cite it
+- [x] Delete deck and delete subject, each behind a confirmation that lists the cost
+- [x] Reset study progress: clears review history and SRS state, keeps the deck
+- [x] Uploaded files are removed from disk, not just from the database
+- [x] Tests: 20, all asserting what survives each destructive operation
+
+**The rule the destructive paths follow:** *generated material may be discarded, edited material
+may not.* A card the model wrote from a file that no longer exists cannot be verified any more,
+so it goes with the file. A card the student rewrote is their work: it is kept, with its
+provenance link nulled rather than left pointing at a slide that is gone. Study-guide objectives
+follow the same rule — parsed ones go, ones the student flagged or excluded stay, because a flag
+is a decision about the material rather than something parsed out of it.
+
+**Design notes:**
+- Confirmations list the actual cost ("3 generated cards, 1 edited card kept") rather than asking
+  "are you sure?". A student cannot be sure without knowing the price.
+- Resetting progress and deleting a deck are deliberately separate controls. "Start this material
+  over" and "get rid of this material" are different requests, and conflating them is how someone
+  loses a deck they meant to keep.
+- Deck deletion leans on the `ON DELETE CASCADE` declarations from Phase 0; a test asserts all
+  nine dependent tables are empty afterwards rather than trusting the schema.
+- Uploads live outside the database, so every deletion path clears the disk too.
+
+**Known limits (deliberate, deferred):**
+- No undo. PRD §15's full undo history is still deferred, which is why the confirmations are
+  specific.
+- DOCX images are counted for the file, not per section: mammoth does not give a reliable
+  position for them once converted.
+- Nested tables inside a DOCX table are not parsed.
+- Renaming exists as an action but is not yet exposed in the UI.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
-DOCX and note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · in-session scaffolding buttons (§14) · full undo history (§15).
+Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · in-session scaffolding buttons (§14) · full undo history (§15).

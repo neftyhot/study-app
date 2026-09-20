@@ -17,6 +17,7 @@ import {
   type SourceFile,
 } from "@/db/schema";
 
+import { extractDocx } from "./docx";
 import { extractPdf } from "./pdf";
 import { extractPptx } from "./pptx";
 import { parseStudyGuide } from "./study-guide";
@@ -42,10 +43,12 @@ export async function extractFile(
   switch (fileType) {
     case "pdf":
       return extractPdf(buffer);
+    case "docx":
+      return extractDocx(buffer);
     case "pptx":
       return extractPptx(buffer);
     default:
-      // DOCX and image/OCR ingestion are deferred past the MVP.
+      // Image/OCR ingestion is deferred past the MVP.
       throw new Error(`Unsupported file type for extraction: ${fileType}`);
   }
 }

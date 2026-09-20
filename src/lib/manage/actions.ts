@@ -1,0 +1,112 @@
+"use server";
+
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
+
+import { revalidatePath } from "next/cache";
+
+import { db } from "@/db";
+import { absolutePathFor, uploadsRoot } from "@/lib/ingest/storage";
+
+import {
+  createCourse,
+  createExam,
+  deleteCourse,
+  deleteExam,
+  deleteSourceFile,
+  previewExamDeletion,
+  previewSourceFileDeletion,
+  renameCourse,
+  renameExam,
+  resetProgress,
+} from "./index";
+
+/** Uploads live outside the database, so deletions have to reach the disk too. */
+async function removeExamUploads(examId: string) {
+  await rm(join(/* turbopackIgnore: true */ uploadsRoot(), examId), {
+    recursive: true,
+    force: true,
+  });
+}
+
+export async function createCourseAction(input: {
+  title: string;
+  term?: string;
+}) {
+  const course = createCourse(db, input);
+  revalidatePath("/");
+  return { id: course.id, title: course.title };
+}
+
+export async function createExamAction(input: {
+  courseId: string;
+  title: string;
+  date?: string;
+}) {
+  const exam = createExam(db, input);
+  revalidatePath("/");
+  return { id: exam.id, title: exam.title };
+}
+
+export async function renameCourseAction(courseId: string, title: string) {
+  renameCourse(db, courseId, title);
+  revalidatePath("/");
+}
+
+export async function renameExamAction(examId: string, title: string) {
+  renameExam(db, examId, title);
+  revalidatePath("/");
+  revalidatePath(`/exams/${examId}`);
+}
+
+export async function sourceFileImpact(fileId: string) {
+  return previewSourceFileDeletion(db, fileId) ?? null;
+}
+
+export async function deleteSourceFileAction(examId: string, fileId: string) {
+  const result = deleteSourceFile(db, fileId);
+  if (!result) return null;
+
+  await rm(absolutePathFor(result.rawPath), { force: true });
+
+  revalidatePath(`/exams/${examId}/sources`);
+  revalidatePath(`/exams/${examId}`);
+  revalidatePath(`/exams/${examId}/cards`);
+  return result;
+}
+
+export async function examImpact(examId: string) {
+  return previewExamDeletion(db, examId) ?? null;
+}
+
+export async function deleteExamAction(examId: string) {
+  const deleted = deleteExam(db, examId);
+  if (deleted) await removeExamUploads(examId);
+
+  revalidatePath("/");
+  return deleted;
+}
+
+export async function deleteCourseAction(courseId: string) {
+  const examIds = deleteCourse(db, courseId);
+  await Promise.all(examIds.map(removeExamUploads));
+
+  revalidatePath("/");
+  return examIds.length;
+}
+
+/**
+ * Clears review history for a deck, keeping the deck itself.
+ *
+ * Deliberately separate from deletion: "I want to start this material over" is
+ * a different request from "I want this material gone", and conflating them is
+ * how a student loses a deck they meant to keep.
+ */
+export async function resetProgressAction(examId: string) {
+  const result = resetProgress(db, examId);
+
+  revalidatePath(`/exams/${examId}`);
+  revalidatePath(`/exams/${examId}/study`);
+  revalidatePath(`/exams/${examId}/learn`);
+  return result;
+}

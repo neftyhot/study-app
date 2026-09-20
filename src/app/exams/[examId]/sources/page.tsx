@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { FileText, Presentation, TriangleAlert } from "lucide-react";
 
 import { UploadPanel } from "@/components/ingest/upload-panel";
+import { SourceFileActions } from "@/components/manage/source-file-actions";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -12,6 +13,19 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { getExam, listObjectives, listSourceFiles } from "@/lib/queries";
+
+/** What one extracted unit is called in each format. */
+const UNIT_NOUN: Record<string, string> = {
+  pptx: "slides",
+  pdf: "pages",
+  docx: "sections",
+};
+
+const UNIT_NOUN_SINGULAR: Record<string, string> = {
+  pptx: "Slide",
+  pdf: "Page",
+  docx: "Section",
+};
 
 const LEGIBILITY_LABEL: Record<string, string> = {
   empty: "No text found",
@@ -87,20 +101,27 @@ export default async function SourcesPage(
             return (
               <Card key={file.id}>
                 <CardHeader>
-                  <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                    {file.fileType === "pptx" ? (
-                      <Presentation className="size-4" />
-                    ) : (
-                      <FileText className="size-4" />
-                    )}
-                    <span className="break-all">{file.filename}</span>
-                    <Badge variant="secondary">{file.role}</Badge>
-                    {file.status !== "ready" ? (
-                      <Badge variant="destructive">{file.status}</Badge>
-                    ) : null}
-                  </CardTitle>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                      {file.fileType === "pptx" ? (
+                        <Presentation className="size-4" />
+                      ) : (
+                        <FileText className="size-4" />
+                      )}
+                      <span className="break-all">{file.filename}</span>
+                      <Badge variant="secondary">{file.role}</Badge>
+                      {file.status !== "ready" ? (
+                        <Badge variant="destructive">{file.status}</Badge>
+                      ) : null}
+                    </CardTitle>
+                    <SourceFileActions
+                      examId={examId}
+                      fileId={file.id}
+                      filename={file.filename}
+                    />
+                  </div>
                   <CardDescription>
-                    {file.unitCount} {file.fileType === "pptx" ? "slides" : "pages"}
+                    {file.unitCount} {UNIT_NOUN[file.fileType] ?? "sections"}
                     {flagged.length > 0
                       ? ` · ${flagged.length} flagged for legibility`
                       : ""}
@@ -118,7 +139,7 @@ export default async function SourcesPage(
                       >
                         <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
                           <span className="text-muted-foreground tabular-nums">
-                            {file.fileType === "pptx" ? "Slide" : "Page"}{" "}
+                            {UNIT_NOUN_SINGULAR[file.fileType] ?? "Section"}{" "}
                             {slide.index}
                           </span>
                           <span className="truncate">{slide.title ?? ""}</span>

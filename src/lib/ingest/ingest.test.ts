@@ -182,8 +182,8 @@ describe("ingestSourceFile", () => {
       .insert(sourceFiles)
       .values({
         examId,
-        filename: "notes.docx",
-        fileType: "docx",
+        filename: "whiteboard.png",
+        fileType: "image",
         rawPath: DECK,
       })
       .returning()

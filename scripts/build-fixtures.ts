@@ -8,6 +8,17 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import {
+  Document,
+  HeadingLevel,
+  Packer,
+  PageBreak,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+} from "docx";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import PptxGenJS from "pptxgenjs";
 
@@ -111,10 +122,76 @@ async function buildStudyGuidePdf() {
   console.log("Wrote study-guide.pdf (4 numbered objectives)");
 }
 
+/**
+ * A Word document shaped like real lecture notes: nested headings, a table,
+ * and a page break, so the section splitter has something to get wrong.
+ */
+async function buildDocx() {
+  const cell = (text: string) =>
+    new TableCell({ children: [new Paragraph(text)] });
+
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({ text: "Renal Physiology", heading: HeadingLevel.HEADING_1 }),
+          new Paragraph("The kidney regulates water and electrolyte balance."),
+
+          new Paragraph({ text: "ADH", heading: HeadingLevel.HEADING_2 }),
+          new Paragraph("ADH is released from the posterior pituitary."),
+          new Paragraph("It increases water reabsorption in the collecting duct."),
+
+          new Table({
+            rows: [
+              new TableRow({
+                children: [cell("Hormone"), cell("Origin"), cell("Action")],
+              }),
+              new TableRow({
+                children: [
+                  cell("ADH"),
+                  cell("Hypothalamus"),
+                  cell("Water reabsorption"),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  cell("Aldosterone"),
+                  cell("Adrenal cortex"),
+                  cell("Sodium reabsorption"),
+                ],
+              }),
+            ],
+          }),
+
+          new Paragraph({ text: "Aldosterone", heading: HeadingLevel.HEADING_2 }),
+          new Paragraph("Aldosterone increases sodium reabsorption."),
+
+          new Paragraph({ children: [new PageBreak()] }),
+
+          new Paragraph({ text: "Acid-Base Balance", heading: HeadingLevel.HEADING_1 }),
+          new Paragraph({
+            children: [
+              new TextRun("The bicarbonate buffer system is the primary "),
+              new TextRun("extracellular buffer."),
+            ],
+          }),
+        ],
+      },
+    ],
+  });
+
+  writeFileSync(
+    join(OUT_DIR, "sample-notes.docx"),
+    await Packer.toBuffer(doc),
+  );
+  console.log("Wrote sample-notes.docx (headings, a table, and a page break)");
+}
+
 async function main() {
   await buildPptx();
   await buildPdf();
   await buildStudyGuidePdf();
+  await buildDocx();
 }
 
 main();

@@ -89,8 +89,9 @@ export function UploadPanel({ examId }: { examId: string }) {
       <CardHeader>
         <CardTitle className="text-base">Add source files</CardTitle>
         <CardDescription>
-          PDF and PPTX. Slide text, tables, and speaker notes are extracted and
-          indexed by slide number.
+          PDF, PPTX, and DOCX. Slide text, tables, and speaker notes are
+          extracted and indexed by slide, page, or heading, so every card can
+          point back at where its answer came from.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -145,7 +146,7 @@ export function UploadPanel({ examId }: { examId: string }) {
             ref={inputRef}
             type="file"
             multiple
-            accept=".pdf,.pptx"
+            accept=".pdf,.pptx,.docx"
             className="hidden"
             onChange={(e) => void upload(e.target.files)}
           />
