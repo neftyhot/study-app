@@ -17,7 +17,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "grade:check": "tsx --env-file=.env.local scripts/grade-check.ts",
-    "smoke": "tsx scripts/smoke.ts"
+    "smoke": "tsx scripts/smoke.ts",
+    "electron:dev": "concurrently -k -n next,electron -c cyan,magenta \"next dev\" \"wait-on tcp:3000 && electron .\"",
+    "electron:build": "next build && node scripts/prepare-standalone.mjs && electron-builder",
+    "electron:pack": "next build && node scripts/prepare-standalone.mjs && electron-builder --dir"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
@@ -46,8 +49,11 @@
     "@types/node": "^24.13.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.5",
     "docx": "^9.7.1",
     "drizzle-kit": "^0.31.10",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "pdf-lib": "^1.17.1",
@@ -55,6 +61,45 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "vitest": "^5.0.1"
+    "vitest": "^5.0.1",
+    "wait-on": "^9.1.0"
+  },
+  "main": "electron/main.cjs",
+  "description": "Generate sourced flashcards from your own lecture material.",
+  "author": "Study App",
+  "build": {
+    "appId": "app.study.desktop",
+    "productName": "Study App",
+    "files": [
+      "electron/**/*",
+      ".next/standalone/**/*",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "directories": {
+      "output": "release",
+      "buildResources": "electron/resources"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.education"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Education"
+    },
+    "npmRebuild": false,
+    "asar": false
   }
 }

@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, Settings } from "lucide-react";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { Button } from "@/components/ui/button";
 import { DeckSwitcher } from "@/components/manage/deck-switcher";
 import { listCoursesWithExams } from "@/lib/queries";
 
@@ -27,6 +28,11 @@ export async function SiteHeader() {
               })),
             }))}
           />
+          <Button asChild variant="ghost" size="icon" aria-label="Settings">
+            <Link href="/settings">
+              <Settings className="size-4" />
+            </Link>
+          </Button>
           <ThemeToggle />
         </div>
       </div>

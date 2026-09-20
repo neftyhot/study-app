@@ -48,3 +48,6 @@ data/
 .env.local
 .env*.local
 .env*.local
+
+# Desktop build output
+release/

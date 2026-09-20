@@ -657,6 +657,24 @@ export const errorDiagnoses = sqliteTable(
   (t) => [uniqueIndex("error_diagnoses_card_idx").on(t.flashcardId)],
 );
 
+/* -------------------------------------------------------------- AppSettings */
+
+/**
+ * Local application settings, stored beside the data they configure.
+ *
+ * The packaged desktop app has no environment to read an API key from, so it
+ * is kept here — in the user's own application-data directory, on their own
+ * machine. It is never sent to the browser: the settings screen is told only
+ * whether a key exists and its last four characters.
+ */
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(current_timestamp)`),
+});
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -827,6 +845,7 @@ export type StudyGuideObjective = typeof studyGuideObjectives.$inferSelect;
 export type Flashcard = typeof flashcards.$inferSelect;
 export type CardRubric = typeof cardRubrics.$inferSelect;
 export type CardRevision = typeof cardRevisions.$inferSelect;
+export type AppSetting = typeof appSettings.$inferSelect;
 export type CoverageMapping = typeof coverageMappings.$inferSelect;
 export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
 export type ContentConflict = typeof contentConflicts.$inferSelect;

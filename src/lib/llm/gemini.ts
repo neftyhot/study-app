@@ -16,7 +16,7 @@ export function createGeminiProvider(options?: {
   const apiKey = options?.apiKey ?? process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new LlmError(
-      "GEMINI_API_KEY is not set. Add it to .env.local to run generation.",
+      "No Gemini API key. Add one in Settings, or set GEMINI_API_KEY in .env.local.",
     );
   }
 

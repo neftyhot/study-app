@@ -605,6 +605,82 @@ are new wrong answers to look at.
 
 ---
 
+## Phase 11 — Skips, Application Cards, New Formats, Desktop App ✅
+
+### Skip controls (both modes)
+
+- [x] "I know it": drops the concept from the round and pushes its review out
+- [x] "No clue": reveals the answer, records a miss, re-queues it later in the round
+- [x] Keyboard shortcuts K and D in flashcard mode
+- [x] Tests: 12
+
+Both are honest about their cost. "I know it" is self-declared, so it promotes no further than
+immediate recall and is never retention-eligible: saying you know something is a claim about
+today, and multi-day retention is a claim only time can support. "No clue" counts as a miss,
+leaves the due date untouched — giving up is not a review — and returns the concept on the same
+rung, a few positions later in flashcards and after the usual interleaving gap in Learn.
+
+### Exhaustive extraction and application questions (PRD §9)
+
+- [x] Broad objectives are decomposed structure by structure and step by step
+- [x] "Include application / higher-order questions" toggle, stored on the exam
+- [x] Perturbation, directional-shift, and scenario cards, tagged `card_type: application`
+- [x] Both study modes can exclude them
+
+A structural heading like "anatomy and physiology of the eye" is a container, not a question,
+and was collapsing into one generic card. The prompt now treats each objective as a checklist
+and says so explicitly: an objective like that is worth ten to forty cards, not one.
+
+### New source formats
+
+- [x] `.txt`, `.md`, `.rtf`, `.csv`, plus pasted text
+- [x] Every format chunked into indexed sections for provenance
+- [x] Tests: 18
+
+Markdown and text chunk at headings or into paragraph-sized sections; RTF is reduced to text
+first; CSV keeps rows and columns, repeats the header in every section, and also writes each row
+out as text so an excerpt can quote it. Pasted text is written to the uploads directory as a
+`.txt` file and ingested through the identical path, so provenance, re-ingestion and deletion
+need no special case.
+
+Four bugs in these extractors were caught by their own tests: Setext headings read off the wrong
+line, escaped braces not surviving RTF's brace-stripping pass, CSV header detection accepting a
+row of numbers as labels, and a `String.raw` fixture silently cooking its own `\u` escape
+before the parser ever saw it.
+
+### Desktop app
+
+- [x] Electron wrapper; `npm run electron:dev` and `npm run electron:build`
+- [x] Database and uploads in `app.getPath('userData')`, migrated on startup
+- [x] Settings screen for a locally stored Gemini API key
+- [x] Fully offline except generation and grading
+
+**Verified by running the packaged app, not by reading the config.** It builds, launches, starts
+its server on a free loopback port, migrates a fresh database into the user-data directory (18
+tables), and serves every route. Three things were found only by doing that:
+
+1. **The Node-ABI question.** better-sqlite3 v13 is N-API, which is ABI-stable across Electron,
+   so no native rebuild is needed. This was checked by loading it inside Electron 44 and
+   round-tripping a query — the `beforePack` rebuild hook written before checking was deleted.
+2. **asar had to go.** The Next standalone server must `chdir` into its own directory, and a
+   process cannot change directory into an asar archive. The app ships unpacked.
+3. **A prerendering leak.** `/` and `/settings` were statically prerendered, so the build
+   machine's state was baked into the shipped HTML — including the last four characters of the
+   developer's API key, and a dashboard listing the developer's own courses. Every page here
+   reads local data, so the root layout now forces dynamic rendering. Verified afterwards: zero
+   occurrences of the key in the bundle, and a fresh install reports "No key set".
+
+**Known limits (deliberate, deferred):**
+- The macOS bundle is unsigned and unnotarized, so Gatekeeper will warn on first open. Signing
+  needs a Developer ID certificate.
+- The app is ~770 MB unpacked (Electron framework plus the traced server); the `.dmg` compresses
+  it substantially. Trimming further means pruning the standalone trace.
+- The API key is stored unencrypted in the local database. Doing it properly needs an OS
+  keychain; the settings screen says so plainly rather than implying otherwise.
+- Only macOS was built and run here. The Windows and Linux targets are configured but untested.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
 Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · full undo history (§15).

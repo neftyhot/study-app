@@ -23,6 +23,18 @@ export const metadata: Metadata = {
     "Turn lecture slides and study guides into sourced, atomic flashcards.",
 };
 
+/**
+ * Nothing in this app may be prerendered.
+ *
+ * Every page reads the local database — the courses that exist, the cards due,
+ * whether an API key is saved. Statically rendering any of them bakes the
+ * build machine's state into the output, which in a packaged desktop app
+ * means shipping one developer's data to every user. That is not theoretical:
+ * the settings page was prerendered with a real key's last four characters in
+ * it before this line existed.
+ */
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html

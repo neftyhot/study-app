@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Packaged desktop output: built artifacts, not source.
+    "release/**",
+    // Electron's main process is CommonJS by necessity; the web app's rules
+    // (ESM imports, React hooks) do not apply to it.
+    "electron/**",
   ]),
 ]);
 

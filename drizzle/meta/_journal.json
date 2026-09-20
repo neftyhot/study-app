@@ -64,6 +64,13 @@
       "when": 1789940432255,
       "tag": "0008_curious_valeria_richards",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789941014855,
+      "tag": "0009_cheerful_devos",
+      "breakpoints": true
     }
   ]
 }
