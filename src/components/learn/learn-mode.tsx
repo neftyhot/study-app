@@ -33,6 +33,7 @@ import {
   overrideAnswer,
   practiceMissedPoints,
   skipToTypedRecall,
+  type LearnPrompt,
   type LearnStatus,
   type Reveal,
 } from "@/lib/learn/actions";
@@ -72,6 +73,14 @@ export function LearnMode({
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [status, setStatus] = useState(initialStatus);
   const [reveal, setReveal] = useState<Reveal | null>(null);
+  /**
+   * The question that was actually answered.
+   *
+   * `status` advances the moment an answer is submitted, so without this the
+   * card above the reveal would already be the NEXT question — and clicking
+   * Continue would appear to change nothing.
+   */
+  const [answered, setAnswered] = useState<LearnPrompt | null>(null);
   const [busy, setBusy] = useState(false);
   const [guessing, setGuessing] = useState(false);
   const [typed, setTyped] = useState("");
@@ -105,6 +114,7 @@ export function LearnMode({
     );
     setBusy(false);
     if (!result) return;
+    setAnswered(prompt);
     setReveal(result.reveal);
     setStatus(result.status);
   }
@@ -120,12 +130,14 @@ export function LearnMode({
     );
     setBusy(false);
     if (!result) return;
+    setAnswered(prompt);
     setReveal(result.reveal);
     setStatus(result.status);
   }
 
   function continueAfterReveal() {
     setReveal(null);
+    setAnswered(null);
     setTyped("");
     setGuessing(false);
   }
@@ -156,6 +168,18 @@ export function LearnMode({
 
   const roundTotal = status.remaining + status.mastered + status.struggled;
 
+  // While a reveal is showing, the screen belongs to the question just
+  // answered; the next one appears when the student continues.
+  const shown = reveal && answered ? answered : prompt;
+
+  // The ladder deliberately re-asks a concept as typed recall straight after
+  // recognizing it. Saying so turns a confusing repeat into an understood one.
+  const repeatsConcept =
+    !reveal &&
+    answered !== null &&
+    answered.cardId === prompt.cardId &&
+    answered.stage !== prompt.stage;
+
   return (
     <div className="space-y-4">
       <div className="space-y-2">
@@ -178,25 +202,30 @@ export function LearnMode({
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-2">
-            {prompt.topic ? (
-              <Badge variant="secondary">{prompt.topic}</Badge>
+            {shown.topic ? (
+              <Badge variant="secondary">{shown.topic}</Badge>
             ) : null}
-            <Badge variant="outline">{STAGE_LABELS[prompt.stage]}</Badge>
+            <Badge variant="outline">{STAGE_LABELS[shown.stage]}</Badge>
             {/* Being honest about what this attempt can prove. */}
-            <Badge variant={prompt.countsTowardMastery ? "default" : "outline"}>
-              {prompt.countsTowardMastery ? "Counts" : "Practice"}
+            <Badge variant={shown.countsTowardMastery ? "default" : "outline"}>
+              {shown.countsTowardMastery ? "Counts" : "Practice"}
             </Badge>
           </div>
           <CardTitle className="pt-2 text-lg leading-snug break-words">
-            {prompt.question}
+            {shown.question}
           </CardTitle>
-          {prompt.remediate && prompt.breakdown?.length ? (
+          {repeatsConcept ? (
+            <p className="text-muted-foreground pt-1 text-sm">
+              Same concept — now from memory, without the options.
+            </p>
+          ) : null}
+          {shown.remediate && shown.breakdown && shown.breakdown.length > 0 ? (
             <div className="bg-muted/60 mt-2 rounded p-3">
               <p className="text-xs font-medium">
                 Take it one piece at a time — this answer needs:
               </p>
               <ul className="text-muted-foreground mt-1 list-disc pl-5 text-xs">
-                {prompt.breakdown.map((point) => (
+                {shown.breakdown.map((point) => (
                   <li key={point}>{point}</li>
                 ))}
               </ul>
@@ -208,9 +237,9 @@ export function LearnMode({
           {reveal ? (
             <RevealPanel
               reveal={reveal}
-              cardId={prompt.cardId}
-              question={prompt.question}
-              canUndo={prompt.canUndo}
+              cardId={shown.cardId}
+              question={shown.question}
+              canUndo={shown.canUndo}
               onContinue={continueAfterReveal}
               onOverride={async () => {
                 if (!sessionId || !reveal.attemptId) return;

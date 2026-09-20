@@ -540,6 +540,24 @@ is a decision about the material rather than something parsed out of it.
 
 ---
 
+## Fixes from real use
+
+Both found by using the app on a real deck, not by the test suite.
+
+- [x] **Generating twice stacked two decks of cards.** Running full coverage and then
+      study-guide focus appended both sets, leaving near-duplicate cards for every fact.
+      Generation now asks when the deck is not empty: replace the generated cards (edited ones
+      are kept), make a separate deck, or add to this one. "Separate" copies the sources into a
+      new deck so provenance resolves inside it and deleting one deck cannot empty the other.
+- [x] **Learn mode looked like it re-asked the same question.** The engine was advancing
+      correctly; the UI was not. `status` was replaced the instant an answer was submitted, so
+      the question above the reveal was already the *next* one — and Continue appeared to change
+      nothing. The answered question is now frozen on screen until Continue. The ladder also
+      deliberately re-asks a concept as typed recall right after recognizing it, which looked
+      identical, so that step now says "Same concept — now from memory, without the options."
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
 Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · in-session scaffolding buttons (§14) · full undo history (§15).

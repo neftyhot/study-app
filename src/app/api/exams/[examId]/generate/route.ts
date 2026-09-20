@@ -9,8 +9,9 @@ import type { NextRequest } from "next/server";
 
 import { db } from "@/db";
 import { exams } from "@/db/schema";
-import { generateCardsForExam } from "@/lib/generate";
+import { clearGeneratedCards, generateCardsForExam } from "@/lib/generate";
 import { getProvider, LlmError } from "@/lib/llm";
+import { duplicateExamSources } from "@/lib/manage";
 
 export const maxDuration = 300;
 
@@ -36,11 +37,49 @@ export async function POST(
     );
   }
 
+  /**
+   * What to do when the deck already has cards.
+   *
+   * Generating twice with different scopes used to stack both sets silently,
+   * which is how a deck ends up with two near-duplicate cards for every fact.
+   * The caller now has to say which it wants.
+   */
+  const body = await request.json().catch(() => ({}));
+  const mode: "append" | "replace" | "separate" =
+    body?.mode === "replace" || body?.mode === "separate" ? body.mode : "append";
+
+  let targetId = examId;
+  let cleared: { deleted: number; kept: number } | undefined;
+  let createdExam: { id: string; title: string } | undefined;
+
   try {
-    const summary = await generateCardsForExam(db, provider, examId);
+    if (mode === "replace") {
+      cleared = clearGeneratedCards(db, examId);
+    }
+
+    if (mode === "separate") {
+      const copy = duplicateExamSources(
+        db,
+        examId,
+        typeof body?.title === "string" && body.title.trim()
+          ? body.title
+          : `${exam.title} (${exam.scopeMode === "objectives" ? "study-guide focus" : "full coverage"})`,
+      );
+      if (!copy) {
+        return Response.json({ error: "Could not create the deck" }, { status: 400 });
+      }
+      targetId = copy.id;
+      createdExam = { id: copy.id, title: copy.title };
+    }
+
+    const summary = await generateCardsForExam(db, provider, targetId);
 
     return Response.json({
       mode: summary.mode,
+      target: mode,
+      examId: targetId,
+      createdExam,
+      cleared,
       batchCount: summary.batchCount,
       cardsCreated: summary.cardsCreated,
       cardsRejected: summary.cardsRejected,

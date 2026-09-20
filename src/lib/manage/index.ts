@@ -93,6 +93,109 @@ export function renameExam(db: Db, examId: string, title: string) {
   db.update(exams).set({ title: trimmed }).where(eq(exams.id, examId)).run();
 }
 
+/**
+ * Copies a deck's sources into a new deck, ready to generate into.
+ *
+ * Used when a student wants a second generation run kept apart from the first
+ * — study-guide focus alongside full coverage, say. The extracted text is
+ * duplicated rather than shared so that provenance resolves inside the new
+ * deck: a card there cites a slide row that belongs to it, and deleting one
+ * deck cannot pull the ground out from under the other.
+ *
+ * Cards, progress, sessions and coverage are NOT copied. The new deck is the
+ * same material with nothing studied yet.
+ */
+export function duplicateExamSources(
+  db: Db,
+  examId: string,
+  title: string,
+): Exam | undefined {
+  const source = db.select().from(exams).where(eq(exams.id, examId)).get();
+  if (!source) return undefined;
+
+  let created: Exam | undefined;
+
+  db.transaction((tx) => {
+    created = tx
+      .insert(exams)
+      .values({
+        courseId: source.courseId,
+        title: title.trim() || `${source.title} (copy)`,
+        date: source.date,
+        scopeMode: source.scopeMode,
+      })
+      .returning()
+      .get();
+
+    const files = tx
+      .select()
+      .from(sourceFiles)
+      .where(eq(sourceFiles.examId, examId))
+      .all();
+
+    for (const file of files) {
+      const copy = tx
+        .insert(sourceFiles)
+        .values({
+          examId: created.id,
+          filename: file.filename,
+          fileType: file.fileType,
+          role: file.role,
+          // The upload on disk is shared; nothing writes to it after ingestion.
+          rawPath: file.rawPath,
+          checksum: file.checksum,
+          status: file.status,
+          unitCount: file.unitCount,
+          errorMessage: file.errorMessage,
+        })
+        .returning()
+        .get();
+
+      const units = tx
+        .select()
+        .from(sourceSlides)
+        .where(eq(sourceSlides.sourceFileId, file.id))
+        .all();
+
+      for (const unit of units) {
+        tx.insert(sourceSlides)
+          .values({
+            sourceFileId: copy.id,
+            index: unit.index,
+            title: unit.title,
+            rawText: unit.rawText,
+            speakerNotes: unit.speakerNotes,
+            tables: unit.tables,
+            imagePath: unit.imagePath,
+            hasDiagram: unit.hasDiagram,
+            legibilityFlag: unit.legibilityFlag,
+          })
+          .run();
+      }
+
+      for (const objective of tx
+        .select()
+        .from(studyGuideObjectives)
+        .where(eq(studyGuideObjectives.sourceFileId, file.id))
+        .all()) {
+        tx.insert(studyGuideObjectives)
+          .values({
+            examId: created.id,
+            sourceFileId: copy.id,
+            orderIndex: objective.orderIndex,
+            label: objective.label,
+            promptText: objective.promptText,
+            professorEmphasis: objective.professorEmphasis,
+            excluded: objective.excluded,
+          })
+          .run();
+      }
+    }
+  });
+
+  return created;
+}
+
 /* ---------------------------------------------------------------- Previews */
 
 export type SourceFileImpact = {

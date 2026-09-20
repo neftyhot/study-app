@@ -32,6 +32,7 @@ import {
   deleteCourse,
   deleteExam,
   deleteSourceFile,
+  duplicateExamSources,
   previewExamDeletion,
   previewSourceFileDeletion,
   renameExam,
@@ -439,5 +440,82 @@ describe("exporting a deck", () => {
     expect(exportFilename("Exam 2 — Renal & Endocrine", new Date("2026-03-10"))).toBe(
       "exam-2-renal-endocrine-2026-03-10.json",
     );
+  });
+});
+
+describe("duplicating a deck's sources", () => {
+  it("copies sources, sections and objectives but no cards or progress", () => {
+    const copy = duplicateExamSources(db, examId, "Exam 2 (study-guide focus)")!;
+
+    expect(copy.id).not.toBe(examId);
+    expect(copy.title).toBe("Exam 2 (study-guide focus)");
+    expect(copy.courseId).toBe(courseId);
+
+    const copiedFiles = db
+      .select()
+      .from(sourceFiles)
+      .where(eq(sourceFiles.examId, copy.id))
+      .all();
+    expect(copiedFiles).toHaveLength(2);
+
+    const copiedObjectives = db
+      .select()
+      .from(studyGuideObjectives)
+      .where(eq(studyGuideObjectives.examId, copy.id))
+      .all();
+    expect(copiedObjectives).toHaveLength(1);
+
+    // A fresh deck: same material, nothing studied.
+    expect(
+      db.select().from(flashcards).where(eq(flashcards.examId, copy.id)).all(),
+    ).toHaveLength(0);
+  });
+
+  it("gives the copy its own section rows so provenance stays inside it", () => {
+    const copy = duplicateExamSources(db, examId, "Copy")!;
+
+    const copiedFile = db
+      .select()
+      .from(sourceFiles)
+      .where(eq(sourceFiles.examId, copy.id))
+      .all()
+      .find((file) => file.filename === "lecture.pptx")!;
+
+    const copiedUnits = db
+      .select()
+      .from(sourceSlides)
+      .where(eq(sourceSlides.sourceFileId, copiedFile.id))
+      .all();
+
+    expect(copiedUnits).toHaveLength(2);
+    expect(copiedUnits.map((unit) => unit.rawText)).toEqual([
+      "Slide one",
+      "Slide two",
+    ]);
+    // Distinct rows, so deleting one deck cannot empty the other.
+    expect(copiedUnits.map((unit) => unit.id)).not.toEqual(slideIds);
+  });
+
+  it("leaves the original deck untouched", () => {
+    duplicateExamSources(db, examId, "Copy");
+
+    expect(
+      db.select().from(flashcards).where(eq(flashcards.examId, examId)).all(),
+    ).toHaveLength(3);
+    expect(
+      db.select().from(sourceSlides).where(eq(sourceSlides.sourceFileId, deckFileId)).all(),
+    ).toHaveLength(2);
+  });
+
+  it("survives deleting the copy without harming the original", () => {
+    const copy = duplicateExamSources(db, examId, "Copy")!;
+    deleteExam(db, copy.id);
+
+    expect(db.select().from(sourceSlides).all()).toHaveLength(2);
+    expect(db.select().from(flashcards).all()).toHaveLength(3);
+  });
+
+  it("reports nothing for a deck that does not exist", () => {
+    expect(duplicateExamSources(db, "missing", "Copy")).toBeUndefined();
   });
 });

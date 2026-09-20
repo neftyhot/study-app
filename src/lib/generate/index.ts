@@ -149,6 +149,29 @@ export async function generateCardsForExam(
   };
 }
 
+/**
+ * Clears a deck's generated cards so it can be regenerated from scratch.
+ *
+ * Cards the student edited are kept: regenerating is a request to redo the
+ * model's work, not theirs. Their rubrics, progress and coverage rows go with
+ * the cards that are removed, by cascade.
+ */
+export function clearGeneratedCards(db: Db, examId: string) {
+  const cards = db
+    .select({ id: flashcards.id, isUserEdited: flashcards.isUserEdited })
+    .from(flashcards)
+    .where(eq(flashcards.examId, examId))
+    .all();
+
+  const generated = cards.filter((card) => !card.isUserEdited).map((c) => c.id);
+
+  if (generated.length > 0) {
+    db.delete(flashcards).where(inArray(flashcards.id, generated)).run();
+  }
+
+  return { deleted: generated.length, kept: cards.length - generated.length };
+}
+
 /** Writes cards and their rubrics. Never updates or deletes existing rows. */
 function persistCards(
   db: Db,

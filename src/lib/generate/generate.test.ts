@@ -24,7 +24,7 @@ import {
 } from "@/db/schema";
 import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 
-import { generateCardsForExam } from "./index";
+import { clearGeneratedCards, generateCardsForExam } from "./index";
 import type { GeneratedCard, GenerationResponse } from "./schemas";
 
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -411,5 +411,47 @@ describe("preconditions", () => {
     await generateCardsForExam(db, provider, examId);
 
     expect(requests[0].prompt).not.toContain("GUIDE_ONLY_MARKER");
+  });
+});
+
+describe("clearGeneratedCards", () => {
+  it("removes generated cards but keeps the ones the student edited", () => {
+    seedSlides(1);
+
+    const generated = db
+      .insert(flashcards)
+      .values({ examId, question: "Generated", directAnswer: "A" })
+      .returning()
+      .get();
+    const edited = db
+      .insert(flashcards)
+      .values({
+        examId,
+        question: "Edited",
+        directAnswer: "A",
+        isUserEdited: true,
+      })
+      .returning()
+      .get();
+    db.insert(cardRubrics)
+      .values({ flashcardId: generated.id, essentialPoints: ["x"] })
+      .run();
+    db.insert(studyProgress)
+      .values({ flashcardId: generated.id, state: "retained" })
+      .run();
+
+    const result = clearGeneratedCards(db, examId);
+
+    expect(result).toEqual({ deleted: 1, kept: 1 });
+    expect(db.select().from(flashcards).all().map((c) => c.id)).toEqual([
+      edited.id,
+    ]);
+    // Rubric and progress go with the card they belonged to.
+    expect(db.select().from(cardRubrics).all()).toHaveLength(0);
+    expect(db.select().from(studyProgress).all()).toHaveLength(0);
+  });
+
+  it("does nothing to a deck with no generated cards", () => {
+    expect(clearGeneratedCards(db, examId)).toEqual({ deleted: 0, kept: 0 });
   });
 });

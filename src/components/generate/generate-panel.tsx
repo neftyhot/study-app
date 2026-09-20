@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { Copy, Layers, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { setScopeMode } from "@/lib/actions";
@@ -15,6 +15,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -22,8 +29,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type GenerateMode = "append" | "replace" | "separate";
+
 type Summary = {
   mode: string;
+  target?: GenerateMode;
+  examId?: string;
+  createdExam?: { id: string; title: string } | null;
+  cleared?: { deleted: number; kept: number } | null;
   batchCount: number;
   cardsCreated: number;
   cardsRejected: number;
@@ -35,23 +48,30 @@ export function GeneratePanel({
   examId,
   scopeMode,
   slideCount,
+  existingCards,
 }: {
   examId: string;
   scopeMode: "files" | "objectives";
   slideCount: number;
+  /** Cards already in this deck; deciding what to do with them comes first. */
+  existingCards: number;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [pending, startTransition] = useTransition();
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [asking, setAsking] = useState(false);
 
-  async function generate() {
+  async function generate(mode: GenerateMode) {
     setBusy(true);
+    setAsking(false);
     setSummary(null);
 
     try {
       const response = await fetch(`/api/exams/${examId}/generate`, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode }),
       });
       const payload = await response.json();
 
@@ -61,6 +81,15 @@ export function GeneratePanel({
       }
 
       setSummary(payload);
+
+      if (payload.createdExam) {
+        toast.success(
+          `Created ${payload.cardsCreated} card(s) in "${payload.createdExam.title}"`,
+        );
+        router.push(`/exams/${payload.createdExam.id}`);
+        return;
+      }
+
       toast.success(`Created ${payload.cardsCreated} card(s)`);
       router.refresh();
     } catch (error) {
@@ -68,6 +97,12 @@ export function GeneratePanel({
     } finally {
       setBusy(false);
     }
+  }
+
+  /** With an empty deck there is nothing to decide, so do not ask. */
+  function start() {
+    if (existingCards === 0) void generate("append");
+    else setAsking(true);
   }
 
   const disabled = busy || pending || slideCount === 0;
@@ -101,7 +136,7 @@ export function GeneratePanel({
             </SelectContent>
           </Select>
 
-          <Button onClick={() => void generate()} disabled={disabled}>
+          <Button onClick={start} disabled={disabled}>
             {busy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -121,6 +156,16 @@ export function GeneratePanel({
             take a minute.
           </p>
         )}
+
+        {summary?.cleared ? (
+          <p className="text-muted-foreground text-xs">
+            Replaced {summary.cleared.deleted} generated card(s)
+            {summary.cleared.kept > 0
+              ? `; kept ${summary.cleared.kept} you had edited`
+              : ""}
+            .
+          </p>
+        ) : null}
 
         {summary ? (
           <div className="space-y-3 rounded-md border p-3 text-sm">
@@ -164,6 +209,66 @@ export function GeneratePanel({
           </div>
         ) : null}
       </CardContent>
+
+      <Dialog open={asking} onOpenChange={setAsking}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>This deck already has cards</DialogTitle>
+            <DialogDescription>
+              {existingCards} card{existingCards === 1 ? "" : "s"} are already
+              here. Generating again in a different mode would otherwise stack
+              a second set on top of them.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <Choice
+              icon={<RefreshCw className="size-4" />}
+              title="Replace them"
+              body="Delete the generated cards and build fresh. Cards you edited yourself are kept."
+              onClick={() => void generate("replace")}
+            />
+            <Choice
+              icon={<Copy className="size-4" />}
+              title="Make a separate deck"
+              body="Copy the sources into a second deck and generate there. This deck is left exactly as it is."
+              onClick={() => void generate("separate")}
+            />
+            <Choice
+              icon={<Layers className="size-4" />}
+              title="Add to this deck"
+              body="Keep both sets together. Identical questions are skipped, but two cards covering the same fact in different words will both stay."
+              onClick={() => void generate("append")}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
+  );
+}
+
+function Choice({
+  icon,
+  title,
+  body,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="hover:bg-muted/60 focus-visible:ring-ring w-full rounded-md border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+    >
+      <span className="flex items-center gap-2 text-sm font-medium">
+        {icon}
+        {title}
+      </span>
+      <span className="text-muted-foreground mt-1 block text-xs">{body}</span>
+    </button>
   );
 }
