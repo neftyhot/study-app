@@ -29,6 +29,9 @@ function configureDataDirectories() {
     process.env.DATABASE_URL ?? path.join(dataDir, "study-app.db");
   process.env.UPLOADS_DIR =
     process.env.UPLOADS_DIR ?? path.join(dataDir, "uploads");
+  // Downloaded models are gigabytes; they belong with the data, not the code.
+  process.env.MODELS_DIR =
+    process.env.MODELS_DIR ?? path.join(dataDir, "models");
 
   return { userData, dataDir };
 }

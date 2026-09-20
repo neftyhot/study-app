@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarDays, FileStack, Layers, ListChecks } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -15,9 +16,14 @@ import {
   CreateCourseDialog,
   CreateExamDialog,
 } from "@/components/manage/create-dialogs";
+import { db } from "@/db";
 import { listCoursesWithExams } from "@/lib/queries";
+import { isSetupComplete } from "@/lib/settings";
 
 export default async function DashboardPage() {
+  // First run lands on the wizard instead of an empty dashboard.
+  if (!isSetupComplete(db)) redirect("/welcome");
+
   const courses = await listCoursesWithExams();
   const courseOptions = courses.map((course) => ({
     id: course.id,

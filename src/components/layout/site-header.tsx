@@ -4,10 +4,15 @@ import { GraduationCap, Settings } from "lucide-react";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { DeckSwitcher } from "@/components/manage/deck-switcher";
+import { DownloadChip } from "@/components/settings/download-chip";
+import { db } from "@/db";
+import { LOCAL_MODELS } from "@/lib/llm/catalog";
 import { listCoursesWithExams } from "@/lib/queries";
+import { readDownload } from "@/lib/settings";
 
 export async function SiteHeader() {
   const courses = await listCoursesWithExams();
+  const download = readDownload(db);
 
   return (
     <header className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur">
@@ -18,6 +23,7 @@ export async function SiteHeader() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
+          <DownloadChip initial={download} models={LOCAL_MODELS} />
           <DeckSwitcher
             courses={courses.map((course) => ({
               id: course.id,

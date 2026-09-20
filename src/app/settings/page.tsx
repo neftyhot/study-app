@@ -1,19 +1,20 @@
 import Link from "next/link";
 
-import { ApiKeyForm } from "@/components/settings/api-key-form";
-import { db } from "@/db";
+import { ProviderSettings } from "@/components/settings/provider-settings";
+import { resolveDbPath } from "@/db/client";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { geminiKeyStatus } from "@/lib/settings";
-import { resolveDbPath } from "@/db/client";
 import { uploadsRoot } from "@/lib/ingest/storage";
+import { LOCAL_MODELS } from "@/lib/llm/catalog";
+import { modelsRoot } from "@/lib/llm/download";
+import { getSetupSnapshot } from "@/lib/settings-actions";
 
 export default async function SettingsPage() {
-  const status = geminiKeyStatus(db);
+  const snapshot = await getSetupSnapshot();
 
   return (
     <div className="space-y-6">
@@ -27,18 +28,17 @@ export default async function SettingsPage() {
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       </div>
 
-      <ApiKeyForm initial={status} />
+      <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
 
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Where your data lives</CardTitle>
           <CardDescription className="space-y-1">
-            <span className="block break-all font-mono text-xs">
-              {resolveDbPath()}
-            </span>
-            <span className="block break-all font-mono text-xs">
-              {uploadsRoot()}
-            </span>
+            {[resolveDbPath(), uploadsRoot(), modelsRoot()].map((path) => (
+              <span key={path} className="block break-all font-mono text-xs">
+                {path}
+              </span>
+            ))}
             <span className="block pt-2">
               Everything stays on this machine. Export a deck from its settings
               card to take a copy elsewhere.

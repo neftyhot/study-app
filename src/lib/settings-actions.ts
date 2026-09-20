@@ -1,25 +1,103 @@
 "use server";
 
+import { totalmem } from "node:os";
+
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
-import { GEMINI_KEY, geminiKeyStatus, writeSetting } from "@/lib/settings";
+import {
+  clearDownload,
+  startModelDownload,
+  unloadLocalModel,
+} from "@/lib/llm";
+import { LOCAL_MODELS, recommendedModel } from "@/lib/llm/catalog";
+import {
+  allKeyStatuses,
+  apiKeyStatus,
+  isAnswerable,
+  markSetupComplete,
+  readDownload,
+  readLocalModel,
+  readProvider,
+  writeApiKey,
+  writeProvider,
+  type ProviderId,
+} from "@/lib/settings";
 
-/**
- * Saves the Gemini key locally.
- *
- * The key is never read back to the browser — the settings screen is told only
- * that one exists and how it ends, which is enough to tell two keys apart
- * without putting either in a page.
- */
-export async function saveGeminiKey(key: string) {
-  writeSetting(GEMINI_KEY, key, db);
-  revalidatePath("/settings");
-  return geminiKeyStatus(db);
+export type SetupSnapshot = {
+  provider: ProviderId;
+  keys: ReturnType<typeof allKeyStatuses>;
+  download: ReturnType<typeof readDownload>;
+  localModelId: string | null;
+  answerable: boolean;
+  /** Installed memory, so the wizard can recommend a size that will run. */
+  totalRamGb: number;
+  recommendedModelId: string;
+};
+
+export async function getSetupSnapshot(): Promise<SetupSnapshot> {
+  const totalRamGb = Math.round(totalmem() / 1_073_741_824);
+
+  return {
+    provider: readProvider(db),
+    keys: allKeyStatuses(db),
+    download: readDownload(db),
+    localModelId: readLocalModel(db).id,
+    answerable: isAnswerable(db),
+    totalRamGb,
+    recommendedModelId: recommendedModel(totalRamGb).id,
+  };
 }
 
-export async function clearGeminiKey() {
-  writeSetting(GEMINI_KEY, "", db);
+export async function saveApiKey(
+  provider: Exclude<ProviderId, "local">,
+  key: string,
+) {
+  writeApiKey(provider, key, db);
   revalidatePath("/settings");
-  return geminiKeyStatus(db);
+  return apiKeyStatus(provider, db);
+}
+
+export async function chooseProvider(provider: ProviderId) {
+  writeProvider(provider, db);
+  // A different model must not keep answering from the last one's weights.
+  if (provider !== "local") await unloadLocalModel();
+
+  revalidatePath("/settings");
+  revalidatePath("/");
+  return getSetupSnapshot();
+}
+
+/**
+ * Starts a model download and returns immediately.
+ *
+ * The wizard does not wait: the student picks a size, this begins, and they
+ * carry on into the app while it arrives.
+ */
+export async function beginModelDownload(modelId: string) {
+  if (!LOCAL_MODELS.some((model) => model.id === modelId)) {
+    return { started: false as const, reason: "Unknown model." };
+  }
+
+  writeProvider("local", db);
+  await unloadLocalModel();
+
+  const result = startModelDownload(modelId, db);
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function downloadProgress() {
+  return readDownload(db);
+}
+
+export async function cancelDownload() {
+  clearDownload(db);
+  revalidatePath("/settings");
+}
+
+export async function finishSetup() {
+  markSetupComplete(db);
+  revalidatePath("/");
+  revalidatePath("/settings");
 }
