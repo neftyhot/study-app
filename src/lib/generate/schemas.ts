@@ -7,7 +7,13 @@
  */
 import type { JsonSchema } from "@/lib/llm";
 
-export const CARD_TYPES = ["atomic", "process", "integration"] as const;
+export const CARD_TYPES = [
+  "atomic",
+  "process",
+  "integration",
+  /** Higher-order questions (PRD §9), generated only when asked for. */
+  "application",
+] as const;
 
 /**
  * Facets from PRD §2. The model picks the facet a card tests, which is what
@@ -29,6 +35,10 @@ export const CARD_FACETS = [
   "process_rationale",
   "process_summary",
   "integration",
+  /* PRD §9 — only produced when application questions are switched on. */
+  "perturbation",
+  "directional_shift",
+  "scenario",
 ] as const;
 
 export type CardFacet = (typeof CARD_FACETS)[number];

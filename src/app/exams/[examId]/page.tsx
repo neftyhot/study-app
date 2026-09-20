@@ -133,6 +133,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         scopeMode={exam.scopeMode}
         slideCount={slideCount}
         existingCards={stats.flashcards}
+        includeApplication={exam.includeApplication}
       />
 
       {stats.objectives > 0 ? (

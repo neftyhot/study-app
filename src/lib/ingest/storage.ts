@@ -10,6 +10,12 @@ const EXTENSIONS: Record<string, SourceFile["fileType"]> = {
   pdf: "pdf",
   pptx: "pptx",
   docx: "docx",
+  txt: "txt",
+  text: "txt",
+  md: "md",
+  markdown: "md",
+  rtf: "rtf",
+  csv: "csv",
   png: "image",
   jpg: "image",
   jpeg: "image",
@@ -20,6 +26,11 @@ export const SUPPORTED_TYPES: SourceFile["fileType"][] = [
   "pdf",
   "pptx",
   "docx",
+  "txt",
+  "md",
+  "rtf",
+  "csv",
+  "pasted",
 ];
 
 /**

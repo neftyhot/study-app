@@ -17,9 +17,12 @@ import {
   type SourceFile,
 } from "@/db/schema";
 
+import { extractCsv } from "./csv";
 import { extractDocx } from "./docx";
 import { extractPdf } from "./pdf";
 import { extractPptx } from "./pptx";
+import { extractRtf } from "./rtf";
+import { extractText } from "./text";
 import { parseStudyGuide } from "./study-guide";
 import {
   classifyLegibility,
@@ -47,6 +50,15 @@ export async function extractFile(
       return extractDocx(buffer);
     case "pptx":
       return extractPptx(buffer);
+    case "txt":
+    case "md":
+    // Pasted text is stored as a .txt file, so it takes the same path.
+    case "pasted":
+      return extractText(buffer);
+    case "rtf":
+      return extractRtf(buffer);
+    case "csv":
+      return extractCsv(buffer);
     default:
       // Image/OCR ingestion is deferred past the MVP.
       throw new Error(`Unsupported file type for extraction: ${fileType}`);

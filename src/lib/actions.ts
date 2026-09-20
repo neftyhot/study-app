@@ -17,6 +17,24 @@ export async function setScopeMode(examId: string, mode: "files" | "objectives")
 }
 
 /**
+ * Higher-order application questions on or off (PRD §9).
+ *
+ * Stored on the exam so it applies to every later generation run, rather than
+ * being a per-click setting that is easy to forget having changed.
+ */
+export async function setIncludeApplication(
+  examId: string,
+  include: boolean,
+) {
+  db.update(exams)
+    .set({ includeApplication: include })
+    .where(eq(exams.id, examId))
+    .run();
+
+  revalidatePath(`/exams/${examId}`);
+}
+
+/**
  * Records the student's decision on a flagged conflict (PRD §3).
  *
  * The pipeline never resolves a conflict itself, and a later scan preserves

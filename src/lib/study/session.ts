@@ -29,6 +29,7 @@ export function loadQueueCards(db: Db, examId: string): QueueCard[] {
       excluded: flashcards.excluded,
       lastGrade: studyProgress.lastGrade,
       nextReviewDue: studyProgress.nextReviewDue,
+      cardType: flashcards.cardType,
     })
     .from(flashcards)
     .leftJoin(studyProgress, eq(studyProgress.flashcardId, flashcards.id))
@@ -119,6 +120,125 @@ export function completeSession(db: Db, sessionId: string) {
 }
 
 /**
+ * "I know it" in flashcard mode: credit it and push the review out.
+ *
+ * Self-declared, like the Learn equivalent, so it promotes no further than
+ * immediate recall and is never retention-eligible.
+ */
+export function skipKnownCard(
+  db: Db,
+  cardId: string,
+  sessionId?: string | null,
+) {
+  const current = db
+    .select()
+    .from(studyProgress)
+    .where(eq(studyProgress.flashcardId, cardId))
+    .get();
+
+  const state = current?.state === "retained" ? "retained" : "immediate_recall";
+  const schedule = scheduleFor(current, state, {
+    quality: "pass",
+    retentionEligible: false,
+  });
+
+  const row = {
+    lastGrade: "easy" as const,
+    lastReviewedAt: new Date().toISOString(),
+    ...schedule,
+  };
+
+  if (current) {
+    db.update(studyProgress)
+      .set(row)
+      .where(eq(studyProgress.flashcardId, cardId))
+      .run();
+  } else {
+    db.insert(studyProgress).values({ flashcardId: cardId, ...row }).run();
+  }
+
+  if (sessionId) bumpSessionCount(db, sessionId, "easy");
+}
+
+/** How far ahead a skipped card is re-queued within the same session. */
+export const REQUEUE_GAP = 5;
+
+/**
+ * "No clue" in flashcard mode: reveal it, mark it missed, and see it again
+ * before the session ends.
+ *
+ * The card is re-inserted a few positions ahead rather than appended, so it
+ * comes back inside this sitting — and its due date is left alone, because
+ * giving up is not a review.
+ */
+export function skipUnknownCard(
+  db: Db,
+  cardId: string,
+  sessionId?: string | null,
+) {
+  const current = db
+    .select()
+    .from(studyProgress)
+    .where(eq(studyProgress.flashcardId, cardId))
+    .get();
+
+  const update = applyFlashcardGrade(current, "missed");
+
+  if (current) {
+    db.update(studyProgress)
+      .set(update)
+      .where(eq(studyProgress.flashcardId, cardId))
+      .run();
+  } else {
+    db.insert(studyProgress).values({ flashcardId: cardId, ...update }).run();
+  }
+
+  if (!sessionId) return undefined;
+
+  bumpSessionCount(db, sessionId, "missed");
+
+  const session = db
+    .select()
+    .from(studySessions)
+    .where(eq(studySessions.id, sessionId))
+    .get();
+  if (!session) return undefined;
+
+  const order = [...session.cardOrder];
+  const at = order.indexOf(cardId);
+  if (at === -1) return undefined;
+
+  order.splice(Math.min(at + 1 + REQUEUE_GAP, order.length), 0, cardId);
+
+  db.update(studySessions)
+    .set({ cardOrder: order, updatedAt: new Date().toISOString() })
+    .where(eq(studySessions.id, sessionId))
+    .run();
+
+  return order;
+}
+
+function bumpSessionCount(db: Db, sessionId: string, grade: Grade) {
+  const session = db
+    .select()
+    .from(studySessions)
+    .where(eq(studySessions.id, sessionId))
+    .get();
+  if (!session) return;
+
+  const counters = {
+    missed: { missedCount: session.missedCount + 1 },
+    difficult: { difficultCount: session.difficultCount + 1 },
+    easy: { easyCount: session.easyCount + 1 },
+  }[grade];
+
+  db.update(studySessions)
+    .set({ ...counters, updatedAt: new Date().toISOString() })
+    .where(eq(studySessions.id, sessionId))
+    .run();
+}
+
+/**
  * Records a grade against a card, and against the session if one is running.
  *
  * Progress is keyed by card, not by session: a card graded in any session is
@@ -158,23 +278,5 @@ export function gradeCard(
       .run();
   }
 
-  if (!sessionId) return;
-
-  const session = db
-    .select()
-    .from(studySessions)
-    .where(eq(studySessions.id, sessionId))
-    .get();
-  if (!session) return;
-
-  const counters = {
-    missed: { missedCount: session.missedCount + 1 },
-    difficult: { difficultCount: session.difficultCount + 1 },
-    easy: { easyCount: session.easyCount + 1 },
-  }[grade];
-
-  db.update(studySessions)
-    .set({ ...counters, updatedAt: new Date().toISOString() })
-    .where(eq(studySessions.id, sessionId))
-    .run();
+  if (sessionId) bumpSessionCount(db, sessionId, grade);
 }

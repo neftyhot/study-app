@@ -1,0 +1,1 @@
+ALTER TABLE `exams` ADD `include_application` integer DEFAULT false NOT NULL;

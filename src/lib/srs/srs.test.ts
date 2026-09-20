@@ -260,6 +260,7 @@ describe("due queue", () => {
       excluded: false,
       lastGrade: null,
       nextReviewDue: null,
+      cardType: "atomic",
       ...overrides,
     };
   }

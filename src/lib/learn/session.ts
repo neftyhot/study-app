@@ -14,6 +14,7 @@ import {
   flashcards,
   studyProgress,
   studySessions,
+  type StudyProgress,
   type AnswerAttempt,
   type AssistEvent,
   type StudySession,
@@ -26,6 +27,8 @@ import {
   isComplete,
   markAssisted,
   nextStep,
+  skipAsKnown,
+  skipAsUnknown,
   skipRecognition,
   startRound,
   type Outcome,
@@ -279,6 +282,112 @@ export async function provideAssist(
   }
 
   return event;
+}
+
+/**
+ * "I know it" (PRD skip controls): drop the concept from the round and push
+ * its review out.
+ *
+ * Self-declared mastery, so it promotes to immediate recall and schedules a
+ * pass — but never a retention-eligible one. Saying you know something is a
+ * claim about today; multi-day retention is a claim only time can support.
+ */
+export function skipKnown(
+  db: Db,
+  sessionId: string,
+  cardId: string,
+): SubmitResult | undefined {
+  const session = db
+    .select()
+    .from(studySessions)
+    .where(eq(studySessions.id, sessionId))
+    .get();
+  if (!session?.roundState) return undefined;
+
+  const step = nextStep(session.roundState);
+  if (!step || step.cardId !== cardId) return undefined;
+
+  const current = db
+    .select()
+    .from(studyProgress)
+    .where(eq(studyProgress.flashcardId, cardId))
+    .get();
+
+  const state: StudyProgress["state"] =
+    current?.state === "retained" ? "retained" : "immediate_recall";
+
+  const schedule = scheduleFor(current, state, {
+    quality: "pass",
+    retentionEligible: false,
+  });
+
+  // `schedule` carries the authoritative state; spread it last.
+  const row = { lastReviewedAt: new Date().toISOString(), ...schedule };
+
+  if (current) {
+    db.update(studyProgress)
+      .set(row)
+      .where(eq(studyProgress.flashcardId, cardId))
+      .run();
+  } else {
+    db.insert(studyProgress).values({ flashcardId: cardId, ...row }).run();
+  }
+
+  const next = skipAsKnown(session.roundState, cardId);
+  save(db, sessionId, { roundState: next, previousRoundState: session.roundState });
+
+  return { state: next, step: nextStep(next), roundComplete: isComplete(next) };
+}
+
+/**
+ * "No clue" (PRD skip controls): reveal it now, come back to it later.
+ *
+ * Recorded as a miss with no interval advance, and re-queued on the same rung
+ * after the usual gap — the ladder is not climbed by admitting you cannot
+ * climb it.
+ */
+export function skipUnknown(
+  db: Db,
+  sessionId: string,
+  cardId: string,
+): SubmitResult | undefined {
+  const session = db
+    .select()
+    .from(studySessions)
+    .where(eq(studySessions.id, sessionId))
+    .get();
+  if (!session?.roundState) return undefined;
+
+  const step = nextStep(session.roundState);
+  if (!step || step.cardId !== cardId) return undefined;
+
+  const current = db
+    .select()
+    .from(studyProgress)
+    .where(eq(studyProgress.flashcardId, cardId))
+    .get();
+
+  const update = applyLearnResult(current, {
+    stage: step.stage,
+    correct: false,
+    countsTowardMastery: step.countsTowardMastery,
+  });
+
+  // Deliberately no `scheduleFor` call: giving up is not a review, and must
+  // not move the card's due date in either direction.
+  if (current) {
+    db.update(studyProgress)
+      .set(update)
+      .where(eq(studyProgress.flashcardId, cardId))
+      .run();
+  } else {
+    db.insert(studyProgress).values({ flashcardId: cardId, ...update }).run();
+  }
+
+  const next = skipAsUnknown(session.roundState, cardId);
+  save(db, sessionId, { roundState: next, previousRoundState: session.roundState });
+
+  return { state: next, step: nextStep(next), roundComplete: isComplete(next) };
 }
 
 export function skipToRecall(

@@ -24,7 +24,9 @@ import {
   loadLearnCards,
   overrideAttempt,
   recordAttempt,
+  skipKnown,
   skipToRecall,
+  skipUnknown,
   startLearnSession,
   startNextRound,
   submitOutcome,
@@ -401,6 +403,39 @@ export async function practiceMissedPoints(
   });
 
   return grade;
+}
+
+/**
+ * "I know it": drop the concept from the round and push its review out.
+ * Returns the answer so the student can confirm they were right.
+ */
+export async function skipKnownConcept(sessionId: string, cardId: string) {
+  const card = cardRow(cardId);
+  const result = skipKnown(db, sessionId, cardId);
+  if (!result || !card) return null;
+
+  return {
+    directAnswer: card.directAnswer,
+    status: status(sessionId),
+  };
+}
+
+/** "No clue": reveal it, count it as missed, and come back to it. */
+export async function skipUnknownConcept(sessionId: string, cardId: string) {
+  const card = cardRow(cardId);
+  const result = skipUnknown(db, sessionId, cardId);
+  if (!result || !card) return null;
+
+  return {
+    reveal: {
+      correct: false,
+      directAnswer: card.directAnswer,
+      fullExplanation: card.fullExplanation,
+      sourceExcerpt: card.sourceExcerpt,
+      diagnosis: null,
+    } satisfies Reveal,
+    status: status(sessionId),
+  };
 }
 
 export async function skipToTypedRecall(sessionId: string, cardId: string) {

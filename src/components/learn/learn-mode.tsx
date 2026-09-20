@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   CircleCheck,
+  CircleHelp,
   CircleX,
   Dices,
   FileText,
@@ -41,7 +42,9 @@ import {
   nextLearnRound,
   overrideAnswer,
   practiceMissedPoints,
+  skipKnownConcept,
   skipToTypedRecall,
+  skipUnknownConcept,
   type AssistResult,
   type LearnPrompt,
   type LearnStatus,
@@ -171,6 +174,33 @@ export function LearnMode({
     setTyped("");
     setGuessing(false);
     setHelps([]);
+  }
+
+  /** "I know it": drop the concept and move on, without typing it out. */
+  async function knowIt() {
+    if (!sessionId || !prompt) return;
+    setBusy(true);
+    const result = await skipKnownConcept(sessionId, prompt.cardId);
+    setBusy(false);
+    if (!result) return;
+
+    setStatus(result.status);
+    setHelps([]);
+    setTyped("");
+    toast.success(`Marked known — the answer was: ${result.directAnswer}`);
+  }
+
+  /** "No clue": reveal it now and come back to it later in the round. */
+  async function noClue() {
+    if (!sessionId || !prompt) return;
+    setBusy(true);
+    const result = await skipUnknownConcept(sessionId, prompt.cardId);
+    setBusy(false);
+    if (!result) return;
+
+    setAnswered(prompt);
+    setReveal(result.reveal);
+    setStatus(result.status);
   }
 
   async function help(kind: AssistKind) {
@@ -327,6 +357,11 @@ export function LearnMode({
               ))}
 
               <div className="flex flex-wrap gap-2 pt-1">
+                <SkipControls
+                  busy={busy}
+                  onKnow={() => void knowIt()}
+                  onNoClue={() => void noClue()}
+                />
                 <Button
                   variant={guessing ? "destructive" : "ghost"}
                   size="sm"
@@ -364,6 +399,11 @@ export function LearnMode({
                 }}
               />
               <div className="flex flex-wrap items-center gap-3">
+                <SkipControls
+                  busy={busy}
+                  onKnow={() => void knowIt()}
+                  onNoClue={() => void noClue()}
+                />
                 <Button
                   disabled={busy || typed.trim().length === 0}
                   onClick={() => void submitTyped()}
@@ -558,6 +598,37 @@ function RevealPanel({
  * who is stuck should not have to go looking, and every one of these is
  * recorded so the attempt that follows is counted as assisted practice.
  */
+/**
+ * The two skips (PRD skip controls).
+ *
+ * Both are honest about their cost: "I know it" credits the card as recall
+ * today and pushes its review out, but can never claim multi-day retention;
+ * "no clue" counts as a miss, leaves the due date alone, and brings the
+ * concept back later in this round.
+ */
+function SkipControls({
+  busy,
+  onKnow,
+  onNoClue,
+}: {
+  busy: boolean;
+  onKnow: () => void;
+  onNoClue: () => void;
+}) {
+  return (
+    <>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={onKnow}>
+        <CircleCheck className="size-3.5" />
+        I know it
+      </Button>
+      <Button variant="ghost" size="sm" disabled={busy} onClick={onNoClue}>
+        <CircleHelp className="size-3.5" />
+        No clue
+      </Button>
+    </>
+  );
+}
+
 function AssistBar({
   helps,
   helping,
@@ -746,11 +817,13 @@ function LearnPicker({
     topic: string | null;
     shuffled: boolean;
     roundSize: number;
+    includeApplication: boolean;
   }) => Promise<void>;
 }) {
   const [scope, setScope] = useState<StudyScope>("all");
   const [topic, setTopic] = useState(topics[0] ?? "");
   const [roundSize, setRoundSize] = useState(6);
+  const [application, setApplication] = useState(true);
   const [starting, setStarting] = useState(false);
 
   return (
@@ -817,6 +890,20 @@ function LearnPicker({
           </Select>
         </div>
 
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="learn-application"
+            checked={application}
+            onCheckedChange={(value) => setApplication(value === true)}
+          />
+          <Label
+            htmlFor="learn-application"
+            className="text-muted-foreground text-sm font-normal"
+          >
+            Include application / higher-order questions
+          </Label>
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={cardCount === 0 || starting}
@@ -827,6 +914,7 @@ function LearnPicker({
                 topic: scope === "topic" ? topic : null,
                 shuffled: false,
                 roundSize,
+                includeApplication: application,
               });
               setStarting(false);
             }}

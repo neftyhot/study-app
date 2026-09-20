@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { Copy, Layers, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
-import { setScopeMode } from "@/lib/actions";
+import { setIncludeApplication, setScopeMode } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -49,10 +51,13 @@ export function GeneratePanel({
   scopeMode,
   slideCount,
   existingCards,
+  includeApplication,
 }: {
   examId: string;
   scopeMode: "files" | "objectives";
   slideCount: number;
+  /** PRD §9 higher-order questions, persisted on the exam. */
+  includeApplication: boolean;
   /** Cards already in this deck; deciding what to do with them comes first. */
   existingCards: number;
 }) {
@@ -61,6 +66,7 @@ export function GeneratePanel({
   const [pending, startTransition] = useTransition();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [asking, setAsking] = useState(false);
+  const [application, setApplication] = useState(includeApplication);
 
   async function generate(mode: GenerateMode) {
     setBusy(true);
@@ -144,6 +150,32 @@ export function GeneratePanel({
             )}
             {busy ? "Generating…" : "Generate"}
           </Button>
+        </div>
+
+        <div className="flex items-start gap-2">
+          <Checkbox
+            id="application"
+            checked={application}
+            disabled={disabled}
+            onCheckedChange={(value) => {
+              const next = value === true;
+              setApplication(next);
+              startTransition(async () => {
+                await setIncludeApplication(examId, next);
+              });
+            }}
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor="application" className="text-sm font-normal">
+              Include application / higher-order questions
+            </Label>
+            <p className="text-muted-foreground text-xs">
+              Adds perturbation (&quot;what if this step is blocked?&quot;),
+              directional (&quot;what happens when Y rises?&quot;), and scenario
+              cards on top of the factual ones. They still have to quote your
+              material.
+            </p>
+          </div>
         </div>
 
         {slideCount === 0 ? (

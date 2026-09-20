@@ -38,6 +38,7 @@ function queueCard(overrides: Partial<QueueCard> = {}): QueueCard {
     excluded: false,
     lastGrade: null,
     nextReviewDue: null,
+    cardType: "atomic",
     ...overrides,
   };
 }

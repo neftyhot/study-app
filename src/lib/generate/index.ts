@@ -107,10 +107,11 @@ export async function generateCardsForExam(
   let cardsCreated = 0;
 
   for (const [batchIndex, batch] of batches.entries()) {
+    const promptOptions = { includeApplication: exam.includeApplication };
     const prompt =
       exam.scopeMode === "objectives"
-        ? objectiveFocusPrompt(batch, objectives)
-        : fullCoveragePrompt(batch);
+        ? objectiveFocusPrompt(batch, objectives, promptOptions)
+        : fullCoveragePrompt(batch, promptOptions);
 
     const { data } = await llm.generateStructured<GenerationResponse>({
       system: GENERATION_SYSTEM,

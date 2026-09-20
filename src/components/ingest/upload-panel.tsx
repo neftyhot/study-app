@@ -13,6 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -20,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 type UploadResult = {
@@ -37,6 +40,8 @@ export function UploadPanel({ examId }: { examId: string }) {
   const [role, setRole] = useState("slides");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [pasteText, setPasteText] = useState("");
+  const [pasteTitle, setPasteTitle] = useState("");
   const [results, setResults] = useState<UploadResult[]>([]);
 
   async function upload(files: FileList | null) {
@@ -84,14 +89,42 @@ export function UploadPanel({ examId }: { examId: string }) {
     if (!busy) void upload(event.dataTransfer.files);
   }
 
+  /** Pasted text takes the same ingestion path as an uploaded file. */
+  async function paste() {
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/exams/${examId}/paste`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: pasteText, title: pasteTitle, role }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        toast.error(payload.error ?? "Could not add that text");
+        return;
+      }
+
+      setResults((previous) => [...previous, payload]);
+      setPasteText("");
+      setPasteTitle("");
+      toast.success(`Added ${payload.unitCount} section(s)`);
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not add");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Add source files</CardTitle>
+        <CardTitle className="text-base">Add source material</CardTitle>
         <CardDescription>
-          PDF, PPTX, and DOCX. Slide text, tables, and speaker notes are
-          extracted and indexed by slide, page, or heading, so every card can
-          point back at where its answer came from.
+          PDF, PPTX, DOCX, TXT, Markdown, RTF, and CSV — or paste text straight
+          in. Everything is indexed by slide, page, or section, so every card
+          can point back at where its answer came from.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -112,6 +145,13 @@ export function UploadPanel({ examId }: { examId: string }) {
           </p>
         </div>
 
+        <Tabs defaultValue="upload">
+          <TabsList>
+            <TabsTrigger value="upload">Upload files</TabsTrigger>
+            <TabsTrigger value="paste">Paste text</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="upload" className="mt-4">
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -146,11 +186,42 @@ export function UploadPanel({ examId }: { examId: string }) {
             ref={inputRef}
             type="file"
             multiple
-            accept=".pdf,.pptx,.docx"
+            accept=".pdf,.pptx,.docx,.txt,.md,.markdown,.rtf,.csv"
             className="hidden"
             onChange={(e) => void upload(e.target.files)}
           />
         </div>
+          </TabsContent>
+
+          <TabsContent value="paste" className="mt-4 space-y-3">
+            <Input
+              value={pasteTitle}
+              onChange={(event) => setPasteTitle(event.target.value)}
+              placeholder="Name it — e.g. Week 4 syllabus"
+              disabled={busy}
+            />
+            <Textarea
+              value={pasteText}
+              onChange={(event) => setPasteText(event.target.value)}
+              placeholder="Paste a syllabus, a study guide, or lecture notes…"
+              className="min-h-48 font-mono text-xs"
+              disabled={busy}
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                disabled={busy || pasteText.trim().length === 0}
+                onClick={() => void paste()}
+              >
+                {busy ? <Loader2 className="size-4 animate-spin" /> : null}
+                Add pasted text
+              </Button>
+              <p className="text-muted-foreground text-xs">
+                Split at Markdown headings if it has any, otherwise into
+                paragraph-sized sections.
+              </p>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {results.length > 0 ? (
           <ul className="space-y-2">

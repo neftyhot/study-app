@@ -270,6 +270,70 @@ export function markAssisted(state: RoundState, cardId: string): RoundState {
   };
 }
 
+/**
+ * "I know it" — the student declares a concept known and drops it from the
+ * round.
+ *
+ * Self-declared, so it is recorded as recall rather than retention: the
+ * student is asserting they can produce the answer today, which is exactly
+ * what the immediate-recall tier means. Multi-day retention still has to be
+ * demonstrated across days, and no amount of clicking can assert it.
+ */
+export function skipAsKnown(state: RoundState, cardId: string): RoundState {
+  return {
+    ...state,
+    step: state.step + 1,
+    concepts: state.concepts.map((concept) =>
+      concept.cardId === cardId && !concept.done
+        ? {
+            ...concept,
+            done: true,
+            tier: "immediate_recall" as const,
+            answerShown: false,
+          }
+        : concept,
+    ),
+  };
+}
+
+/**
+ * "No clue" — reveal it and come back to it.
+ *
+ * Counts as a miss and stays on the same rung: the ladder is not climbed by
+ * admitting you cannot climb it. The concept is re-queued after the usual gap
+ * so the reveal has time to stop being the reason they remember.
+ */
+export function skipAsUnknown(
+  state: RoundState,
+  cardId: string,
+): RoundState {
+  const gap = INTERLEAVE_GAPS[state.gapCursor % INTERLEAVE_GAPS.length];
+
+  return {
+    ...state,
+    step: state.step + 1,
+    gapCursor: state.gapCursor + 1,
+    concepts: state.concepts.map((concept) => {
+      if (concept.cardId !== cardId || concept.done) return concept;
+
+      const errors = concept.errors + 1;
+
+      // Still bounded, so repeatedly giving up parks the concept for review
+      // instead of looping forever.
+      if (errors >= MAX_ERRORS) {
+        return { ...concept, errors, done: true, struggled: true };
+      }
+
+      return {
+        ...concept,
+        errors,
+        answerShown: true,
+        dueAt: state.step + 1 + gap,
+      };
+    }),
+  };
+}
+
 export function roundSummary(state: RoundState) {
   return {
     total: state.concepts.length,

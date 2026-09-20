@@ -36,6 +36,19 @@ COMPLETENESS
 - Do not produce two cards that test the same fact. Cards that test genuinely
   different details of the same concept are not duplicates.
 
+BREADTH (this is where most decks fail)
+- A broad or structural heading is a CONTAINER, not a question. "Anatomy and
+  physiology of the eye" is not one card; it is every structure, every layer,
+  every fluid, every mechanism and every pathway the material gives for the
+  eye — cornea, lens, retina, the refraction of light, phototransduction, the
+  route from photoreceptor to visual cortex, and so on, each as its own card.
+- Work through the material structure by structure and step by step. For each
+  structure ask: what is it, where is it, what is it made of, what does it do,
+  how does it relate to the structure next to it. For each pathway ask: what
+  are the steps, in what order, and what happens at each one.
+- Never answer a broad heading with a single summary card. If you find
+  yourself writing one card whose answer is a list, split the list.
+
 PROVENANCE (non-negotiable)
 - Every card cites the slide token it came from, e.g. "S7".
 - sourceExcerpt must be text copied VERBATIM from that slide. Copy it exactly,
@@ -83,13 +96,43 @@ export function renderSlides(slides: SourceSlide[]): string {
     .join("\n\n---\n\n");
 }
 
-export function fullCoveragePrompt(slides: SourceSlide[]): string {
+/** PRD §9 — appended only when the student asked for application questions. */
+export const APPLICATION_RULES = `
+ALSO PRODUCE APPLICATION CARDS (cardType "application")
+After the factual cards for a concept, add higher-order questions that make
+the student USE the fact rather than restate it:
+- Perturbation: "What happens if <structure or step> is damaged, blocked, or
+  inhibited?" (facet "perturbation")
+- Directional shift: "What happens to X when Y increases / decreases?"
+  (facet "directional_shift")
+- Scenario: a short concrete situation whose answer requires the mechanism —
+  a patient presentation, a lab result, an experimental manipulation.
+  (facet "scenario")
+
+These follow the same provenance rule as every other card: the excerpt must be
+copied verbatim from the slide that supports the underlying mechanism. If the
+material does not state the mechanism, do not invent a consequence for it.
+Set hasAiSupplement to true when the reasoning goes beyond what is stated.`;
+
+export type PromptOptions = {
+  /** PRD §9 higher-order questions, off unless the student asked. */
+  includeApplication?: boolean;
+};
+
+function applicationSection(options?: PromptOptions): string {
+  return options?.includeApplication ? `\n${APPLICATION_RULES}\n` : "";
+}
+
+export function fullCoveragePrompt(
+  slides: SourceSlide[],
+  options?: PromptOptions,
+): string {
   return `Generate flashcards covering every testable fact in the slides below.
 
 Work concept by concept. For each concept, produce the full set of atomic
 cards its facets call for, then any integration cards that connect it to other
 concepts in this material.
-
+${applicationSection(options)}
 SLIDES
 ${renderSlides(slides)}`;
 }
@@ -97,6 +140,7 @@ ${renderSlides(slides)}`;
 export function objectiveFocusPrompt(
   slides: SourceSlide[],
   objectives: StudyGuideObjective[],
+  options?: PromptOptions,
 ): string {
   const list = objectives
     .map((o, i) => `${o.label ?? i + 1}. ${o.promptText}`)
@@ -105,11 +149,22 @@ export function objectiveFocusPrompt(
   return `Generate flashcards that answer the study-guide objectives below,
 using only the slides that follow.
 
-Stay anchored to these objectives. An objective usually needs SEVERAL atomic
-cards rather than one — decompose it the same way you would any concept.
+Stay anchored to these objectives, and treat each one as a CHECKLIST of
+everything it covers rather than as a single question.
+
+- A narrow objective ("Where is ADH released?") still needs its facets split.
+- A broad or structural objective ("Anatomy and physiology of the eye",
+  "The cardiac cycle") needs EXHAUSTIVE decomposition: every structure named
+  in the material, every mechanism, and every step of every pathway it
+  involves, each as its own card. Go through the slides for that objective and
+  account for all of it. An objective like that is usually worth ten to forty
+  cards, not one.
+- Before moving on from an objective, re-read it and ask what part of it you
+  have not yet turned into a card.
 
 If the slides do not contain what an objective asks for, do not invent it:
 record the objective in uncoveredNotes instead.
+${applicationSection(options)}
 
 STUDY-GUIDE OBJECTIVES
 ${list}

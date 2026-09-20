@@ -29,6 +29,11 @@ export type QueueFilter = {
   seed?: number;
   /** Overridden in tests; today's date otherwise. */
   today?: string;
+  /**
+   * PRD §9 higher-order cards. Included unless explicitly switched off, since
+   * a deck without them behaves exactly as it did before they existed.
+   */
+  includeApplication?: boolean;
 };
 
 export type QueueCard = {
@@ -39,14 +44,20 @@ export type QueueCard = {
   lastGrade: "missed" | "difficult" | "easy" | null;
   /** Due date (YYYY-MM-DD) from the scheduler; null if never scheduled. */
   nextReviewDue: string | null;
+  cardType: string;
 };
 
 export function filterCards<T extends QueueCard>(
   cards: readonly T[],
   filter: QueueFilter,
 ): T[] {
-  // Cards the student marked as not testable stay out of every deck.
-  const testable = cards.filter((card) => !card.excluded);
+  // Cards the student marked as not testable stay out of every deck, and
+  // application questions drop out when they have been switched off.
+  const testable = cards.filter(
+    (card) =>
+      !card.excluded &&
+      (filter.includeApplication !== false || card.cardType !== "application"),
+  );
 
   switch (filter.scope) {
     case "topic":

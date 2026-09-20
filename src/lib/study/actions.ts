@@ -14,6 +14,8 @@ import {
   completeSession,
   gradeCard,
   setPosition,
+  skipKnownCard,
+  skipUnknownCard,
   startSession,
 } from "./session";
 
@@ -45,6 +47,17 @@ export async function gradeStudyCard(
   sessionId?: string | null,
 ) {
   gradeCard(db, cardId, grade, sessionId);
+}
+
+/** "I know it": credit the card and move on without flipping it. */
+export async function skipKnown(cardId: string, sessionId?: string | null) {
+  skipKnownCard(db, cardId, sessionId);
+}
+
+/** "No clue": mark it missed and re-queue it later in this session. */
+export async function skipUnknown(cardId: string, sessionId?: string | null) {
+  const order = skipUnknownCard(db, cardId, sessionId);
+  return { cardOrder: order ?? null };
 }
 
 export async function toggleCardStar(cardId: string) {

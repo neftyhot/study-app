@@ -58,6 +58,14 @@ export const exams = sqliteTable(
     scopeMode: text("scope_mode", { enum: ["files", "objectives"] })
       .notNull()
       .default("files"),
+    /**
+     * Whether generation also produces higher-order application cards
+     * (PRD §9). Off by default: they are worth more once the underlying
+     * facts are in the deck.
+     */
+    includeApplication: integer("include_application", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: createdAt(),
   },
   (t) => [index("exams_course_idx").on(t.courseId)],
@@ -65,7 +73,18 @@ export const exams = sqliteTable(
 
 /* -------------------------------------------------------------- SourceFile */
 
-export const sourceFileTypes = ["pdf", "pptx", "docx", "image"] as const;
+export const sourceFileTypes = [
+  "pdf",
+  "pptx",
+  "docx",
+  "txt",
+  "md",
+  "rtf",
+  "csv",
+  /** Text pasted straight into the app rather than uploaded. */
+  "pasted",
+  "image",
+] as const;
 export const sourceFileRoles = ["slides", "study_guide", "notes"] as const;
 export const ingestStatuses = [
   "pending",
@@ -169,7 +188,13 @@ export const studyGuideObjectives = sqliteTable(
 
 /* --------------------------------------------------------------- Flashcard */
 
-export const cardTypes = ["atomic", "process", "integration"] as const;
+export const cardTypes = [
+  "atomic",
+  "process",
+  "integration",
+  /** Higher-order questions (PRD §9): perturbations, shifts, scenarios. */
+  "application",
+] as const;
 
 export const flashcards = sqliteTable(
   "flashcards",

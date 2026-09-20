@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   ChevronRight,
+  CircleCheck,
+  CircleHelp,
   FileText,
   Pencil,
   Shuffle,
@@ -46,6 +48,8 @@ import {
   finishStudySession,
   gradeStudyCard,
   saveStudyPosition,
+  skipKnown,
+  skipUnknown,
   toggleCardStar,
 } from "@/lib/study/actions";
 
@@ -164,6 +168,39 @@ export function StudyDeck({
     [current, revealed, session, move, position],
   );
 
+  /** "I know it": credit it and move on without flipping the card. */
+  const knowIt = useCallback(() => {
+    if (!current) return;
+    void skipKnown(current.id, session?.id ?? null);
+    setCounts((prev) => ({ ...prev, easy: prev.easy + 1 }));
+    setDeck((prev) =>
+      prev.map((card) =>
+        card.id === current.id ? { ...card, lastGrade: "easy" } : card,
+      ),
+    );
+    move(position + 1);
+  }, [current, session, move, position]);
+
+  /** "No clue": show the answer, mark it missed, see it again this session. */
+  const noClue = useCallback(async () => {
+    if (!current) return;
+    setRevealed(true);
+    setDetail(true);
+
+    const result = await skipUnknown(current.id, session?.id ?? null);
+    setCounts((prev) => ({ ...prev, missed: prev.missed + 1 }));
+    setDeck((prev) =>
+      prev.map((card) =>
+        card.id === current.id ? { ...card, lastGrade: "missed" } : card,
+      ),
+    );
+
+    // The card was re-inserted further down the queue; take the new order.
+    if (result.cardOrder && session) {
+      setSession({ ...session, cardOrder: result.cardOrder });
+    }
+  }, [current, session]);
+
   const star = useCallback(() => {
     if (!current) return;
     const id = current.id;
@@ -219,6 +256,14 @@ export function StudyDeck({
           event.preventDefault();
           setEditing(true);
           break;
+        case "k":
+        case "K":
+          knowIt();
+          break;
+        case "d":
+        case "D":
+          void noClue();
+          break;
         default:
           break;
       }
@@ -226,12 +271,13 @@ export function StudyDeck({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [current, editing, grade, move, position, star]);
+  }, [current, editing, grade, knowIt, move, noClue, position, star]);
 
   async function start(filter: {
     scope: StudyScope;
     topic: string | null;
     shuffled: boolean;
+    includeApplication: boolean;
   }) {
     const started = await beginStudySession(examId, filter);
     setSession({
@@ -415,14 +461,40 @@ export function StudyDeck({
                   ) : null}
                 </div>
               ) : (
-                <Button
-                  variant="secondary"
-                  onClick={() => setRevealed(true)}
-                  className="w-full"
-                >
-                  Show answer
-                  <kbd className="text-muted-foreground ml-1 text-xs">space</kbd>
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    variant="secondary"
+                    onClick={() => setRevealed(true)}
+                    className="w-full"
+                  >
+                    Show answer
+                    <kbd className="text-muted-foreground ml-1 text-xs">
+                      space
+                    </kbd>
+                  </Button>
+
+                  {/* Skipping without flipping: the two honest shortcuts. */}
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      variant="outline"
+                      className="text-xs sm:text-sm"
+                      onClick={knowIt}
+                    >
+                      <CircleCheck className="size-4" />
+                      I know it
+                      <kbd className="ml-1 text-xs opacity-70">k</kbd>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="text-xs sm:text-sm"
+                      onClick={() => void noClue()}
+                    >
+                      <CircleHelp className="size-4" />
+                      No clue
+                      <kbd className="ml-1 text-xs opacity-70">d</kbd>
+                    </Button>
+                  </div>
+                </div>
               )}
             </>
           )}
@@ -529,14 +601,22 @@ function DeckPicker({
     scope: StudyScope;
     topic: string | null;
     shuffled: boolean;
+    includeApplication: boolean;
   }) => Promise<void>;
 }) {
   const [scope, setScope] = useState<StudyScope>("all");
   const [topic, setTopic] = useState<string>(topics[0] ?? "");
   const [shuffled, setShuffled] = useState(false);
+  const [application, setApplication] = useState(true);
   const [starting, setStarting] = useState(false);
 
-  const testable = cards.filter((card) => !card.excluded);
+  const testable = cards.filter(
+    (card) =>
+      !card.excluded && (application || card.cardType !== "application"),
+  );
+  const applicationCount = cards.filter(
+    (card) => !card.excluded && card.cardType === "application",
+  ).length;
   const available = {
     all: testable.length,
     topic: testable.filter((card) => card.topic === topic).length,
@@ -550,8 +630,8 @@ function DeckPicker({
       <CardHeader>
         <CardTitle className="text-base">Start a session</CardTitle>
         <CardDescription>
-          Space reveals the answer, 1/2/3 grades it, arrows move, S stars, E
-          edits.
+          Space reveals the answer, 1/2/3 grades it, K skips one you know, D
+          reveals one you do not, arrows move, S stars, E edits.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -604,6 +684,23 @@ function DeckPicker({
           </div>
         </div>
 
+        {applicationCount > 0 ? (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="study-application"
+              checked={application}
+              onCheckedChange={(value) => setApplication(value === true)}
+            />
+            <Label
+              htmlFor="study-application"
+              className="text-muted-foreground text-sm font-normal"
+            >
+              Include {applicationCount} application question
+              {applicationCount === 1 ? "" : "s"}
+            </Label>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={available === 0 || starting}
@@ -613,6 +710,7 @@ function DeckPicker({
                 scope,
                 topic: scope === "topic" ? topic : null,
                 shuffled,
+                includeApplication: application,
               });
               setStarting(false);
             }}
