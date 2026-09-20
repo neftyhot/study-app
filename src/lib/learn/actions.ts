@@ -11,6 +11,14 @@ import { hasRevision } from "@/lib/cards/edit";
 import { buildMcq, type McqCard, type McqOption } from "./mcq";
 import type { Stage } from "./ladder";
 import {
+  assistsForCard,
+  diagnoseCard,
+  existingDiagnosis,
+  type AssistKind,
+} from "@/lib/assist";
+import { getProvider } from "@/lib/llm";
+
+import {
   finishLearnSession,
   loadLearn,
   loadLearnCards,
@@ -20,6 +28,7 @@ import {
   startLearnSession,
   startNextRound,
   submitOutcome,
+  provideAssist,
 } from "./session";
 import type { TypedGrade } from "./typed";
 import { getTypedGrader } from "@/lib/grade";
@@ -63,6 +72,12 @@ export type Reveal = {
   debrief?: string;
   grade?: TypedGrade;
   correct: boolean;
+  /** Why this card keeps being missed, once there is a pattern (PRD §14). */
+  diagnosis?: {
+    category: string;
+    explanation: string;
+    suggestion: string;
+  } | null;
   /** Set for typed answers, so the student can overrule the grade (PRD §7). */
   attemptId?: string;
 };
@@ -256,6 +271,9 @@ export async function answerTyped(
   });
   if (!submitted) return null;
 
+  // An answer given after a hint is assisted practice, not recall.
+  const assisted = assistsForCard(db, cardId, sessionId).length > 0;
+
   const attempt = recordAttempt(db, {
     flashcardId: cardId,
     sessionId,
@@ -264,7 +282,18 @@ export async function answerTyped(
     grade,
     countsTowardMastery: step.countsTowardMastery,
     guessed,
+    assisted,
   });
+
+  // A pattern of wrong answers is worth explaining; one is not.
+  let diagnosis = null;
+  if (!correct) {
+    try {
+      diagnosis = (await diagnoseCard(db, getProvider(), cardId)) ?? null;
+    } catch {
+      diagnosis = existingDiagnosis(db, cardId) ?? null;
+    }
+  }
 
   return {
     reveal: {
@@ -274,9 +303,60 @@ export async function answerTyped(
       directAnswer: card.directAnswer,
       fullExplanation: card.fullExplanation,
       sourceExcerpt: card.sourceExcerpt,
+      diagnosis: diagnosis
+        ? {
+            category: diagnosis.category,
+            explanation: diagnosis.explanation,
+            suggestion: diagnosis.suggestion,
+          }
+        : null,
     },
     status: status(sessionId),
   };
+}
+
+export type AssistResult = {
+  kind: AssistKind;
+  body: string;
+  usesOutsideKnowledge: boolean;
+  status: LearnStatus;
+};
+
+/**
+ * Asks for help mid-question (PRD §14).
+ *
+ * Returns the updated status too, because using an aid changes what the
+ * current attempt can prove — the badge flips from "Counts" to "Practice"
+ * as soon as the help arrives, rather than silently downgrading later.
+ */
+export async function askForHelp(
+  sessionId: string,
+  cardId: string,
+  kind: AssistKind,
+): Promise<AssistResult | { error: string }> {
+  try {
+    const provider = kind === "source" ? undefined : getProvider();
+    const event = await provideAssist(
+      db,
+      provider ?? ({} as never),
+      sessionId,
+      cardId,
+      kind,
+    );
+
+    if (!event) return { error: "That card is no longer available." };
+
+    return {
+      kind,
+      body: event.body,
+      usesOutsideKnowledge: event.usesOutsideKnowledge,
+      status: status(sessionId),
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Could not fetch help",
+    };
+  }
 }
 
 /**

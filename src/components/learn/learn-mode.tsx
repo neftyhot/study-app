@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { CircleCheck, CircleX, Dices, Loader2, Pencil } from "lucide-react";
+import {
+  CircleCheck,
+  CircleX,
+  Dices,
+  FileText,
+  Loader2,
+  Pencil,
+  Sparkles,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -27,19 +35,39 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   answerMultipleChoice,
   answerTyped,
+  askForHelp,
   beginLearnSession,
   endLearnSession,
   nextLearnRound,
   overrideAnswer,
   practiceMissedPoints,
   skipToTypedRecall,
+  type AssistResult,
   type LearnPrompt,
   type LearnStatus,
   type Reveal,
 } from "@/lib/learn/actions";
+import type { AssistKind } from "@/lib/assist";
 import type { TypedGrade } from "@/lib/learn/typed";
 import { CardEditor } from "@/components/cards/card-editor";
 import type { StudyScope } from "@/lib/study/queue";
+
+/** PRD §14's assistance buttons, in the order a stuck student wants them. */
+const AIDS: { kind: AssistKind; label: string }[] = [
+  { kind: "hint", label: "Hint" },
+  { kind: "simpler", label: "Explain simply" },
+  { kind: "example", label: "Give an example" },
+  { kind: "compare", label: "Compare concepts" },
+  { kind: "prerequisite", label: "Easier prerequisite" },
+  { kind: "source", label: "Show original slide" },
+];
+
+const DIAGNOSIS_LABELS: Record<string, string> = {
+  missing_prerequisite: "Looks like a missing prerequisite",
+  term_confusion: "Looks like two terms getting swapped",
+  defective_question: "This card may be the problem, not you",
+  not_learned_yet: "Not learned yet",
+};
 
 const ERROR_LABELS: Record<string, string> = {
   directionality: "direction reversed",
@@ -84,6 +112,8 @@ export function LearnMode({
   const [busy, setBusy] = useState(false);
   const [guessing, setGuessing] = useState(false);
   const [typed, setTyped] = useState("");
+  const [helps, setHelps] = useState<AssistResult[]>([]);
+  const [helping, setHelping] = useState<AssistKind | null>(null);
 
   if (!sessionId || !status) {
     return (
@@ -140,6 +170,27 @@ export function LearnMode({
     setAnswered(null);
     setTyped("");
     setGuessing(false);
+    setHelps([]);
+  }
+
+  async function help(kind: AssistKind) {
+    if (!sessionId || !prompt) return;
+    setHelping(kind);
+
+    const result = await askForHelp(sessionId, prompt.cardId, kind);
+    setHelping(null);
+
+    if ("error" in result) {
+      toast.error(result.error);
+      return;
+    }
+
+    setHelps((previous) => [
+      ...previous.filter((item) => item.kind !== kind),
+      result,
+    ]);
+    // Using an aid changes what this attempt can prove; say so immediately.
+    setStatus(result.status);
   }
 
   if (!prompt) {
@@ -234,6 +285,14 @@ export function LearnMode({
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {!reveal ? (
+            <AssistBar
+              helps={helps}
+              helping={helping}
+              onAsk={(kind) => void help(kind)}
+            />
+          ) : null}
+
           {reveal ? (
             <RevealPanel
               reveal={reveal}
@@ -384,6 +443,19 @@ function RevealPanel({
         <p className="text-muted-foreground text-sm">{reveal.debrief}</p>
       ) : null}
 
+      {reveal.diagnosis ? (
+        <div className="space-y-1 rounded-md border p-3 text-sm">
+          <p className="text-xs font-medium">
+            {DIAGNOSIS_LABELS[reveal.diagnosis.category] ??
+              reveal.diagnosis.category}
+          </p>
+          <p className="text-muted-foreground">
+            {reveal.diagnosis.explanation}
+          </p>
+          <p>{reveal.diagnosis.suggestion}</p>
+        </div>
+      ) : null}
+
       {reveal.grade ? (
         <div className="space-y-2 text-sm">
           {reveal.grade.metPoints.length > 0 ? (
@@ -475,6 +547,71 @@ function RevealPanel({
           </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The help buttons and whatever help has been given so far.
+ *
+ * Deliberately sits above the answer box rather than behind a menu: a student
+ * who is stuck should not have to go looking, and every one of these is
+ * recorded so the attempt that follows is counted as assisted practice.
+ */
+function AssistBar({
+  helps,
+  helping,
+  onAsk,
+}: {
+  helps: AssistResult[];
+  helping: AssistKind | null;
+  onAsk: (kind: AssistKind) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {AIDS.map((aid) => (
+          <Button
+            key={aid.kind}
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground h-7 px-2 text-xs"
+            disabled={helping !== null}
+            onClick={() => onAsk(aid.kind)}
+          >
+            {helping === aid.kind ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : aid.kind === "source" ? (
+              <FileText className="size-3" />
+            ) : null}
+            {aid.label}
+          </Button>
+        ))}
+      </div>
+
+      {helps.map((item) => (
+        <div
+          key={item.kind}
+          className="bg-muted/50 space-y-1 rounded-md border p-3 text-sm"
+        >
+          <p className="flex items-center gap-1.5 text-xs font-medium">
+            {AIDS.find((aid) => aid.kind === item.kind)?.label ?? item.kind}
+            {item.usesOutsideKnowledge ? (
+              <Badge variant="outline" className="gap-1">
+                <Sparkles className="size-3" />
+                beyond your notes
+              </Badge>
+            ) : null}
+          </p>
+          <p className="whitespace-pre-wrap">{item.body}</p>
+        </div>
+      ))}
+
+      {helps.length > 0 ? (
+        <p className="text-muted-foreground text-xs">
+          Answering after help counts as practice, not recall.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -251,6 +251,25 @@ export function skipRecognition(
   };
 }
 
+/**
+ * Records that the student asked for help on a concept (PRD §14).
+ *
+ * Reuses `answerShown`, which already means "the next attempt on this concept
+ * cannot prove recall". A hint is help in exactly that sense: the attempt that
+ * follows it is assisted practice, and the concept gets a genuine chance again
+ * once other items have intervened.
+ */
+export function markAssisted(state: RoundState, cardId: string): RoundState {
+  return {
+    ...state,
+    concepts: state.concepts.map((concept) =>
+      concept.cardId === cardId && !concept.done
+        ? { ...concept, answerShown: true }
+        : concept,
+    ),
+  };
+}
+
 export function roundSummary(state: RoundState) {
   return {
     total: state.concepts.length,

@@ -507,6 +507,8 @@ export const answerAttempts = sqliteTable(
     guessed: integer("guessed", { mode: "boolean" }).notNull().default(false),
     /** A sub-point drill: graded and recorded, but never scored. */
     practice: integer("practice", { mode: "boolean" }).notNull().default(false),
+    /** The student used an aid before answering (PRD §14). */
+    assisted: integer("assisted", { mode: "boolean" }).notNull().default(false),
     /** The student overruled the grade. */
     overridden: integer("overridden", { mode: "boolean" })
       .notNull()
@@ -550,6 +552,84 @@ export const cardRevisions = sqliteTable(
     createdAt: createdAt(),
   },
   (t) => [index("card_revisions_card_idx").on(t.flashcardId)],
+);
+
+/* -------------------------------------------------------------- AssistEvent */
+
+export const assistKinds = [
+  "simpler",
+  "example",
+  "compare",
+  "hint",
+  "prerequisite",
+  "source",
+] as const;
+
+/**
+ * Every time the student asked for help (PRD §14).
+ *
+ * Recorded because help changes what an answer means: recalling something
+ * after a hint is assisted practice, not independent recall. Keeping the
+ * events also shows which concepts consistently need scaffolding.
+ */
+export const assistEvents = sqliteTable(
+  "assist_events",
+  {
+    id: id(),
+    flashcardId: text("flashcard_id")
+      .notNull()
+      .references(() => flashcards.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").references(() => studySessions.id, {
+      onDelete: "set null",
+    }),
+    kind: text("kind", { enum: assistKinds }).notNull(),
+    /** What the aid said, so it can be shown again without paying twice. */
+    body: text("body").notNull(),
+    /** True when the aid went beyond the uploaded material. */
+    usesOutsideKnowledge: integer("uses_outside_knowledge", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("assist_events_card_idx").on(t.flashcardId),
+    index("assist_events_session_idx").on(t.sessionId),
+  ],
+);
+
+/* ----------------------------------------------------------- ErrorDiagnosis */
+
+export const errorCategories = [
+  "missing_prerequisite",
+  "term_confusion",
+  "defective_question",
+  "not_learned_yet",
+] as const;
+
+/**
+ * Why a concept keeps being missed (PRD §14).
+ *
+ * "You got this wrong again" is not useful. Whether the student is missing a
+ * prerequisite, confusing two terms, or answering a badly worded question
+ * calls for three different responses — and the third is the app's fault, not
+ * theirs, which is why it is a category at all.
+ */
+export const errorDiagnoses = sqliteTable(
+  "error_diagnoses",
+  {
+    id: id(),
+    flashcardId: text("flashcard_id")
+      .notNull()
+      .references(() => flashcards.id, { onDelete: "cascade" }),
+    category: text("category", { enum: errorCategories }).notNull(),
+    explanation: text("explanation").notNull(),
+    /** What to do about it, in one sentence. */
+    suggestion: text("suggestion").notNull(),
+    /** How many wrong answers this diagnosis was based on. */
+    attemptsConsidered: integer("attempts_considered").notNull().default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("error_diagnoses_card_idx").on(t.flashcardId)],
 );
 
 /* --------------------------------------------------------------- Relations */
@@ -608,6 +688,8 @@ export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
   coverage: many(coverageMappings),
   attempts: many(answerAttempts),
   revisions: many(cardRevisions),
+  assists: many(assistEvents),
+  diagnosis: one(errorDiagnoses),
 }));
 
 export const cardRevisionsRelations = relations(cardRevisions, ({ one }) => ({
@@ -678,6 +760,20 @@ export const studySessionsRelations = relations(
   }),
 );
 
+export const assistEventsRelations = relations(assistEvents, ({ one }) => ({
+  flashcard: one(flashcards, {
+    fields: [assistEvents.flashcardId],
+    references: [flashcards.id],
+  }),
+}));
+
+export const errorDiagnosesRelations = relations(errorDiagnoses, ({ one }) => ({
+  flashcard: one(flashcards, {
+    fields: [errorDiagnoses.flashcardId],
+    references: [flashcards.id],
+  }),
+}));
+
 export const answerAttemptsRelations = relations(answerAttempts, ({ one }) => ({
   flashcard: one(flashcards, {
     fields: [answerAttempts.flashcardId],
@@ -712,6 +808,8 @@ export type ContentConflict = typeof contentConflicts.$inferSelect;
 export type StudyProgress = typeof studyProgress.$inferSelect;
 export type StudySession = typeof studySessions.$inferSelect;
 export type AnswerAttempt = typeof answerAttempts.$inferSelect;
+export type AssistEvent = typeof assistEvents.$inferSelect;
+export type ErrorDiagnosis = typeof errorDiagnoses.$inferSelect;
 
 export type NewCourse = typeof courses.$inferInsert;
 export type NewExam = typeof exams.$inferInsert;

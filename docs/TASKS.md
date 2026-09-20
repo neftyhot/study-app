@@ -558,6 +558,53 @@ Both found by using the app on a real deck, not by the test suite.
 
 ---
 
+## Phase 10 — In-Session Scaffolding & Remediation (PRD §14) ✅
+
+**Goal:** Help a stuck student without quietly inflating what they have proven.
+
+- [x] Six aids while answering: Hint, Explain simply, Give an example, Compare concepts,
+      Easier prerequisite, Show original slide
+- [x] Every aid grounded in the card's own source material, and badged when it goes beyond it
+- [x] A hint that contains the answer is rejected **in code** and replaced
+- [x] Using an aid is recorded (`assist_events`) and makes the next attempt assisted practice
+- [x] Persistent-error diagnosis from what the student actually wrote (`error_diagnoses`)
+- [x] Diagnoses surfaced in the session and on the exam overview
+- [x] Tests: 278 passing (18 new)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 278 tests, smoke green. Live against
+a real card from a Sense Organs deck, all six aids returned usable help: the hint
+("Think about what fundamental aspects of human experience... rely on receiving information from
+the senses") named neither required point, `compare` correctly pulled a sibling card about
+unconscious sensory input, and `source` quoted page 2 of the PDF with no model call at all.
+
+**Help has to cost something, or it is not help.** An answer given after a hint is not recall,
+so asking for any aid marks the concept `answerShown` — the same mechanism that already makes a
+typed attempt right after an MCQ count as practice. The badge on screen flips from "Counts" to
+"Practice" the moment the help arrives, so the student sees the trade rather than discovering it
+later. The concept gets a genuine chance again once other items have intervened.
+
+**A hint that contains the answer is not a hint.** The prompt says so, and then
+`hintLeaksAnswer` checks it: if 80% of a required point's content words appear in the hint, it
+is replaced with a structural hint built from the shape of the answer rather than its content
+("This answer needs 2 separate points... It came from slide 4 of lecture.pptx, if you want to
+look it up instead"), which cannot leak because it contains nothing to leak.
+
+**Diagnosis reads the answers, not the count.** After two wrong answers it asks what they have
+in common, and one of the four categories it may return is `defective_question` — the card
+itself being ambiguous or mis-rubriced. A generated card can simply be wrong, and a tool that
+cannot say so trains the student to distrust themselves. Re-diagnosis happens only when there
+are new wrong answers to look at.
+
+**Known limits (deliberate, deferred):**
+- The prerequisite aid asks a simpler question but does not grade the answer to it; it is
+  scaffolding, not a sub-round.
+- Diagnoses are per card. Spotting that a whole topic is missing a prerequisite is analytics
+  (§13), still deferred.
+- Aids are fetched one at a time and not cached across sessions, so asking again next week
+  pays again.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
-Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · in-session scaffolding buttons (§14) · full undo history (§15).
+Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · full undo history (§15).

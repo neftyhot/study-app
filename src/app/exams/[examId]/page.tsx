@@ -19,7 +19,15 @@ import {
   getExam,
   getExamStats,
   getMasteryBreakdown,
+  listDiagnosedCards,
 } from "@/lib/queries";
+
+const DIAGNOSIS_LABELS: Record<string, string> = {
+  missing_prerequisite: "missing prerequisite",
+  term_confusion: "terms getting swapped",
+  defective_question: "the card may be at fault",
+  not_learned_yet: "not learned yet",
+};
 
 export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   const { examId } = await props.params;
@@ -27,13 +35,15 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
 
   if (!exam) notFound();
 
-  const [stats, slideCount, coverage, dueCount, mastery] = await Promise.all([
-    getExamStats(examId),
-    countAnswerSlides(examId),
-    getCoverageStats(examId),
-    countDueCards(examId),
-    getMasteryBreakdown(examId),
-  ]);
+  const [stats, slideCount, coverage, dueCount, mastery, diagnoses] =
+    await Promise.all([
+      getExamStats(examId),
+      countAnswerSlides(examId),
+      getCoverageStats(examId),
+      countDueCards(examId),
+      getMasteryBreakdown(examId),
+      listDiagnosedCards(examId),
+    ]);
 
   return (
     <div className="space-y-8">
@@ -141,6 +151,36 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
                 {coverage.analyzed === 0 ? "Analyze coverage" : "Open matrix"}
               </Link>
             </Button>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {diagnoses.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              Cards that keep going wrong
+            </CardTitle>
+            <CardDescription>
+              Diagnosed from what you actually wrote, not from how many times
+              you missed them.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {diagnoses.map((item) => (
+              <div key={item.cardId} className="space-y-1 rounded-md border p-3">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium break-words">
+                  {item.question}
+                  <Badge variant="outline">
+                    {DIAGNOSIS_LABELS[item.category] ?? item.category}
+                  </Badge>
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {item.explanation}
+                </p>
+                <p className="text-xs">{item.suggestion}</p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       ) : null}

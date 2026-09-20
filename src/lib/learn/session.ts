@@ -15,6 +15,7 @@ import {
   studyProgress,
   studySessions,
   type AnswerAttempt,
+  type AssistEvent,
   type StudySession,
 } from "@/db/schema";
 import { buildQueue, type QueueFilter } from "@/lib/study/queue";
@@ -23,6 +24,7 @@ import { loadQueueCards } from "@/lib/study/session";
 import {
   applyOutcome,
   isComplete,
+  markAssisted,
   nextStep,
   skipRecognition,
   startRound,
@@ -34,6 +36,8 @@ import { qualityForVerdict, scheduleFor } from "@/lib/srs";
 
 import { applyLearnResult } from "./progress";
 import type { TypedGrade } from "./typed";
+import { requestAssist, type AssistKind } from "@/lib/assist";
+import type { LlmProvider } from "@/lib/llm";
 
 /** Concepts per round, bounded by PRD §5's 5–8. */
 export const MIN_ROUND_SIZE = 5;
@@ -244,6 +248,39 @@ export function submitOutcome(
   };
 }
 
+/**
+ * Fetches an aid and marks the concept as assisted (PRD §14).
+ *
+ * Order matters: the concept is marked before the student answers, so the
+ * attempt they make next is already known to be assisted practice.
+ */
+// Not named `useAssist`: a `use` prefix reads as a React hook to both humans
+// and the linter, and this is a database function.
+export async function provideAssist(
+  db: Db,
+  llm: LlmProvider,
+  sessionId: string | null,
+  cardId: string,
+  kind: AssistKind,
+): Promise<AssistEvent | undefined> {
+  const event = await requestAssist(db, llm, { cardId, kind, sessionId });
+  if (!event || !sessionId) return event;
+
+  const session = db
+    .select()
+    .from(studySessions)
+    .where(eq(studySessions.id, sessionId))
+    .get();
+
+  if (session?.roundState) {
+    save(db, sessionId, {
+      roundState: markAssisted(session.roundState, cardId),
+    });
+  }
+
+  return event;
+}
+
 export function skipToRecall(
   db: Db,
   sessionId: string,
@@ -327,6 +364,8 @@ export type AttemptInput = {
   guessed?: boolean;
   /** A sub-point drill: recorded and graded, never scored. */
   practice?: boolean;
+  /** The student used an aid before answering (PRD §14). */
+  assisted?: boolean;
 };
 
 export function recordAttempt(db: Db, input: AttemptInput): AnswerAttempt {
@@ -344,6 +383,7 @@ export function recordAttempt(db: Db, input: AttemptInput): AnswerAttempt {
       countsTowardMastery: input.countsTowardMastery,
       guessed: input.guessed ?? false,
       practice: input.practice ?? false,
+      assisted: input.assisted ?? false,
       provisional: input.grade.provisional,
     })
     .returning()

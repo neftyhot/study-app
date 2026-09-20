@@ -5,8 +5,10 @@ import { and, count, desc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-o
 import { db } from "@/db";
 import { todayIso } from "@/lib/srs";
 import {
+  assistEvents,
   cardRevisions,
   contentConflicts,
+  errorDiagnoses,
   courses,
   exams,
   flashcards,
@@ -254,4 +256,39 @@ export async function listUndoableCards(examId: string) {
     .where(eq(flashcards.examId, examId));
 
   return new Set(rows.map((row) => row.flashcardId));
+}
+
+/**
+ * Cards that keep going wrong, with why (PRD §14).
+ *
+ * Surfaced outside the session as well as inside it: the point of diagnosing
+ * a persistent error is to do something about it later, not only to see a note
+ * in the moment it happens.
+ */
+export async function listDiagnosedCards(examId: string) {
+  return db
+    .select({
+      cardId: flashcards.id,
+      question: flashcards.question,
+      topic: flashcards.topic,
+      category: errorDiagnoses.category,
+      explanation: errorDiagnoses.explanation,
+      suggestion: errorDiagnoses.suggestion,
+      attemptsConsidered: errorDiagnoses.attemptsConsidered,
+    })
+    .from(errorDiagnoses)
+    .innerJoin(flashcards, eq(flashcards.id, errorDiagnoses.flashcardId))
+    .where(eq(flashcards.examId, examId))
+    .orderBy(desc(errorDiagnoses.attemptsConsidered));
+}
+
+/** How often help was used, per kind — assisted practice at a glance. */
+export async function countAssists(examId: string) {
+  const rows = await db
+    .select({ kind: assistEvents.kind })
+    .from(assistEvents)
+    .innerJoin(flashcards, eq(flashcards.id, assistEvents.flashcardId))
+    .where(eq(flashcards.examId, examId));
+
+  return rows.length;
 }
