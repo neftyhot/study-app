@@ -22,6 +22,13 @@
       "when": 1789931756226,
       "tag": "0002_naive_hex",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789932394052,
+      "tag": "0003_spooky_the_order",
+      "breakpoints": true
     }
   ]
 }

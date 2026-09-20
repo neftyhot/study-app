@@ -9,6 +9,8 @@
  *  - Timestamps are ISO-8601 strings, which keeps them portable to Turso.
  */
 import { relations, sql } from "drizzle-orm";
+// Type-only: the Learn round engine owns the shape of its own saved state.
+import type { RoundState } from "@/lib/learn/ladder";
 import {
   index,
   integer,
@@ -417,6 +419,12 @@ export const studySessions = sqliteTable(
       .default([]),
     /** Index into `card_order` of the card to show next. */
     position: integer("position").notNull().default(0),
+    /** Concepts per Learn micro-round (PRD §5: 5–8, user-configurable). */
+    roundSize: integer("round_size").notNull().default(6),
+    /** Index into `card_order` of the current round's first concept. */
+    roundIndex: integer("round_index").notNull().default(0),
+    /** The Learn engine's state for the round in progress; null in flashcards mode. */
+    roundState: text("round_state", { mode: "json" }).$type<RoundState>(),
     missedCount: integer("missed_count").notNull().default(0),
     difficultCount: integer("difficult_count").notNull().default(0),
     easyCount: integer("easy_count").notNull().default(0),

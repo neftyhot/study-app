@@ -1,0 +1,280 @@
+"use server";
+
+import { and, eq } from "drizzle-orm";
+
+import { db } from "@/db";
+import { cardRubrics, flashcards } from "@/db/schema";
+import type { QueueFilter } from "@/lib/study/queue";
+
+import { buildMcq, type McqCard, type McqOption } from "./mcq";
+import type { Stage } from "./ladder";
+import {
+  finishLearnSession,
+  loadLearn,
+  loadLearnCards,
+  skipToRecall,
+  startLearnSession,
+  startNextRound,
+  submitOutcome,
+} from "./session";
+import { createKeywordGrader, type TypedGrade } from "./typed";
+
+/**
+ * Typed answers are graded here, not in the browser: the client never receives
+ * the answer it is being asked for. Phase 6 swaps this for the semantic
+ * grader without touching any caller.
+ */
+const grader = createKeywordGrader();
+
+export type LearnPrompt = {
+  cardId: string;
+  stage: Stage;
+  topic: string | null;
+  question: string;
+  /** Present only on a recognition step. */
+  options?: { text: string }[];
+  /** Sub-concept breakdown, shown once errors repeat (PRD §5). */
+  breakdown?: string[];
+  remediate: boolean;
+  countsTowardMastery: boolean;
+};
+
+export type LearnStatus = {
+  prompt: LearnPrompt | null;
+  roundNumber: number;
+  roundCount: number;
+  roundComplete: boolean;
+  remaining: number;
+  mastered: number;
+  struggled: number;
+};
+
+export type Reveal = {
+  directAnswer: string;
+  fullExplanation: string | null;
+  sourceExcerpt: string | null;
+  /** Why the chosen option was wrong (PRD §8 debrief). */
+  debrief?: string;
+  grade?: TypedGrade;
+  correct: boolean;
+};
+
+/** Stable per card and attempt, so re-rendering does not reshuffle the options. */
+function seedFor(sessionId: string, cardId: string, attempts: number): number {
+  const input = `${sessionId}:${cardId}:${attempts}`;
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function cardRow(cardId: string) {
+  return db
+    .select({
+      id: flashcards.id,
+      examId: flashcards.examId,
+      topic: flashcards.topic,
+      question: flashcards.question,
+      directAnswer: flashcards.directAnswer,
+      fullExplanation: flashcards.fullExplanation,
+      sourceExcerpt: flashcards.sourceExcerpt,
+      essentialPoints: cardRubrics.essentialPoints,
+      misconceptions: cardRubrics.commonMisconceptions,
+    })
+    .from(flashcards)
+    .leftJoin(cardRubrics, eq(cardRubrics.flashcardId, flashcards.id))
+    .where(eq(flashcards.id, cardId))
+    .get();
+}
+
+function optionsFor(
+  sessionId: string,
+  card: NonNullable<ReturnType<typeof cardRow>>,
+  attempts: number,
+): McqOption[] {
+  const deck: McqCard[] = loadLearnCards(db, card.examId).map((row) => ({
+    id: row.id,
+    topic: row.topic,
+    question: row.question,
+    directAnswer: row.directAnswer,
+    misconceptions: row.misconceptions ?? [],
+  }));
+
+  return buildMcq(
+    {
+      id: card.id,
+      topic: card.topic,
+      question: card.question,
+      directAnswer: card.directAnswer,
+      misconceptions: card.misconceptions ?? [],
+    },
+    deck,
+    { seed: seedFor(sessionId, card.id, attempts) },
+  );
+}
+
+function status(sessionId: string): LearnStatus {
+  const view = loadLearn(db, sessionId);
+
+  if (!view || !view.state) {
+    return {
+      prompt: null,
+      roundNumber: view?.roundNumber ?? 0,
+      roundCount: view?.roundCount ?? 0,
+      roundComplete: true,
+      remaining: 0,
+      mastered: 0,
+      struggled: 0,
+    };
+  }
+
+  const { state, step } = view;
+  const concepts = state.concepts;
+
+  const base = {
+    roundNumber: view.roundNumber,
+    roundCount: view.roundCount,
+    roundComplete: step === null,
+    remaining: concepts.filter((concept) => !concept.done).length,
+    mastered: concepts.filter((concept) => concept.tier === "immediate_recall")
+      .length,
+    struggled: concepts.filter((concept) => concept.struggled).length,
+  };
+
+  if (!step) return { ...base, prompt: null };
+
+  const card = cardRow(step.cardId);
+  if (!card) return { ...base, prompt: null };
+
+  const concept = concepts.find((c) => c.cardId === step.cardId);
+
+  return {
+    ...base,
+    prompt: {
+      cardId: card.id,
+      stage: step.stage,
+      topic: card.topic,
+      question: card.question,
+      options:
+        step.stage === "mcq"
+          ? optionsFor(sessionId, card, concept?.attempts ?? 0).map(
+              ({ text }) => ({ text }),
+            )
+          : undefined,
+      breakdown: step.remediate ? (card.essentialPoints ?? []) : undefined,
+      remediate: step.remediate,
+      countsTowardMastery: step.countsTowardMastery,
+    },
+  };
+}
+
+export async function beginLearnSession(
+  examId: string,
+  filter: QueueFilter & { roundSize?: number },
+) {
+  const session = startLearnSession(db, examId, filter);
+  return { sessionId: session.id, status: status(session.id) };
+}
+
+export async function getLearnStatus(sessionId: string) {
+  return status(sessionId);
+}
+
+export async function answerMultipleChoice(
+  sessionId: string,
+  cardId: string,
+  chosen: string,
+  guessed = false,
+): Promise<{ reveal: Reveal; status: LearnStatus } | null> {
+  const card = cardRow(cardId);
+  if (!card) return null;
+
+  const view = loadLearn(db, sessionId);
+  const concept = view?.state?.concepts.find((c) => c.cardId === cardId);
+  const options = optionsFor(sessionId, card, concept?.attempts ?? 0);
+
+  // Correctness is decided from the stored answer, never from the client.
+  const picked = options.find((option) => option.text === chosen);
+  const correct = picked?.correct ?? false;
+
+  const submitted = submitOutcome(db, sessionId, cardId, { correct, guessed });
+  if (!submitted) return null;
+
+  return {
+    reveal: {
+      correct,
+      directAnswer: card.directAnswer,
+      fullExplanation: card.fullExplanation,
+      sourceExcerpt: card.sourceExcerpt,
+      debrief: picked?.debrief,
+    },
+    status: status(sessionId),
+  };
+}
+
+export async function answerTyped(
+  sessionId: string,
+  cardId: string,
+  answer: string,
+  guessed = false,
+): Promise<{ reveal: Reveal; status: LearnStatus } | null> {
+  const card = cardRow(cardId);
+  if (!card) return null;
+
+  const grade = await grader.grade({
+    question: card.question,
+    expected: card.directAnswer,
+    essentialPoints: card.essentialPoints ?? [],
+    answer,
+  });
+
+  const correct = grade.verdict === "correct";
+
+  const submitted = submitOutcome(db, sessionId, cardId, {
+    correct,
+    guessed,
+    metPoints: grade.metPoints,
+  });
+  if (!submitted) return null;
+
+  return {
+    reveal: {
+      correct,
+      grade,
+      directAnswer: card.directAnswer,
+      fullExplanation: card.fullExplanation,
+      sourceExcerpt: card.sourceExcerpt,
+    },
+    status: status(sessionId),
+  };
+}
+
+export async function skipToTypedRecall(sessionId: string, cardId: string) {
+  skipToRecall(db, sessionId, cardId);
+  return status(sessionId);
+}
+
+export async function nextLearnRound(sessionId: string) {
+  const more = startNextRound(db, sessionId);
+  return { more, status: status(sessionId) };
+}
+
+export async function endLearnSession(sessionId: string) {
+  finishLearnSession(db, sessionId);
+}
+
+/** Topic list for the Learn picker, excluding cards the student excluded. */
+export async function learnTopics(examId: string) {
+  const rows = db
+    .selectDistinct({ topic: flashcards.topic })
+    .from(flashcards)
+    .where(and(eq(flashcards.examId, examId), eq(flashcards.excluded, false)))
+    .orderBy(flashcards.topic)
+    .all();
+
+  return rows
+    .map((row) => row.topic)
+    .filter((topic): topic is string => Boolean(topic));
+}

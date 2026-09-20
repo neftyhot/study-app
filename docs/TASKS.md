@@ -264,17 +264,63 @@ what the Phase 7 scheduler will read. Four tests pin this.
 
 ---
 
-## Phase 5 — Adaptive Learn Mode (PRD §5, MVP #5)
+## Phase 5 — Adaptive Learn Mode (PRD §5, MVP #5) ✅
 
-- [ ] Round builder: 5–8 concepts per micro-round (user-configurable)
-- [ ] Scaffolding ladder: MCQ recognition → immediate typed recall → interleaved re-prompt after 3–5 items → same-session delayed check
-- [ ] MCQ distractor generation from sibling deck concepts; randomized placement, length-matched
-- [ ] "I guessed" control; post-answer debrief on why a distractor fails
-- [ ] Mastery safeguards: typing straight after a reveal does not register mastery
-- [ ] Skip-ahead to typed recall for known concepts
-- [ ] Persistent-error path: simplified explanation / sub-concept breakdown
+**Goal:** Move a concept from "I recognize it" to "I can produce it", and be honest about
+which of those the student has actually shown.
 
----
+- [x] Round builder: 5–8 concepts per micro-round, user-configurable (clamped to the PRD range)
+- [x] Scaffolding ladder: MCQ recognition → immediate typed recall → interleaved re-prompt after
+      3–5 intervening items → same-session delayed check
+- [x] MCQ distractors from the deck itself; randomized placement, length-gated
+- [x] "I guessed" control; post-answer debrief naming what each distractor actually answers
+- [x] Mastery safeguards: typing an answer you were just shown never registers mastery
+- [x] Skip-ahead to typed recall for concepts already recognized, and on demand
+- [x] Persistent-error path: sub-concept breakdown after repeated misses, then the concept is
+      parked rather than drilled forever
+- [x] Round state persisted on `study_sessions` (`mode: "learn"`), so a round survives a reload
+- [x] Tests: 129 passing (34 new)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 129 tests. A full round driven
+against the real database with 32 generated cards: 26 steps for 6 concepts, every `mcq` and
+`typed_immediate` step labelled practice and every `typed_interleaved` / `typed_delayed` step
+labelled counting; a deliberately-missed concept picked up the sub-concept breakdown after two
+errors, recorded 2 lapses, and still reached `immediate_recall` once it was genuinely recalled.
+Every progress row ended with `interval_days = 0` and `next_review_due = null`.
+
+**The rule the design turns on:**
+Typing an answer you were just shown is not recall. The correct option is on screen during an
+MCQ, so the typed attempt that immediately follows is practice by construction and cannot
+promote anything. Only an attempt made after other concepts have intervened counts. That single
+rule is why the ladder exists, and `countsTowardMastery` is carried on every step so the UI can
+say which kind of attempt the student is making rather than quietly scoring it.
+
+**Design notes:**
+- The ladder is a pure state machine (`ladder.ts`), so the mastery rules are tested directly
+  instead of inferred from clicking through a UI.
+- Interleaving falls out of scheduling rather than being imposed: a concept waiting out its
+  delay is skipped, and un-started concepts fill the gap.
+- Distractors prefer the card's own `commonMisconceptions` — Phase 2 wrote those specifically
+  as the plausible wrong answers for that fact, which makes them the best distractors available.
+- A distractor must be within 0.4×–2.5× the correct answer's length. A question with three
+  options is fine; a fourth that is obviously wrong on sight is not.
+- An admitted guess is treated as absence of evidence, not as an error: no promotion, no lapse.
+- Correctness is decided on the server from the stored answer. Typed steps never send the
+  answer to the browser at all.
+- MCQ option order is seeded from (session, card, attempt) so re-rendering does not reshuffle.
+
+**Known limits (deliberate, deferred):**
+- Typed answers are graded by a **provisional keyword grader** behind the `TypedAnswerGrader`
+  interface. It cannot catch a directionality error ("decreases" where "increases" was
+  required) — which is exactly what PRD §7 exists for. Phase 6 implements the semantic grader
+  and drops it in; nothing in the ladder or the UI changes.
+- Multi-day spaced scheduling (rung 5 of the PRD ladder) is Phase 7. Learn writes tiers and
+  counts only, never intervals.
+- The scaffolding aids of PRD §14 ("explain more simply", "give an example") are deferred; the
+  remediation path uses the rubric's essential points as a sub-concept breakdown, which needs
+  no extra model call.
+- A round's concepts come from the deck in order, so a round is usually one topic. Shuffling is
+  offered but defaults off.
 
 ## Phase 6 — Semantic Typed-Answer Grading (PRD §7, MVP #6)
 
