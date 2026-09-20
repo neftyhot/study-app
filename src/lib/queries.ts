@@ -1,6 +1,6 @@
 import "server-only";
 
-import { desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -64,4 +64,33 @@ export async function listObjectives(examId: string) {
     .from(studyGuideObjectives)
     .where(eq(studyGuideObjectives.examId, examId))
     .orderBy(studyGuideObjectives.orderIndex);
+}
+
+/** How many extracted units are available as answer material. */
+export async function countAnswerSlides(examId: string) {
+  const [row] = await db
+    .select({ n: count() })
+    .from(sourceSlides)
+    .innerJoin(sourceFiles, eq(sourceSlides.sourceFileId, sourceFiles.id))
+    .where(
+      and(
+        eq(sourceFiles.examId, examId),
+        eq(sourceFiles.status, "ready"),
+        ne(sourceFiles.role, "study_guide"),
+      ),
+    );
+
+  return row?.n ?? 0;
+}
+
+/** Cards with the slide each one cites, for the deck view. */
+export async function listFlashcards(examId: string) {
+  return db.query.flashcards.findMany({
+    where: eq(flashcards.examId, examId),
+    with: {
+      sourceSlide: { with: { sourceFile: true } },
+      rubric: true,
+    },
+    orderBy: [flashcards.topic, flashcards.createdAt],
+  });
 }

@@ -9,7 +9,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getExam, getExamStats } from "@/lib/queries";
+import { GeneratePanel } from "@/components/generate/generate-panel";
+import { countAnswerSlides, getExam, getExamStats } from "@/lib/queries";
 
 export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   const { examId } = await props.params;
@@ -17,7 +18,10 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
 
   if (!exam) notFound();
 
-  const stats = await getExamStats(examId);
+  const [stats, slideCount] = await Promise.all([
+    getExamStats(examId),
+    countAnswerSlides(examId),
+  ]);
 
   return (
     <div className="space-y-8">
@@ -50,19 +54,30 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <Button asChild>
+        <Button asChild variant="outline">
           <Link href={`/exams/${examId}/sources`}>
             {stats.sourceFiles === 0 ? "Upload sources" : "Manage sources"}
           </Link>
         </Button>
+        {stats.flashcards > 0 ? (
+          <Button asChild variant="outline">
+            <Link href={`/exams/${examId}/cards`}>Browse cards</Link>
+          </Button>
+        ) : null}
       </div>
+
+      <GeneratePanel
+        examId={examId}
+        scopeMode={exam.scopeMode}
+        slideCount={slideCount}
+      />
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Next up: card generation</CardTitle>
+          <CardTitle className="text-base">Next up: coverage matrix</CardTitle>
           <CardDescription>
-            Sources are ingested and browsable. Atomic card generation
-            (Phase 2) lands next — see docs/TASKS.md.
+            Phase 3 maps each study-guide objective to the cards and slides
+            that cover it — see docs/TASKS.md.
           </CardDescription>
         </CardHeader>
       </Card>

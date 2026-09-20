@@ -1,0 +1,119 @@
+/**
+ * Prompts for card generation.
+ *
+ * The rules here are PRD §2 (atomization, process cards, completeness) and
+ * §3 (provenance, no hallucination) stated as model instructions. Slides are
+ * presented with citation tokens so a card's citation can be checked against
+ * the material it was generated from.
+ */
+import type { SourceSlide, StudyGuideObjective } from "@/db/schema";
+
+/** Stable, short token the model cites instead of a UUID. */
+export function citationToken(slide: Pick<SourceSlide, "index">) {
+  return `S${slide.index}`;
+}
+
+export const GENERATION_SYSTEM = `You build flashcards for a student from their own lecture material.
+
+ATOMICITY (this is the core requirement)
+- One card tests exactly ONE fact. Never combine two facts with "and".
+- Decompose every concept into its separate facets. For a hormone that means
+  separate cards for: where it is produced, what triggers its release, what
+  tissue and receptor it acts on, what it actually does, and how it is
+  regulated. Do not answer several of those in one card.
+- For a process or pathway, produce: one card per discrete step, a card on the
+  ORDER of the steps, a card on WHY a key step happens (its mechanism or
+  rationale), and one whole-process summary card.
+- After the discrete cards, add integration cards that test how facets or
+  concepts relate to each other. An integration card still has to quote ONE
+  slide verbatim: quote the fragment supporting its main claim, and cite that
+  slide. Never stitch an excerpt together from two different slides.
+
+COMPLETENESS
+- Cover exceptions, comparisons, worked examples, and numeric values. These are
+  exactly what exams test.
+- There is no limit on card count. Do not summarize to save space.
+- Do not produce two cards that test the same fact. Cards that test genuinely
+  different details of the same concept are not duplicates.
+
+PROVENANCE (non-negotiable)
+- Every card cites the slide token it came from, e.g. "S7".
+- sourceExcerpt must be text copied VERBATIM from that slide. Copy it exactly,
+  character for character. Do not paraphrase, reformat, or correct it.
+- You may shorten a long quote with "..." between the parts you keep, but every
+  part you keep must still be copied exactly.
+- If the material does not state something, DO NOT generate a card for it and
+  do not fill the gap from your own knowledge. List it in uncoveredNotes.
+- fullExplanation may add clarifying context beyond the source. When it does,
+  set hasAiSupplement to true. When it contains only source material, set it
+  to false.
+
+RUBRICS
+- essentialPoints are what a typed answer MUST say to count as correct. Keep
+  each one short and independently checkable.
+- optionalPoints are worth credit but not required.
+- commonMisconceptions are plausible wrong answers. Prioritise reversed
+  directionality (increase vs. decrease) and mechanism mix-ups (synthesis vs.
+  secretion), which are what students actually get wrong.
+
+Write questions a student can answer from memory, not questions about the
+slides. Never write "According to slide 7, ...".`;
+
+/** Renders slides into the prompt body, tagged with citation tokens. */
+export function renderSlides(slides: SourceSlide[]): string {
+  return slides
+    .map((slide) => {
+      const parts = [`[${citationToken(slide)}]`];
+      if (slide.title) parts.push(`Title: ${slide.title}`);
+      if (slide.rawText) parts.push(slide.rawText);
+
+      for (const table of slide.tables) {
+        const rendered = table.rows
+          .map((row) => row.join(" | "))
+          .join("\n");
+        if (rendered.trim()) parts.push(`Table:\n${rendered}`);
+      }
+
+      // Speaker notes routinely carry the professor's actual explanation, so
+      // they are prompt material, not metadata.
+      if (slide.speakerNotes) parts.push(`Speaker notes: ${slide.speakerNotes}`);
+
+      return parts.join("\n");
+    })
+    .join("\n\n---\n\n");
+}
+
+export function fullCoveragePrompt(slides: SourceSlide[]): string {
+  return `Generate flashcards covering every testable fact in the slides below.
+
+Work concept by concept. For each concept, produce the full set of atomic
+cards its facets call for, then any integration cards that connect it to other
+concepts in this material.
+
+SLIDES
+${renderSlides(slides)}`;
+}
+
+export function objectiveFocusPrompt(
+  slides: SourceSlide[],
+  objectives: StudyGuideObjective[],
+): string {
+  const list = objectives
+    .map((o, i) => `${o.label ?? i + 1}. ${o.promptText}`)
+    .join("\n");
+
+  return `Generate flashcards that answer the study-guide objectives below,
+using only the slides that follow.
+
+Stay anchored to these objectives. An objective usually needs SEVERAL atomic
+cards rather than one — decompose it the same way you would any concept.
+
+If the slides do not contain what an objective asks for, do not invent it:
+record the objective in uncoveredNotes instead.
+
+STUDY-GUIDE OBJECTIVES
+${list}
+
+SLIDES
+${renderSlides(slides)}`;
+}

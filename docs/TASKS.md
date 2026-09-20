@@ -77,18 +77,64 @@ endpoint: a 12-slide PPTX extracts with notes and a table; an identical re-uploa
 
 ---
 
-## Phase 2 — Atomic Flashcard Generation (PRD §2, §3, MVP #2)
+## Phase 2 — Atomic Flashcard Generation (PRD §2, §3, MVP #2) ✅
 
-- [ ] Anthropic client wrapper with strict JSON-schema tool output (ARCHITECTURE principle #2)
-- [ ] Chunking strategy: group source units into generation batches within token budget
-- [ ] Atomization prompt: discrete sub-questions per concept (origin, trigger, target, action, feedback pattern)
-- [ ] Process-card prompt: step, sequence, mechanism, and full-summary card variants
-- [ ] Provenance enforcement: reject any card missing `source_slide_id` + verbatim excerpt
-- [ ] `CardRubric` generation (essential / optional points, common misconceptions)
-- [ ] Deduplication pass across batches preserving distinct nuances
-- [ ] Source-vs-AI-supplement badging on `full_explanation`
-- [ ] Generation run UI: progress, per-batch errors, resumable
-- [ ] Non-destructive regeneration: append/merge proposals, never wipe existing card IDs
+**Goal:** Turn ingested slides into atomic, rubric-backed cards that each cite the slide they came from.
+
+- [x] Provider boundary (`src/lib/llm/`): `LlmProvider` interface + Gemini implementation
+- [x] Gemini `@google/genai` client on `gemini-2.5-flash` with `responseMimeType: "application/json"` and `responseJsonSchema`
+- [x] Strict response schema for cards and rubrics (`src/lib/generate/schemas.ts`)
+- [x] Atomization prompt: per-facet cards (origin, trigger, target, mechanism, regulation) (`src/lib/generate/prompts.ts`)
+- [x] Process cards: step, sequence, rationale, whole-process summary
+- [x] Integration cards connecting facets and concepts
+- [x] `CardRubric` generation (essential / optional points, common misconceptions)
+- [x] Provenance enforcement with excerpt verification (`src/lib/generate/validate.ts`)
+- [x] Slide batching (default 8) with per-batch progress
+- [x] Deduplication within a batch and against stored cards
+- [x] Source-vs-AI-supplement badging via `has_ai_supplement`
+- [x] Both modes: 'Study Guide Focus' anchored to objectives, and 'Full Coverage'
+- [x] Generation route, mode toggle, and result panel; card deck view at `/exams/[examId]/cards`
+- [x] Non-destructive: generation only ever appends; user edits and progress untouched
+- [x] Tests: 55 passing, with a stubbed `LlmProvider` (no API key or network needed)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 55 tests. Against the **live Gemini API**
+with realistic endocrine slides: full coverage produced 31 cards (20 atomic / 8 process /
+3 integration) and study-guide focus produced 21 — both with zero rejections and every card's
+excerpt confirmed present on its cited slide.
+
+**Provenance is verified, not just requested:**
+A schema can require a citation field; it cannot make the citation true. `validateCards`
+checks the cited slide exists **and** that the excerpt really occurs in that slide's text
+(title, body, speaker notes, and table cells). A card whose excerpt appears on no slide is
+discarded rather than stored — that is what "never hallucinate when the source is silent"
+means in practice. Confirmed live: run against placeholder slides with no real content,
+the pipeline stored **zero** cards and reported every objective as uncovered.
+
+**Two matching rules that took a live run to find:**
+- Models mark truncation with `...`. Treating those as literal characters rejected a batch of
+  genuinely verbatim quotes (8 of 19 cards in the first live run). Excerpts are now split on
+  ellipses and every fragment must appear **in order** — still exact per fragment, so
+  fabricated text and out-of-order stitching both still fail.
+- Integration cards span concepts, so models cite `"S2, S3"` or `"[S2]"`. Any S-token that
+  resolves is accepted; the excerpt check then re-points the card at the slide that actually
+  contains the quote. A citation matching no slide is still rejected.
+
+**Design notes:**
+- ARCHITECTURE.md names Anthropic Claude; the MVP runs on Gemini per the available key.
+  Everything above `src/lib/llm/` talks to `LlmProvider` only, so adding Claude is one new
+  file and no caller changes.
+- A miscited card whose excerpt exists on a *different* slide is repaired rather than dropped
+  (`repairedFrom` records the original citation), keeping a good card with exact provenance.
+- Study-guide focus **refuses to run** without objectives rather than silently behaving like
+  full coverage.
+- Study-guide files are never used as answer material; slides and notes both are.
+- Rejections are returned to the UI as an audit trail for "why is this card missing?".
+
+**Known limits (deliberate, deferred):**
+- Generation runs inline in the request; `generateCardsForExam` takes a `Db` and an
+  `LlmProvider`, so the Phase 8 queue can call it unchanged.
+- The secondary AI review pass for omissions is Phase 3, alongside the coverage matrix.
+- Conflict detection across files (PRD §3) is Phase 3.
 
 ---
 
