@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardDescription,
@@ -48,11 +49,20 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         <StatCard label="Flashcards" value={stats.flashcards} />
       </div>
 
+      <div className="flex flex-wrap gap-3">
+        <Button asChild>
+          <Link href={`/exams/${examId}/sources`}>
+            {stats.sourceFiles === 0 ? "Upload sources" : "Manage sources"}
+          </Link>
+        </Button>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Next up: ingestion</CardTitle>
+          <CardTitle className="text-base">Next up: card generation</CardTitle>
           <CardDescription>
-            Upload and extraction (Phase 1) lands here — see docs/TASKS.md.
+            Sources are ingested and browsable. Atomic card generation
+            (Phase 2) lands next — see docs/TASKS.md.
           </CardDescription>
         </CardHeader>
       </Card>

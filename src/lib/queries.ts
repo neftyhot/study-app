@@ -8,6 +8,7 @@ import {
   exams,
   flashcards,
   sourceFiles,
+  sourceSlides,
   studyGuideObjectives,
 } from "@/db/schema";
 
@@ -46,4 +47,21 @@ export async function getExamStats(examId: string) {
     objectives: objectiveRow?.n ?? 0,
     flashcards: cardRow?.n ?? 0,
   };
+}
+
+/** Source files for an exam, with their extracted units. */
+export async function listSourceFiles(examId: string) {
+  return db.query.sourceFiles.findMany({
+    where: eq(sourceFiles.examId, examId),
+    with: { slides: { orderBy: [sourceSlides.index] } },
+    orderBy: [desc(sourceFiles.createdAt)],
+  });
+}
+
+export async function listObjectives(examId: string) {
+  return db
+    .select()
+    .from(studyGuideObjectives)
+    .where(eq(studyGuideObjectives.examId, examId))
+    .orderBy(studyGuideObjectives.orderIndex);
 }
