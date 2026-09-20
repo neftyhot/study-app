@@ -4,9 +4,11 @@ import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
+  contentConflicts,
   courses,
   exams,
   flashcards,
+  objectiveCoverage,
   sourceFiles,
   sourceSlides,
   studyGuideObjectives,
@@ -93,4 +95,75 @@ export async function listFlashcards(examId: string) {
     },
     orderBy: [flashcards.topic, flashcards.createdAt],
   });
+}
+
+/**
+ * The coverage matrix: every objective with its verdict, the cards mapped to
+ * it, and the slide each of those cards cites — enough to render
+ * "Covered by 6 cards via Slides 15–19" without a second query.
+ */
+export async function getCoverageMatrix(examId: string) {
+  return db.query.studyGuideObjectives.findMany({
+    where: eq(studyGuideObjectives.examId, examId),
+    orderBy: [studyGuideObjectives.orderIndex],
+    with: {
+      verdict: { with: { supportingSlide: { with: { sourceFile: true } } } },
+      coverage: {
+        with: {
+          flashcard: {
+            with: { sourceSlide: { with: { sourceFile: true } } },
+          },
+        },
+      },
+    },
+  });
+}
+
+export type CoverageRow = Awaited<ReturnType<typeof getCoverageMatrix>>[number];
+
+/** Headline coverage counts for the exam overview. */
+export async function getCoverageStats(examId: string) {
+  const rows = await db
+    .select({ status: objectiveCoverage.status })
+    .from(objectiveCoverage)
+    .innerJoin(
+      studyGuideObjectives,
+      eq(objectiveCoverage.objectiveId, studyGuideObjectives.id),
+    )
+    .where(eq(studyGuideObjectives.examId, examId));
+
+  return {
+    analyzed: rows.length,
+    covered: rows.filter((r) => r.status === "covered").length,
+    partiallyCovered: rows.filter((r) => r.status === "partially_covered")
+      .length,
+    missing: rows.filter((r) => r.status === "missing").length,
+  };
+}
+
+export async function listConflicts(examId: string) {
+  return db.query.contentConflicts.findMany({
+    where: eq(contentConflicts.examId, examId),
+    with: {
+      slideA: { with: { sourceFile: true } },
+      slideB: { with: { sourceFile: true } },
+    },
+    orderBy: [desc(contentConflicts.createdAt)],
+  });
+}
+
+/** How many source files can be compared against each other for conflicts. */
+export async function countReadyAnswerFiles(examId: string) {
+  const [row] = await db
+    .select({ n: count() })
+    .from(sourceFiles)
+    .where(
+      and(
+        eq(sourceFiles.examId, examId),
+        eq(sourceFiles.status, "ready"),
+        ne(sourceFiles.role, "study_guide"),
+      ),
+    );
+
+  return row?.n ?? 0;
 }

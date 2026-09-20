@@ -5,12 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { GeneratePanel } from "@/components/generate/generate-panel";
-import { countAnswerSlides, getExam, getExamStats } from "@/lib/queries";
+import {
+  countAnswerSlides,
+  getCoverageStats,
+  getExam,
+  getExamStats,
+} from "@/lib/queries";
 
 export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   const { examId } = await props.params;
@@ -18,9 +24,10 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
 
   if (!exam) notFound();
 
-  const [stats, slideCount] = await Promise.all([
+  const [stats, slideCount, coverage] = await Promise.all([
     getExamStats(examId),
     countAnswerSlides(examId),
+    getCoverageStats(examId),
   ]);
 
   return (
@@ -64,6 +71,11 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
             <Link href={`/exams/${examId}/cards`}>Browse cards</Link>
           </Button>
         ) : null}
+        {stats.objectives > 0 ? (
+          <Button asChild variant="outline">
+            <Link href={`/exams/${examId}/coverage`}>Coverage matrix</Link>
+          </Button>
+        ) : null}
       </div>
 
       <GeneratePanel
@@ -72,15 +84,25 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         slideCount={slideCount}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Next up: coverage matrix</CardTitle>
-          <CardDescription>
-            Phase 3 maps each study-guide objective to the cards and slides
-            that cover it — see docs/TASKS.md.
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      {stats.objectives > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Study-guide coverage</CardTitle>
+            <CardDescription>
+              {coverage.analyzed === 0
+                ? "Not analyzed yet — the coverage matrix checks each objective against your cards and slides."
+                : `${coverage.covered} of ${coverage.analyzed} objectives fully covered · ${coverage.partiallyCovered} partial · ${coverage.missing} not covered.`}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild variant={coverage.analyzed === 0 ? "default" : "outline"}>
+              <Link href={`/exams/${examId}/coverage`}>
+                {coverage.analyzed === 0 ? "Analyze coverage" : "Open matrix"}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

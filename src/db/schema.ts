@@ -266,6 +266,83 @@ export const coverageMappings = sqliteTable(
   ],
 );
 
+/* ------------------------------------------------------ ObjectiveCoverage */
+
+export const sourceSupportLevels = ["answers", "partial", "silent"] as const;
+
+/**
+ * The per-objective verdict for the coverage matrix (PRD §3).
+ *
+ * `coverage_mappings` records WHICH cards support an objective; this records
+ * whether, taken together, they actually answer it — and when they do not,
+ * whether the uploaded material even could. "We failed to make the card" and
+ * "your files never cover this" are different problems for the student, and
+ * the checklist is only useful if it tells them apart.
+ */
+export const objectiveCoverage = sqliteTable(
+  "objective_coverage",
+  {
+    id: id(),
+    objectiveId: text("objective_id")
+      .notNull()
+      .references(() => studyGuideObjectives.id, { onDelete: "cascade" }),
+    status: text("status", { enum: coverageStatuses }).notNull(),
+    rationale: text("rationale"),
+    /** Sub-points the objective asks for that no card answers. */
+    missingPoints: text("missing_points", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** Secondary review pass: does the source material support this at all? */
+    sourceSupport: text("source_support", { enum: sourceSupportLevels }),
+    /** Where the review found supporting material, when it found any. */
+    supportingSlideId: text("supporting_slide_id").references(
+      () => sourceSlides.id,
+      { onDelete: "set null" },
+    ),
+    supportingExcerpt: text("supporting_excerpt"),
+    reviewedAt: text("reviewed_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [uniqueIndex("objective_coverage_objective_idx").on(t.objectiveId)],
+);
+
+/* -------------------------------------------------------- ContentConflict */
+
+/**
+ * Contradicting statements found across files (PRD §3). Stored rather than
+ * resolved: the app flags both sides and lets the student decide, because
+ * silently picking one is how a wrong answer becomes invisible.
+ */
+export const contentConflicts = sqliteTable(
+  "content_conflicts",
+  {
+    id: id(),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    topic: text("topic"),
+    statementA: text("statement_a").notNull(),
+    slideAId: text("slide_a_id").references(() => sourceSlides.id, {
+      onDelete: "cascade",
+    }),
+    statementB: text("statement_b").notNull(),
+    slideBId: text("slide_b_id").references(() => sourceSlides.id, {
+      onDelete: "cascade",
+    }),
+    /** Why the two statements cannot both be true. */
+    explanation: text("explanation").notNull(),
+    /** Set only by the student; the pipeline never resolves a conflict. */
+    resolution: text("resolution"),
+    dismissed: integer("dismissed", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("content_conflicts_exam_idx").on(t.examId)],
+);
+
 /* ----------------------------------------------------------- StudyProgress */
 
 export const progressStates = [
@@ -347,6 +424,7 @@ export const objectivesRelations = relations(
       references: [exams.id],
     }),
     coverage: many(coverageMappings),
+    verdict: one(objectiveCoverage),
   }),
 );
 
@@ -382,6 +460,38 @@ export const coverageMappingsRelations = relations(
   }),
 );
 
+export const objectiveCoverageRelations = relations(
+  objectiveCoverage,
+  ({ one }) => ({
+    objective: one(studyGuideObjectives, {
+      fields: [objectiveCoverage.objectiveId],
+      references: [studyGuideObjectives.id],
+    }),
+    supportingSlide: one(sourceSlides, {
+      fields: [objectiveCoverage.supportingSlideId],
+      references: [sourceSlides.id],
+    }),
+  }),
+);
+
+export const contentConflictsRelations = relations(
+  contentConflicts,
+  ({ one }) => ({
+    exam: one(exams, {
+      fields: [contentConflicts.examId],
+      references: [exams.id],
+    }),
+    slideA: one(sourceSlides, {
+      fields: [contentConflicts.slideAId],
+      references: [sourceSlides.id],
+    }),
+    slideB: one(sourceSlides, {
+      fields: [contentConflicts.slideBId],
+      references: [sourceSlides.id],
+    }),
+  }),
+);
+
 export const studyProgressRelations = relations(studyProgress, ({ one }) => ({
   flashcard: one(flashcards, {
     fields: [studyProgress.flashcardId],
@@ -399,6 +509,8 @@ export type StudyGuideObjective = typeof studyGuideObjectives.$inferSelect;
 export type Flashcard = typeof flashcards.$inferSelect;
 export type CardRubric = typeof cardRubrics.$inferSelect;
 export type CoverageMapping = typeof coverageMappings.$inferSelect;
+export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
+export type ContentConflict = typeof contentConflicts.$inferSelect;
 export type StudyProgress = typeof studyProgress.$inferSelect;
 
 export type NewCourse = typeof courses.$inferInsert;

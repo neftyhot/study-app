@@ -133,18 +133,81 @@ the pipeline stored **zero** cards and reported every objective as uncovered.
 **Known limits (deliberate, deferred):**
 - Generation runs inline in the request; `generateCardsForExam` takes a `Db` and an
   `LlmProvider`, so the Phase 8 queue can call it unchanged.
-- The secondary AI review pass for omissions is Phase 3, alongside the coverage matrix.
-- Conflict detection across files (PRD §3) is Phase 3.
+- The secondary AI review pass for omissions and conflict detection landed in Phase 3.
 
 ---
 
-## Phase 3 — Coverage Matrix (PRD §3, MVP #3)
+## Phase 3 — Coverage Matrix (PRD §3, MVP #3) ✅
 
-- [ ] Map cards → objectives; write `CoverageMapping` rows with status
-- [ ] Secondary AI review pass for omissions
-- [ ] Coverage checklist UI: per objective, status + card count + slide range ("Covered by 6 cards via Slides 15–19")
-- [ ] Gap view: objectives with no supporting source material, flagged explicitly
-- [ ] Conflict detection: contradicting statements across files surfaced, not silently resolved
+**Goal:** Tell the student, per study-guide objective, whether their deck answers it —
+and when it does not, whether their files even could.
+
+- [x] Map cards → objectives; write `CoverageMapping` rows with per-card status
+- [x] Per-objective verdict with rationale and missing sub-points (`objective_coverage`)
+- [x] Secondary AI review pass: re-checks every gap against the slides themselves
+- [x] Coverage checklist UI at `/exams/[examId]/coverage`: status + card count + slide range
+      ("Covered by 5 cards via Slides 5–7 of lecture-renal.pptx")
+- [x] Gap view split in two: what the slides can still answer vs. what they never cover
+- [x] Conflict detection across files, with both statements quoted and neither resolved
+- [x] Student can resolve or dismiss a conflict; that decision survives later scans
+- [x] Lexical candidate retrieval so objectives are judged against plausible cards, not all of them
+- [x] Tests: 77 passing (22 new), stubbed `LlmProvider` — no API key or network needed
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 77 tests. Against the **live Gemini
+API** with a fixture built to have known answers — one objective the slides cannot answer, one
+they answer only partly, and one flat contradiction between two files — the pipeline reported
+exactly those three and nothing else: 3 covered, 1 partial (`sourceSupport: answers`), 1 missing
+(`sourceSupport: silent`), 1 conflict, with zero invented references and zero unverified quotes.
+
+**Three passes, because they answer different questions:**
+1. **Mapping** — which cards answer each objective, and do they answer all of it?
+2. **Review** — for objectives that came back short, does the uploaded material answer them at
+   all? "We failed to make the card" and "your files never cover this" call for completely
+   different responses from the student, and a checklist that conflates them is useless.
+3. **Conflicts** — do two files contradict each other?
+
+**Verification carries over from Phase 2:** every reference the model returns must resolve to a
+row we handed it, and every supporting quote must really occur in the slide it cites — reusing
+`excerptAppearsIn`, the same check that gates card provenance. A quote that does not check out
+is dropped and the claim is downgraded from "your material answers this" to "partly", because a
+fabricated quote cannot be evidence of coverage.
+
+**What the live run changed:**
+- Conflict detection first found **nothing**, despite a planted contradiction. Whole-slide
+  similarity scored the true pair at 0.16 — a one-line note contradicting one bullet of a dense
+  slide is drowned out by everything else on that slide. Pairing now scores statement against
+  statement, which finds it.
+- The threshold is deliberately loose (0.2) because lexical similarity **cannot** recognise a
+  contradiction: "released from the posterior pituitary" and "released from the anterior
+  pituitary" disagree in precisely the words that do not match, so the true pair never ranks
+  first. Retrieval only bounds how many comparisons reach the model; the model decides.
+- Pairing was asymmetric: three pages of notes against an eight-slide deck produced 7 pairs or
+  5, depending only on which file was iterated first. Matching now runs both directions; a test
+  pins it.
+
+**Design notes:**
+- Coverage rows are derived data and are recomputed wholesale. Cards, rubrics, and study
+  progress are never touched (ARCHITECTURE principle #3) — a test asserts it.
+- Conflicts are the exception: once the student resolves or dismisses one, that judgement is
+  theirs and survives every later scan.
+- An objective the mapper skips is recorded as **missing**, not covered. The safe direction
+  sends it to the review pass rather than letting silence read as success.
+- A "covered" verdict listing no cards, or a "missing" verdict listing cards, is reconciled
+  against the cards that actually resolved.
+- Tokens (`O3`, `C12`, `S7`) are assigned per call and mean nothing outside it, so the model
+  can only point at material it was given. Tests read tokens back out of the prompt rather than
+  hardcoding them.
+
+**Known limits (deliberate, deferred):**
+- Conflict detection is recall-limited by its pairing budget: it surfaces contradictions between
+  slides that discuss the same thing in similar words, and can miss one phrased very
+  differently. It also only compares *across* files, not within one.
+- Verdicts are not perfectly repeatable. The same fixture scored one objective `covered` on one
+  run and `partially_covered` on the next; at temperature 0 the models still vary.
+- Analysis runs inline in the request; `analyzeCoverageForExam` takes a `Db` and an
+  `LlmProvider`, so the Phase 8 queue can call it unchanged.
+- Regenerating cards does not re-run coverage automatically — the matrix shows the state as of
+  its last analysis.
 
 ---
 
