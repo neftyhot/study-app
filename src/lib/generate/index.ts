@@ -89,7 +89,7 @@ export async function generateCardsForExam(
   }
 
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
-  const batches = chunk(slides, batchSize);
+  const batches = batchSlides(slides, batchSize);
 
   // Deduplicate against what is already stored, so re-running generation adds
   // to the deck instead of duplicating it.
@@ -235,6 +235,25 @@ function loadObjectives(db: Db, examId: string): StudyGuideObjective[] {
     )
     .orderBy(studyGuideObjectives.orderIndex)
     .all();
+}
+
+/**
+ * Batches never span source files.
+ *
+ * Citation tokens are `S<index>`, so slide 3 of a deck and page 3 of a set of
+ * notes would both render as "[S3]" in one prompt — ambiguous to the model and
+ * a collision in the map that resolves a citation back to a real slide.
+ * Grouping by file keeps every token unique within the batch it belongs to.
+ */
+function batchSlides(slides: SourceSlide[], size: number): SourceSlide[][] {
+  const byFile = new Map<string, SourceSlide[]>();
+  for (const slide of slides) {
+    const group = byFile.get(slide.sourceFileId) ?? [];
+    group.push(slide);
+    byFile.set(slide.sourceFileId, group);
+  }
+
+  return [...byFile.values()].flatMap((group) => chunk(group, size));
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

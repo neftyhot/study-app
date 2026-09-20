@@ -95,7 +95,9 @@ endpoint: a 12-slide PPTX extracts with notes and a table; an identical re-uploa
 - [x] Both modes: 'Study Guide Focus' anchored to objectives, and 'Full Coverage'
 - [x] Generation route, mode toggle, and result panel; card deck view at `/exams/[examId]/cards`
 - [x] Non-destructive: generation only ever appends; user edits and progress untouched
-- [x] Tests: 55 passing, with a stubbed `LlmProvider` (no API key or network needed)
+- [x] Tests: 56 passing, with a stubbed `LlmProvider` (no API key or network needed)
+- [x] Batches never span source files — `S<index>` tokens would otherwise collide between
+      slide 3 of a deck and page 3 of a set of notes (found while building Phase 3)
 
 **Verified:** `typecheck`, `lint`, `build` (zero warnings), 55 tests. Against the **live Gemini API**
 with realistic endocrine slides: full coverage produced 31 cards (20 atomic / 8 process /

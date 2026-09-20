@@ -113,6 +113,42 @@ beforeEach(() => {
 });
 
 describe("generateCardsForExam", () => {
+  it("never puts two files in one batch, so citation tokens stay unique", async () => {
+    seedSlides(2);
+
+    // A second file whose page numbers collide with the deck's slide numbers.
+    const notesId = db
+      .insert(sourceFiles)
+      .values({
+        examId,
+        filename: "notes.pdf",
+        fileType: "pdf",
+        role: "notes",
+        rawPath: "notes.pdf",
+        status: "ready",
+      })
+      .returning()
+      .get().id;
+    db.insert(sourceSlides)
+      .values([
+        { sourceFileId: notesId, index: 1, rawText: "Notes page one text" },
+        { sourceFileId: notesId, index: 2, rawText: "Notes page two text" },
+      ])
+      .run();
+
+    const { provider, requests } = stubProvider([{ cards: [] }]);
+
+    // All four units would fit in one batch if batching ignored file boundaries.
+    await generateCardsForExam(db, provider, examId, { batchSize: 8 });
+
+    expect(requests).toHaveLength(2);
+    for (const request of requests) {
+      const tokens = request.prompt.match(/\[S\d+\]/g) ?? [];
+      expect(new Set(tokens).size).toBe(tokens.length);
+    }
+  });
+
+
   it("stores validated cards with their rubric and provenance", async () => {
     seedSlides(2);
     const { provider } = stubProvider([{ cards: [card()] }]);
