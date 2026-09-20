@@ -681,6 +681,65 @@ tables), and serves every route. Three things were found only by doing that:
 
 ---
 
+## Phase 12 — Offline Models, More Providers, Visible Generation ✅
+
+### Four providers behind one interface
+
+- [x] Offline model running on the student's machine (llama.cpp / GGUF)
+- [x] Anthropic Claude and OpenAI alongside Gemini
+- [x] First-run setup wizard; provider switchable from Settings at any time
+- [x] Keys stored per provider, environment always wins, only the last four
+      characters ever reach the browser
+- [x] Tests: 20
+
+Nothing in generation, coverage, grading, or assistance changed to add any of
+this — the `LlmProvider` interface from Phase 2 absorbed all four.
+
+**The offline one needed the grammar.** Every pass in this app depends on strict
+JSON, and a small local model asked politely for JSON will not reliably give it.
+Decoding is therefore *constrained* by a grammar built from the same schema the
+caller already passes, so tokens that would break the shape are never sampled.
+That is what makes a 1.5B model usable here at all. Verified end to end: a
+386 MB model downloaded and returned schema-valid JSON with no network.
+
+**The catalog is honest about size.** Every entry is a permissively licensed
+instruct model whose URL and size were checked against the real file, and every
+entry leads with what it can do for coursework. The small ones carry an explicit
+warning — on anatomy and physiology they will miss steps and invent mechanisms
+that sound right — because letting someone find that out after building a deck
+is worse than telling them first. The recommendation is based on installed
+memory: a model that swaps to disk is not slow, it is unusable.
+
+**The wizard asks one question** — think on this machine, or through an API —
+and then gets out of the way. Picking a model starts the download and moves
+straight on; all the student sees afterwards is a small percentage in the
+header. Progress lives in a settings row, so it survives a reload.
+
+### Generation you can watch
+
+- [x] Generation runs as a tracked job with progress in the database
+- [x] Batch counter, live card count, and a progress bar
+- [x] The spinner survives navigating away, reloading, and coming back
+- [x] One run at a time per deck
+- [x] Tests: 7
+
+Generation stores each batch as it finishes, so cards genuinely do keep
+appearing for minutes. Run as a plain request that looked like a bug: the
+spinner stopped when the browser stopped waiting, and more cards turned up
+afterwards. The work had never stopped — only the watching had. The run now has
+a row, progress is written as batches complete, and the panel polls it, so
+"batch 3 of 12" means three batches are safely stored and the end is the end.
+
+**Known limits (deliberate, deferred):**
+- A job interrupted by quitting the app stays marked running until something
+  clears it; there is no startup sweep yet.
+- Local generation is slower than any hosted model, and a large deck on a small
+  machine will take a long time. The progress bar makes that visible rather than
+  fixing it.
+- Model downloads resume only by starting again; partial files are discarded.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
 Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · full undo history (§15).

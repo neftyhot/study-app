@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Copy, Layers, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -32,6 +33,20 @@ import {
 } from "@/components/ui/select";
 
 type GenerateMode = "append" | "replace" | "separate";
+
+export type GenerationJobView = {
+  id: string;
+  status: "running" | "done" | "failed";
+  mode: string;
+  examId: string;
+  batchIndex: number;
+  batchCount: number;
+  cardsCreated: number;
+  cardsRejected: number;
+  error: string | null;
+  summary: Summary | null;
+  finishedAt: string | null;
+};
 
 type Summary = {
   mode: string;
@@ -52,10 +67,13 @@ export function GeneratePanel({
   slideCount,
   existingCards,
   includeApplication,
+  initialJob,
 }: {
   examId: string;
   scopeMode: "files" | "objectives";
   slideCount: number;
+  /** A run already in flight, so the panel comes back mid-generation. */
+  initialJob: GenerationJobView | null;
   /** PRD §9 higher-order questions, persisted on the exam. */
   includeApplication: boolean;
   /** Cards already in this deck; deciding what to do with them comes first. */
@@ -64,8 +82,57 @@ export function GeneratePanel({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(
+    initialJob?.status === "done" ? initialJob.summary : null,
+  );
   const [asking, setAsking] = useState(false);
+  const [job, setJob] = useState<GenerationJobView | null>(initialJob);
+
+  const running = job?.status === "running";
+
+  /**
+   * Watch the run on the server rather than the request.
+   *
+   * Generation stores each batch as it finishes, so it keeps working whether
+   * or not anyone is looking. Polling the job means the progress is real, and
+   * leaving the page and coming back picks it up where it is.
+   */
+  useEffect(() => {
+    if (!running) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const response = await fetch(`/api/exams/${examId}/generate`);
+        const payload = await response.json();
+        if (cancelled) return;
+
+        const next: GenerationJobView | null = payload.job;
+        setJob(next);
+
+        if (next && next.status !== "running") {
+          if (next.status === "done") {
+            setSummary(next.summary);
+            toast.success(`Finished — ${next.cardsCreated} card(s) created`);
+          } else {
+            toast.error(next.error ?? "Generation failed");
+          }
+          router.refresh();
+        }
+      } catch {
+        // A dropped poll is not a failure; the next one will catch up.
+      }
+    };
+
+    const timer = setInterval(() => void tick(), 1500);
+    void tick();
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [running, examId, router]);
   const [application, setApplication] = useState(includeApplication);
 
   async function generate(mode: GenerateMode) {
@@ -86,18 +153,30 @@ export function GeneratePanel({
         return;
       }
 
-      setSummary(payload);
+      setSummary(null);
+      setJob({
+        id: payload.jobId,
+        status: "running",
+        mode: payload.target,
+        examId: payload.examId,
+        batchIndex: 0,
+        batchCount: 0,
+        cardsCreated: 0,
+        cardsRejected: 0,
+        error: null,
+        summary: null,
+        finishedAt: null,
+      });
 
       if (payload.createdExam) {
         toast.success(
-          `Created ${payload.cardsCreated} card(s) in "${payload.createdExam.title}"`,
+          `Generating into "${payload.createdExam.title}" — it keeps going if you navigate away`,
         );
         router.push(`/exams/${payload.createdExam.id}`);
         return;
       }
 
-      toast.success(`Created ${payload.cardsCreated} card(s)`);
-      router.refresh();
+      toast.success("Generating — this keeps running if you navigate away");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed");
     } finally {
@@ -111,7 +190,7 @@ export function GeneratePanel({
     else setAsking(true);
   }
 
-  const disabled = busy || pending || slideCount === 0;
+  const disabled = busy || pending || running || slideCount === 0;
 
   return (
     <Card>
@@ -143,12 +222,12 @@ export function GeneratePanel({
           </Select>
 
           <Button onClick={start} disabled={disabled}>
-            {busy ? (
+            {busy || running ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
               <Sparkles className="size-4" />
             )}
-            {busy ? "Generating…" : "Generate"}
+            {busy || running ? "Generating…" : "Generate"}
           </Button>
         </div>
 
@@ -188,6 +267,12 @@ export function GeneratePanel({
             take a minute.
           </p>
         )}
+
+        {job?.status === "running" ? <JobProgress job={job} /> : null}
+
+        {job?.status === "failed" ? (
+          <p className="text-destructive text-sm">{job.error}</p>
+        ) : null}
 
         {summary?.cleared ? (
           <p className="text-muted-foreground text-xs">
@@ -276,6 +361,43 @@ export function GeneratePanel({
         </DialogContent>
       </Dialog>
     </Card>
+  );
+}
+
+/**
+ * What generation is actually doing.
+ *
+ * Batches are counted as they finish, not as they start, so "3 of 12" means
+ * three batches are safely stored. The card count rising as it goes is the
+ * thing that used to look like cards appearing at random after the end.
+ */
+function JobProgress({ job }: { job: GenerationJobView }) {
+  const percent = job.batchCount
+    ? Math.min(100, (job.batchIndex / job.batchCount) * 100)
+    : 8;
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span className="flex items-center gap-2">
+          <Loader2 className="size-3.5 animate-spin" />
+          {job.batchCount
+            ? `Batch ${job.batchIndex} of ${job.batchCount}`
+            : "Reading your material…"}
+        </span>
+        <span className="text-muted-foreground">
+          {job.cardsCreated} card{job.cardsCreated === 1 ? "" : "s"} so far
+          {job.cardsRejected > 0 ? ` · ${job.cardsRejected} rejected` : ""}
+        </span>
+      </div>
+
+      <Progress value={percent} />
+
+      <p className="text-muted-foreground text-xs">
+        Cards are saved batch by batch, so they appear as they are checked. You
+        can leave this page — generation carries on.
+      </p>
+    </div>
   );
 }
 

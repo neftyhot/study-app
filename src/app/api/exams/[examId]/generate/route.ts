@@ -9,7 +9,12 @@ import type { NextRequest } from "next/server";
 
 import { db } from "@/db";
 import { exams } from "@/db/schema";
-import { clearGeneratedCards, generateCardsForExam } from "@/lib/generate";
+import { clearGeneratedCards } from "@/lib/generate";
+import {
+  activeJob,
+  latestJob,
+  startGenerationJob,
+} from "@/lib/generate/jobs";
 import { getProvider, LlmError } from "@/lib/llm";
 import { duplicateExamSources } from "@/lib/manage";
 
@@ -24,6 +29,19 @@ export async function POST(
   const exam = db.select().from(exams).where(eq(exams.id, examId)).get();
   if (!exam) {
     return Response.json({ error: "Exam not found" }, { status: 404 });
+  }
+
+  // One run at a time per deck: two concurrent runs would duplicate cards and
+  // race each other's progress.
+  const running = activeJob(db, examId);
+  if (running) {
+    return Response.json(
+      {
+        error: "Generation is already running for this deck.",
+        jobId: running.id,
+      },
+      { status: 409 },
+    );
   }
 
   let provider;
@@ -72,24 +90,21 @@ export async function POST(
       createdExam = { id: copy.id, title: copy.title };
     }
 
-    const summary = await generateCardsForExam(db, provider, targetId);
+    // Started, not awaited: generation writes each batch as it finishes and
+    // can run for minutes. The job row is what the client watches, so closing
+    // the page or navigating away no longer loses the run.
+    const job = startGenerationJob(db, provider, examId, {
+      mode,
+      targetExamId: targetId,
+    });
 
     return Response.json({
-      mode: summary.mode,
+      jobId: job.id,
+      status: job.status,
       target: mode,
       examId: targetId,
       createdExam,
       cleared,
-      batchCount: summary.batchCount,
-      cardsCreated: summary.cardsCreated,
-      cardsRejected: summary.cardsRejected,
-      uncoveredNotes: summary.uncoveredNotes,
-      // Rejections are the audit trail for "why is this card missing?".
-      rejections: summary.rejections.map((r) => ({
-        reason: r.reason,
-        detail: r.detail,
-        question: r.card.question,
-      })),
     });
   } catch (error) {
     const status = error instanceof LlmError ? 502 : 400;
@@ -98,4 +113,31 @@ export async function POST(
       { status },
     );
   }
+}
+
+/** Progress for the panel to poll. */
+export async function GET(
+  _request: NextRequest,
+  ctx: RouteContext<"/api/exams/[examId]/generate">,
+) {
+  const { examId } = await ctx.params;
+  const job = latestJob(db, examId);
+
+  if (!job) return Response.json({ job: null });
+
+  return Response.json({
+    job: {
+      id: job.id,
+      status: job.status,
+      mode: job.mode,
+      examId: job.targetExamId ?? job.examId,
+      batchIndex: job.batchIndex,
+      batchCount: job.batchCount,
+      cardsCreated: job.cardsCreated,
+      cardsRejected: job.cardsRejected,
+      error: job.error,
+      summary: job.summary,
+      finishedAt: job.finishedAt,
+    },
+  });
 }

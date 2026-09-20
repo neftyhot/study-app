@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Download, KeyRound, Loader2 } from "lucide-react";
+import { Check, Cloud, Download, HardDrive, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ModelPicker } from "@/components/settings/model-picker";
@@ -16,13 +16,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   chooseProvider,
   downloadProgress,
@@ -56,33 +49,63 @@ export function ProviderSettings({
         <CardHeader>
           <CardTitle className="text-base">What answers your questions</CardTitle>
           <CardDescription>
-            Generating cards and grading typed answers need a model. Everything
-            else — studying, reviews, browsing, editing — works with no model
-            and no network at all.
+            Generating cards and grading typed answers need a model.
+            Everything else — studying, reviews, browsing, editing — works with
+            no model and no network at all.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Select
-            value={state.provider}
-            disabled={busy}
-            onValueChange={async (value) => {
-              setBusy(true);
-              setState(await chooseProvider(value as ProviderId));
-              setBusy(false);
-              toast.success(`Now using ${PROVIDER_LABELS[value as ProviderId]}`);
-            }}
-          >
-            <SelectTrigger className="sm:w-80">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(["local", ...API_PROVIDERS] as ProviderId[]).map((id) => (
-                <SelectItem key={id} value={id}>
-                  {PROVIDER_LABELS[id]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/*
+            Shown as visible choices rather than a dropdown: switching to the
+            offline model is the option people most need to find, and an
+            option inside a closed select is an option nobody knows exists.
+          */}
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(["local", ...API_PROVIDERS] as ProviderId[]).map((id) => {
+              const selected = state.provider === id;
+              const key =
+                id === "local"
+                  ? null
+                  : state.keys.find((item) => item.provider === id);
+
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    if (selected) return;
+                    setBusy(true);
+                    setState(await chooseProvider(id));
+                    setBusy(false);
+                    toast.success(`Now using ${PROVIDER_LABELS[id]}`);
+                  }}
+                  className={`rounded-md border p-3 text-left transition-colors ${
+                    selected ? "border-primary bg-primary/5" : "hover:bg-muted/60"
+                  }`}
+                >
+                  <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                    {id === "local" ? (
+                      <HardDrive className="size-4" />
+                    ) : (
+                      <Cloud className="size-4" />
+                    )}
+                    {PROVIDER_LABELS[id]}
+                    {selected ? <Badge variant="secondary">In use</Badge> : null}
+                  </span>
+                  <span className="text-muted-foreground mt-1 block text-xs">
+                    {id === "local"
+                      ? state.download?.status === "ready"
+                        ? "A model is installed. Works with no internet."
+                        : "Download a model that runs here. Free, private, works offline."
+                      : key?.present
+                        ? `Key ending …${key.hint} saved.`
+                        : "Needs an API key."}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
           <p className="text-muted-foreground text-xs">
             {state.answerable

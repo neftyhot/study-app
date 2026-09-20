@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/card";
 import { GeneratePanel } from "@/components/generate/generate-panel";
 import { ExamSettings } from "@/components/manage/exam-settings";
+import { db } from "@/db";
+import { latestJob } from "@/lib/generate/jobs";
 import {
   countAnswerSlides,
   countDueCards,
@@ -34,6 +36,8 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   const exam = await getExam(examId);
 
   if (!exam) notFound();
+
+  const job = latestJob(db, examId);
 
   const [stats, slideCount, coverage, dueCount, mastery, diagnoses] =
     await Promise.all([
@@ -134,6 +138,23 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         slideCount={slideCount}
         existingCards={stats.flashcards}
         includeApplication={exam.includeApplication}
+        initialJob={
+          job
+            ? {
+                id: job.id,
+                status: job.status,
+                mode: job.mode,
+                examId: job.targetExamId ?? job.examId,
+                batchIndex: job.batchIndex,
+                batchCount: job.batchCount,
+                cardsCreated: job.cardsCreated,
+                cardsRejected: job.cardsRejected,
+                error: job.error,
+                summary: (job.summary as never) ?? null,
+                finishedAt: job.finishedAt,
+              }
+            : null
+        }
       />
 
       {stats.objectives > 0 ? (

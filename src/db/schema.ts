@@ -675,6 +675,47 @@ export const appSettings = sqliteTable("app_settings", {
     .default(sql`(current_timestamp)`),
 });
 
+/* ------------------------------------------------------------ GenerationJob */
+
+export const jobStatuses = ["running", "done", "failed"] as const;
+
+/**
+ * A generation run, tracked while it happens.
+ *
+ * Generation persists each batch as it finishes, which is why cards used to
+ * keep appearing after the request that started them had seemingly ended: the
+ * browser had stopped watching, not the work. Keeping the run's state here
+ * means the UI can show real progress, survive navigating away, and say
+ * authoritatively when it is actually done.
+ */
+export const generationJobs = sqliteTable(
+  "generation_jobs",
+  {
+    id: id(),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    /** Where the cards land — different from `examId` for a separate deck. */
+    targetExamId: text("target_exam_id"),
+    status: text("status", { enum: jobStatuses }).notNull().default("running"),
+    /** append | replace | separate */
+    mode: text("mode").notNull().default("append"),
+    batchIndex: integer("batch_index").notNull().default(0),
+    batchCount: integer("batch_count").notNull().default(0),
+    cardsCreated: integer("cards_created").notNull().default(0),
+    cardsRejected: integer("cards_rejected").notNull().default(0),
+    error: text("error"),
+    /** The finished summary, for the panel to show when it completes. */
+    summary: text("summary", { mode: "json" }).$type<unknown>(),
+    startedAt: createdAt(),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [index("generation_jobs_exam_idx").on(t.examId)],
+);
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -846,6 +887,7 @@ export type Flashcard = typeof flashcards.$inferSelect;
 export type CardRubric = typeof cardRubrics.$inferSelect;
 export type CardRevision = typeof cardRevisions.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type GenerationJob = typeof generationJobs.$inferSelect;
 export type CoverageMapping = typeof coverageMappings.$inferSelect;
 export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
 export type ContentConflict = typeof contentConflicts.$inferSelect;
