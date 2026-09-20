@@ -76,6 +76,8 @@
     "files": [
       "electron/**/*",
       ".next/standalone/**/*",
+      "!**/node_modules/.bin/**",
+      "!**/node_modules/electron/**",
       "package.json"
     ],
     "extraMetadata": {

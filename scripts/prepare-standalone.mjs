@@ -6,7 +6,7 @@
  * assets or `public/`, because a normal deployment serves those from a CDN —
  * a desktop app has no CDN, so they are copied in here.
  */
-import { cp, mkdir, access } from "node:fs/promises";
+import { cp, mkdir, access, rm } from "node:fs/promises";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -43,6 +43,42 @@ async function main() {
   await cp(join(root, "drizzle"), join(standalone, "drizzle"), {
     recursive: true,
   });
+
+  // Build-time packages the tracer picked up but the app must not ship.
+  //
+  // `electron` is the worst of these: its dist contains a whole Electron.app,
+  // so packaging it puts Electron inside Electron — a quarter of a gigabyte of
+  // duplication, and the framework symlinks inside it break the packager
+  // outright (fs-extra resolves a relative symlink target against the working
+  // directory, which cannot work for `Versions/Current/Squirrel`).
+  for (const unwanted of ["electron", "electron-builder", "app-builder-lib"]) {
+    await rm(join(standalone, "node_modules", unwanted), {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  // Native modules the tracer cannot follow.
+  //
+  // Next traces imports, so it copies these packages' JavaScript and stops
+  // there — the llama.cpp binary is selected and loaded at runtime, so it is
+  // invisible to static analysis. The traced copy of the Metal binding came to
+  // 8 KB of a 14 MB package, which loads fine right up until someone picks the
+  // offline model. Copying the real directories over the stubs fixes that.
+  for (const native of ["@node-llama-cpp", "node-llama-cpp"]) {
+    const source = join(root, "node_modules", native);
+    if (!(await exists(source))) continue;
+
+    const destination = join(standalone, "node_modules", native);
+    await cp(source, destination, { recursive: true, force: true });
+
+    // `.bin` holds symlinks to CLI entry points. They are useless inside a
+    // packaged app and the packager chokes on copying them, so they go.
+    await rm(join(destination, "node_modules", ".bin"), {
+      recursive: true,
+      force: true,
+    });
+  }
 
   console.log("Standalone output prepared for packaging.");
 }
