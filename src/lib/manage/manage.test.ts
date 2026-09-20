@@ -25,6 +25,7 @@ import {
   studySessions,
 } from "@/db/schema";
 
+import { buildExamExport, exportFilename } from "./export";
 import {
   createCourse,
   createExam,
@@ -374,5 +375,69 @@ describe("resetting progress", () => {
     resetProgress(db, examId);
 
     expect(db.select().from(studyProgress).all()).toHaveLength(1);
+  });
+});
+
+describe("exporting a deck", () => {
+  it("includes everything a student built or wrote", () => {
+    const bundle = buildExamExport(db, examId)!;
+
+    expect(bundle.version).toBe(1);
+    expect(bundle.course?.title).toBe("Physiology");
+    expect(bundle.exam.title).toBe("Exam 2");
+    expect(bundle.sourceFiles).toHaveLength(2);
+    expect(bundle.flashcards).toHaveLength(3);
+    expect(bundle.objectives).toHaveLength(1);
+    expect(bundle.coverage).toHaveLength(1);
+    expect(bundle.attempts).toHaveLength(1);
+  });
+
+  it("writes the extracted text out, not just a reference to it", () => {
+    const bundle = buildExamExport(db, examId)!;
+    const deck = bundle.sourceFiles.find((f) => f.filename === "lecture.pptx")!;
+
+    expect(deck.units).toHaveLength(2);
+    expect(deck.units[0].rawText).toBe("Slide one");
+  });
+
+  it("writes provenance in a form that means something outside this app", () => {
+    const bundle = buildExamExport(db, examId)!;
+    const card = bundle.flashcards.find((c) => c.id === generatedCardId)!;
+
+    // A foreign key is useless in a backup; "slide 1 of lecture.pptx" is not.
+    expect(card.source).toEqual({
+      filename: "lecture.pptx",
+      index: 1,
+      excerpt: "Slide one",
+    });
+    expect(card.rubric?.essentialPoints).toEqual(["yes"]);
+  });
+
+  it("carries review history and the student's own answers", () => {
+    const bundle = buildExamExport(db, examId)!;
+
+    const studied = bundle.flashcards.find((c) => c.id === generatedCardId)!;
+    expect(studied.progress?.state).toBe("retained");
+    expect(studied.progress?.intervalDays).toBe(12);
+    expect(bundle.attempts[0].answer).toBe("an attempt");
+  });
+
+  it("survives a deck with nothing in it", () => {
+    const empty = createExam(db, { courseId, title: "Empty" });
+    const bundle = buildExamExport(db, empty.id)!;
+
+    expect(bundle.flashcards).toEqual([]);
+    expect(bundle.sourceFiles).toEqual([]);
+    expect(() => JSON.stringify(bundle)).not.toThrow();
+  });
+
+  it("reports nothing for a deck that does not exist", () => {
+    expect(buildExamExport(db, "missing")).toBeUndefined();
+  });
+
+  it("names the file after the deck and the day", () => {
+    expect(exportFilename("Exam 2 — Renal & Endocrine", new Date("2026-03-10"))).toBe(
+      "exam-2-renal-endocrine-2026-03-10.json",
+    );
   });
 });

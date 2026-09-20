@@ -6,6 +6,8 @@ import { db } from "@/db";
 import { cardRubrics, flashcards } from "@/db/schema";
 import type { QueueFilter } from "@/lib/study/queue";
 
+import { hasRevision } from "@/lib/cards/edit";
+
 import { buildMcq, type McqCard, type McqOption } from "./mcq";
 import type { Stage } from "./ladder";
 import {
@@ -39,6 +41,8 @@ export type LearnPrompt = {
   breakdown?: string[];
   remediate: boolean;
   countsTowardMastery: boolean;
+  /** An earlier edit to this card is still restorable. */
+  canUndo: boolean;
 };
 
 export type LearnStatus = {
@@ -171,6 +175,7 @@ function status(sessionId: string): LearnStatus {
       breakdown: step.remediate ? (card.essentialPoints ?? []) : undefined,
       remediate: step.remediate,
       countsTowardMastery: step.countsTowardMastery,
+      canUndo: hasRevision(db, card.id),
     },
   };
 }

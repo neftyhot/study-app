@@ -166,22 +166,24 @@ export default async function SourcesPage(
                           )}
 
                           {slide.tables.map((table, i) => (
-                            <table
-                              key={i}
-                              className="w-full border-collapse text-xs"
-                            >
-                              <tbody>
-                                {table.rows.map((row, r) => (
-                                  <tr key={r}>
-                                    {row.map((cell, c) => (
-                                      <td key={c} className="border p-1.5">
-                                        {cell}
-                                      </td>
-                                    ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            // A lecture table can have more columns than a
+                            // phone has room for; scrolling it beats pushing
+                            // the whole page sideways.
+                            <div key={i} className="overflow-x-auto">
+                              <table className="w-full border-collapse text-xs">
+                                <tbody>
+                                  {table.rows.map((row, r) => (
+                                    <tr key={r}>
+                                      {row.map((cell, c) => (
+                                        <td key={c} className="border p-1.5">
+                                          {cell}
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
                           ))}
 
                           {slide.speakerNotes ? (

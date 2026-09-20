@@ -6,6 +6,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { flashcards } from "@/db/schema";
 
+import { editCard, undoCardEdit } from "@/lib/cards/edit";
+
 import type { Grade } from "./grade";
 import type { QueueFilter } from "./queue";
 import {
@@ -63,8 +65,11 @@ export async function toggleCardStar(cardId: string) {
 }
 
 /**
- * In-place editing (PRD §4). Sets `is_user_edited` so later regeneration and
- * the coverage matrix can tell the student's wording from the model's.
+ * In-place editing (PRD §4, §15).
+ *
+ * Saves continuously as the student types, and writes the previous text to
+ * history first so the edit can be undone. `is_user_edited` tells later
+ * regeneration and the deletion rules that this card is the student's work.
  */
 export async function saveCardEdit(
   cardId: string,
@@ -75,17 +80,37 @@ export async function saveCardEdit(
     .from(flashcards)
     .where(eq(flashcards.id, cardId))
     .get();
-  if (!card) return;
+  if (!card) return null;
 
-  db.update(flashcards)
-    .set({
-      question: fields.question.trim(),
-      directAnswer: fields.directAnswer.trim(),
-      fullExplanation: fields.fullExplanation.trim() || null,
-      isUserEdited: true,
-    })
-    .where(eq(flashcards.id, cardId))
-    .run();
+  const result = editCard(db, cardId, fields);
+  if (!result) return null;
 
   revalidatePath(`/exams/${card.examId}/cards`);
+
+  return {
+    undoAvailable: result.undoAvailable,
+    revisionCreated: result.revisionCreated,
+  };
+}
+
+export async function undoCardEditAction(cardId: string) {
+  const card = db
+    .select({ examId: flashcards.examId })
+    .from(flashcards)
+    .where(eq(flashcards.id, cardId))
+    .get();
+  if (!card) return null;
+
+  const result = undoCardEdit(db, cardId);
+  if (!result) return null;
+
+  revalidatePath(`/exams/${card.examId}/cards`);
+
+  return {
+    question: result.card.question,
+    directAnswer: result.card.directAnswer,
+    fullExplanation: result.card.fullExplanation,
+    isUserEdited: result.card.isUserEdited,
+    undoAvailable: result.undoAvailable,
+  };
 }

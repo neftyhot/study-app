@@ -37,7 +37,7 @@ import {
   type Reveal,
 } from "@/lib/learn/actions";
 import type { TypedGrade } from "@/lib/learn/typed";
-import { saveCardEdit } from "@/lib/study/actions";
+import { CardEditor } from "@/components/cards/card-editor";
 import type { StudyScope } from "@/lib/study/queue";
 
 const ERROR_LABELS: Record<string, string> = {
@@ -187,7 +187,7 @@ export function LearnMode({
               {prompt.countsTowardMastery ? "Counts" : "Practice"}
             </Badge>
           </div>
-          <CardTitle className="pt-2 text-lg leading-snug">
+          <CardTitle className="pt-2 text-lg leading-snug break-words">
             {prompt.question}
           </CardTitle>
           {prompt.remediate && prompt.breakdown?.length ? (
@@ -210,6 +210,7 @@ export function LearnMode({
               reveal={reveal}
               cardId={prompt.cardId}
               question={prompt.question}
+              canUndo={prompt.canUndo}
               onContinue={continueAfterReveal}
               onOverride={async () => {
                 if (!sessionId || !reveal.attemptId) return;
@@ -308,12 +309,14 @@ function RevealPanel({
   reveal,
   cardId,
   question,
+  canUndo,
   onContinue,
   onOverride,
 }: {
   reveal: Reveal;
   cardId: string;
   question: string;
+  canUndo: boolean;
   onContinue: () => void;
   onOverride: () => Promise<void>;
 }) {
@@ -398,12 +401,19 @@ function RevealPanel({
       ) : null}
 
       {editing ? (
-        <InlineCardEditor
-          cardId={cardId}
-          question={question}
-          directAnswer={reveal.directAnswer}
-          onClose={() => setEditing(false)}
-        />
+        <div className="rounded-md border p-3">
+          <CardEditor
+            cardId={cardId}
+            card={{
+              question,
+              directAnswer: reveal.directAnswer,
+              fullExplanation: reveal.fullExplanation,
+            }}
+            canUndo={canUndo}
+            onClose={() => setEditing(false)}
+            onSaved={() => undefined}
+          />
+        </div>
       ) : null}
 
       <div className="flex flex-wrap gap-2">
@@ -512,66 +522,6 @@ function PracticeDrill({
         </Button>
         <Button size="sm" variant="ghost" onClick={onClose}>
           Done
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Fixing a badly worded card without leaving the session (PRD §7). */
-function InlineCardEditor({
-  cardId,
-  question,
-  directAnswer,
-  onClose,
-}: {
-  cardId: string;
-  question: string;
-  directAnswer: string;
-  onClose: () => void;
-}) {
-  const [editedQuestion, setEditedQuestion] = useState(question);
-  const [editedAnswer, setEditedAnswer] = useState(directAnswer);
-  const [busy, setBusy] = useState(false);
-
-  return (
-    <div className="space-y-2 rounded-md border p-3">
-      <Label className="text-xs">Question</Label>
-      <Textarea
-        value={editedQuestion}
-        onChange={(event) => setEditedQuestion(event.target.value)}
-        className="min-h-16 text-sm"
-      />
-      <Label className="text-xs">Answer</Label>
-      <Textarea
-        value={editedAnswer}
-        onChange={(event) => setEditedAnswer(event.target.value)}
-        className="min-h-16 text-sm"
-      />
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          disabled={
-            busy ||
-            editedQuestion.trim().length === 0 ||
-            editedAnswer.trim().length === 0
-          }
-          onClick={async () => {
-            setBusy(true);
-            await saveCardEdit(cardId, {
-              question: editedQuestion,
-              directAnswer: editedAnswer,
-              fullExplanation: "",
-            });
-            setBusy(false);
-            onClose();
-            toast.success("Card updated");
-          }}
-        >
-          Save
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onClose} disabled={busy}>
-          Cancel
         </Button>
       </div>
     </div>

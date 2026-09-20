@@ -523,6 +523,35 @@ export const answerAttempts = sqliteTable(
   ],
 );
 
+/* ------------------------------------------------------------ CardRevision */
+
+/**
+ * The previous text of a card, kept so an edit can be undone (PRD §15).
+ *
+ * Editing is continuous and autosaved, which without history means a student
+ * can destroy a good card by typing into it. A revision is written before the
+ * card is overwritten, so undo restores exactly what was there.
+ */
+export const cardRevisions = sqliteTable(
+  "card_revisions",
+  {
+    id: id(),
+    flashcardId: text("flashcard_id")
+      .notNull()
+      .references(() => flashcards.id, { onDelete: "cascade" }),
+    /** The content as it was BEFORE the edit this row records. */
+    question: text("question").notNull(),
+    directAnswer: text("direct_answer").notNull(),
+    fullExplanation: text("full_explanation"),
+    /** False when the card was still exactly as generated. */
+    wasUserEdited: integer("was_user_edited", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    createdAt: createdAt(),
+  },
+  (t) => [index("card_revisions_card_idx").on(t.flashcardId)],
+);
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -578,6 +607,14 @@ export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
   progress: one(studyProgress),
   coverage: many(coverageMappings),
   attempts: many(answerAttempts),
+  revisions: many(cardRevisions),
+}));
+
+export const cardRevisionsRelations = relations(cardRevisions, ({ one }) => ({
+  flashcard: one(flashcards, {
+    fields: [cardRevisions.flashcardId],
+    references: [flashcards.id],
+  }),
 }));
 
 export const cardRubricsRelations = relations(cardRubrics, ({ one }) => ({
@@ -668,6 +705,7 @@ export type SourceSlide = typeof sourceSlides.$inferSelect;
 export type StudyGuideObjective = typeof studyGuideObjectives.$inferSelect;
 export type Flashcard = typeof flashcards.$inferSelect;
 export type CardRubric = typeof cardRubrics.$inferSelect;
+export type CardRevision = typeof cardRevisions.$inferSelect;
 export type CoverageMapping = typeof coverageMappings.$inferSelect;
 export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
 export type ContentConflict = typeof contentConflicts.$inferSelect;

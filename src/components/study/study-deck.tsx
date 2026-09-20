@@ -38,14 +38,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import type { Grade } from "@/lib/study/grade";
 import type { StudyScope } from "@/lib/study/queue";
+import { CardEditor } from "@/components/cards/card-editor";
 import {
   beginStudySession,
   finishStudySession,
   gradeStudyCard,
-  saveCardEdit,
   saveStudyPosition,
   toggleCardStar,
 } from "@/lib/study/actions";
@@ -60,6 +59,8 @@ export type StudyCardView = {
   starred: boolean;
   excluded: boolean;
   isUserEdited: boolean;
+  /** An earlier edit is still restorable. */
+  canUndo: boolean;
   hasAiSupplement: boolean;
   essentialPoints: string[];
   lastGrade: Grade | null;
@@ -339,35 +340,35 @@ export function StudyDeck({
         <CardContent className="space-y-4">
           {editing ? (
             <CardEditor
-              card={current}
-              onCancel={() => setEditing(false)}
-              onSave={async (fields) => {
-                await saveCardEdit(current.id, fields);
+              cardId={current.id}
+              card={{
+                question: current.question,
+                directAnswer: current.directAnswer,
+                fullExplanation: current.fullExplanation,
+              }}
+              canUndo={current.canUndo}
+              onClose={() => setEditing(false)}
+              onSaved={(fields) =>
                 setDeck((prev) =>
                   prev.map((card) =>
                     card.id === current.id
-                      ? {
-                          ...card,
-                          ...fields,
-                          fullExplanation: fields.fullExplanation || null,
-                          isUserEdited: true,
-                        }
+                      ? { ...card, ...fields, isUserEdited: true }
                       : card,
                   ),
-                );
-                setEditing(false);
-                toast.success("Card updated");
-              }}
+                )
+              }
             />
           ) : (
             <>
-              <p className="text-lg leading-snug font-medium">
+              <p className="text-lg leading-snug font-medium break-words">
                 {current.question}
               </p>
 
               {revealed ? (
                 <div className="space-y-3">
-                  <p className="text-base">{current.directAnswer}</p>
+                  <p className="text-base break-words">
+                    {current.directAnswer}
+                  </p>
 
                   {current.fullExplanation || current.essentialPoints.length ? (
                     <div>
@@ -434,6 +435,7 @@ export function StudyDeck({
             <Button
               key={value}
               variant={value === "missed" ? "destructive" : "outline"}
+              className="text-xs sm:text-sm"
               onClick={() => grade(value)}
             >
               {GRADE_LABELS[value]}
@@ -492,7 +494,7 @@ export function StudyDeck({
           </DialogHeader>
 
           {current.source?.excerpt ? (
-            <blockquote className="border-l-2 pl-3 text-sm italic">
+            <blockquote className="border-l-2 pl-3 text-sm italic break-words">
               {current.source.excerpt}
             </blockquote>
           ) : null}
@@ -510,83 +512,6 @@ export function StudyDeck({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function CardEditor({
-  card,
-  onSave,
-  onCancel,
-}: {
-  card: StudyCardView;
-  onSave: (fields: {
-    question: string;
-    directAnswer: string;
-    fullExplanation: string;
-  }) => Promise<void>;
-  onCancel: () => void;
-}) {
-  const [question, setQuestion] = useState(card.question);
-  const [directAnswer, setDirectAnswer] = useState(card.directAnswer);
-  const [fullExplanation, setFullExplanation] = useState(
-    card.fullExplanation ?? "",
-  );
-  const [saving, setSaving] = useState(false);
-
-  const valid = question.trim().length > 0 && directAnswer.trim().length > 0;
-
-  return (
-    <div className="space-y-3">
-      <div className="space-y-1">
-        <Label htmlFor="question" className="text-xs">
-          Question
-        </Label>
-        <Textarea
-          id="question"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          className="min-h-16"
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="answer" className="text-xs">
-          Answer
-        </Label>
-        <Textarea
-          id="answer"
-          value={directAnswer}
-          onChange={(event) => setDirectAnswer(event.target.value)}
-          className="min-h-16"
-        />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="detail" className="text-xs">
-          Detail (optional)
-        </Label>
-        <Textarea
-          id="detail"
-          value={fullExplanation}
-          onChange={(event) => setFullExplanation(event.target.value)}
-          className="min-h-16"
-        />
-      </div>
-      <div className="flex gap-2">
-        <Button
-          size="sm"
-          disabled={!valid || saving}
-          onClick={async () => {
-            setSaving(true);
-            await onSave({ question, directAnswer, fullExplanation });
-            setSaving(false);
-          }}
-        >
-          Save
-        </Button>
-        <Button size="sm" variant="ghost" onClick={onCancel} disabled={saving}>
-          Cancel
-        </Button>
-      </div>
     </div>
   );
 }

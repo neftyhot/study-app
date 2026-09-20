@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { Download, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/manage/confirm-dialog";
@@ -52,11 +52,19 @@ export function ExamSettings({
         <CardHeader>
           <CardTitle className="text-base">Deck settings</CardTitle>
           <CardDescription>
-            Starting the material over and getting rid of it are different
-            things, so they are different buttons.
+            Export a full JSON backup — sources, cards, coverage, and review
+            history. Starting the material over and getting rid of it are
+            different things, so they are different buttons.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            {/* A plain link: the browser downloads it, no blob juggling. */}
+            <a href={`/api/exams/${examId}/export`} download>
+              <Download className="size-4" />
+              Export backup
+            </a>
+          </Button>
           <Button variant="outline" onClick={() => setConfirm("reset")}>
             <RotateCcw className="size-4" />
             Reset study progress

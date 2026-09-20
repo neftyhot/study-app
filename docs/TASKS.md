@@ -429,13 +429,52 @@ and left the tier alone; two cards backdated six days came back at the head of t
 - No "bury siblings" or daily review cap; a large backlog arrives all at once.
 - The review queue is the ordinary study queue with a `due` scope rather than its own mode.
 
-## Phase 8 — MVP Hardening
+## Phase 8 — MVP Hardening ✅
 
-- [ ] Responsive pass: desktop / tablet / mobile
-- [ ] Continuous autosave + undo for card edits
-- [ ] Export / backup of an exam (cards + progress) as JSON
-- [ ] Empty, loading, and error states across all routes
-- [ ] End-to-end smoke test: upload → generate → coverage → learn → review-due
+- [x] Responsive pass: tables scroll instead of pushing the page sideways, long terms wrap,
+      grading controls fit a phone
+- [x] Continuous autosave for card edits, with undo (`card_revisions`)
+- [x] Export / backup of a deck as JSON (`GET /api/exams/[examId]/export`)
+- [x] Loading skeletons, an error boundary, and a not-found page across all routes
+- [x] End-to-end smoke test: `npm run smoke`
+- [x] Tests: 235 passing (20 new)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 235 tests, and the smoke test green
+from a cold database. Against the running app: all seven routes return 200, and the export of a
+real deck came back as 1,028 cards / 5 source files / 48 objectives in a 1.1 MB file, with the
+download filename `exam-1-2026-09-20.json`.
+
+**Autosave needed undo to be safe.** Editing saves itself once typing stops, which means the
+student is no longer choosing when to commit — so a stray keystroke could quietly destroy a good
+card. Every save writes the previous text to `card_revisions` first, and one burst of typing is
+one restorable point rather than forty: saves within 90 seconds of the last revision extend it
+instead of adding one. Undoing the only edit a card ever had also restores `is_user_edited`,
+because that flag is what the deletion rules read to decide whose work a card is.
+
+**The smoke test is the one that catches wiring.** It runs the real pipeline — ingest three
+formats, re-ingest to prove non-destructiveness, generate, coverage, a full Learn round,
+flashcard grading, a due queue, export — against a throwaway database with a stubbed
+`LlmProvider`, so it needs no API key. The stub answers from the prompt it is handed, so
+provenance verification genuinely runs: a card whose excerpt is not in its slide is rejected
+there exactly as in production. Unit counts are asserted exactly per format (12 slides, 1 page,
+4 sections), so a regression in any single extractor fails the run.
+
+**Design notes:**
+- The error boundary shows the real message. Most failures here are actionable — a missing API
+  key, an unreadable upload — and "something went wrong" just means the student cannot fix it.
+- The export writes provenance as `{filename, index, excerpt}` rather than a foreign key, since
+  a UUID means nothing outside this app.
+- One editor component is now shared by flashcard mode and Learn, so autosave and undo behave
+  the same in both.
+
+**Known limits (deliberate, deferred):**
+- A deleted deck's URL returns HTTP 200 with the not-found UI rather than a 404. That is
+  documented Next 16 behaviour for *streamed* responses, and this segment streams because it has
+  a `loading.tsx`. Unmatched routes still 404. For a local study app the loading skeleton is
+  worth more than the status code.
+- Undo is per card and unbounded in depth, but there is no undo for deletions — those are still
+  guarded by confirmations that spell out the cost.
+- No import to match the export yet.
 
 ---
 

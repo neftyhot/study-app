@@ -8,6 +8,7 @@ import {
   getOpenStudySession,
   listStudyCards,
   listTopics,
+  listUndoableCards,
 } from "@/lib/queries";
 
 export default async function StudyPage(
@@ -17,11 +18,12 @@ export default async function StudyPage(
   const exam = await getExam(examId);
   if (!exam) notFound();
 
-  const [cards, topics, session, dueCount] = await Promise.all([
+  const [cards, topics, session, dueCount, undoable] = await Promise.all([
     listStudyCards(examId),
     listTopics(examId),
     getOpenStudySession(examId),
     countDueCards(examId),
+    listUndoableCards(examId),
   ]);
 
   // Mapped here rather than passed whole: the client needs a flat view, and
@@ -36,6 +38,7 @@ export default async function StudyPage(
     starred: card.starred,
     excluded: card.excluded,
     isUserEdited: card.isUserEdited,
+    canUndo: undoable.has(card.id),
     hasAiSupplement: card.hasAiSupplement,
     essentialPoints: card.rubric?.essentialPoints ?? [],
     lastGrade: card.progress?.lastGrade ?? null,

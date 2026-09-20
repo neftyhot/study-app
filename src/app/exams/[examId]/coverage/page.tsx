@@ -193,7 +193,7 @@ function ObjectiveRow({ row }: { row: CoverageRow }) {
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-2">
-          <CardTitle className="text-base leading-snug">
+          <CardTitle className="text-base leading-snug break-words">
             {row.label ? (
               <span className="text-muted-foreground mr-1.5">{row.label}.</span>
             ) : null}

@@ -5,6 +5,7 @@ import { and, count, desc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-o
 import { db } from "@/db";
 import { todayIso } from "@/lib/srs";
 import {
+  cardRevisions,
   contentConflicts,
   courses,
   exams,
@@ -242,4 +243,15 @@ export async function getMasteryBreakdown(examId: string) {
     immediateRecall: rows.filter((r) => r.state === "immediate_recall").length,
     retained: rows.filter((r) => r.state === "retained").length,
   };
+}
+
+/** Cards with an edit that can still be undone (PRD §15). */
+export async function listUndoableCards(examId: string) {
+  const rows = await db
+    .selectDistinct({ flashcardId: cardRevisions.flashcardId })
+    .from(cardRevisions)
+    .innerJoin(flashcards, eq(flashcards.id, cardRevisions.flashcardId))
+    .where(eq(flashcards.examId, examId));
+
+  return new Set(rows.map((row) => row.flashcardId));
 }

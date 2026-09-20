@@ -71,7 +71,7 @@ export default async function CardsPage(
                 {topicCards.map((card) => (
                   <Card key={card.id}>
                     <CardHeader>
-                      <CardTitle className="text-base leading-snug">
+                      <CardTitle className="text-base leading-snug break-words">
                         {card.question}
                       </CardTitle>
                       <div className="flex flex-wrap gap-1.5 pt-1">

@@ -16,7 +16,8 @@
     "fixtures": "tsx scripts/build-fixtures.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "grade:check": "tsx --env-file=.env.local scripts/grade-check.ts"
+    "grade:check": "tsx --env-file=.env.local scripts/grade-check.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@google/genai": "^2.23.0",
