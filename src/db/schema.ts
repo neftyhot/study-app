@@ -384,6 +384,52 @@ export const studyProgress = sqliteTable(
   ],
 );
 
+/* ------------------------------------------------------------ StudySession */
+
+export const sessionScopes = ["all", "topic", "starred", "missed"] as const;
+
+/**
+ * One run through a deck, kept so a session resumes exactly (PRD §4).
+ *
+ * The queue is stored as an ordered list of card ids rather than recomputed
+ * from a filter: a shuffled deck, or a deck whose cards were graded mid-run,
+ * would otherwise come back in a different order and silently lose the
+ * student's place.
+ */
+export const studySessions = sqliteTable(
+  "study_sessions",
+  {
+    id: id(),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    mode: text("mode", { enum: ["flashcards", "learn"] })
+      .notNull()
+      .default("flashcards"),
+    scope: text("scope", { enum: sessionScopes }).notNull().default("all"),
+    /** Set when scope is "topic". */
+    topic: text("topic"),
+    shuffled: integer("shuffled", { mode: "boolean" }).notNull().default(false),
+    /** Card ids in the exact order they are being studied. */
+    cardOrder: text("card_order", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    /** Index into `card_order` of the card to show next. */
+    position: integer("position").notNull().default(0),
+    missedCount: integer("missed_count").notNull().default(0),
+    difficultCount: integer("difficult_count").notNull().default(0),
+    easyCount: integer("easy_count").notNull().default(0),
+    startedAt: createdAt(),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+    /** Null while the session is still open. */
+    completedAt: text("completed_at"),
+  },
+  (t) => [index("study_sessions_exam_idx").on(t.examId)],
+);
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -398,6 +444,7 @@ export const examsRelations = relations(exams, ({ one, many }) => ({
   sourceFiles: many(sourceFiles),
   objectives: many(studyGuideObjectives),
   flashcards: many(flashcards),
+  sessions: many(studySessions),
 }));
 
 export const sourceFilesRelations = relations(sourceFiles, ({ one, many }) => ({
@@ -492,6 +539,10 @@ export const contentConflictsRelations = relations(
   }),
 );
 
+export const studySessionsRelations = relations(studySessions, ({ one }) => ({
+  exam: one(exams, { fields: [studySessions.examId], references: [exams.id] }),
+}));
+
 export const studyProgressRelations = relations(studyProgress, ({ one }) => ({
   flashcard: one(flashcards, {
     fields: [studyProgress.flashcardId],
@@ -512,6 +563,7 @@ export type CoverageMapping = typeof coverageMappings.$inferSelect;
 export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
 export type ContentConflict = typeof contentConflicts.$inferSelect;
 export type StudyProgress = typeof studyProgress.$inferSelect;
+export type StudySession = typeof studySessions.$inferSelect;
 
 export type NewCourse = typeof courses.$inferInsert;
 export type NewExam = typeof exams.$inferInsert;

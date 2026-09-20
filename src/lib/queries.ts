@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, count, desc, eq, ne, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import {
@@ -12,6 +12,7 @@ import {
   sourceFiles,
   sourceSlides,
   studyGuideObjectives,
+  studySessions,
 } from "@/db/schema";
 
 /** Courses with their exams, for the dashboard. */
@@ -166,4 +167,43 @@ export async function countReadyAnswerFiles(examId: string) {
     );
 
   return row?.n ?? 0;
+}
+
+/** Everything the flip-card UI needs for one exam, in structured order. */
+export async function listStudyCards(examId: string) {
+  return db.query.flashcards.findMany({
+    where: eq(flashcards.examId, examId),
+    with: {
+      sourceSlide: { with: { sourceFile: true } },
+      rubric: true,
+      progress: true,
+    },
+    orderBy: [flashcards.topic, flashcards.createdAt],
+  });
+}
+
+export type StudyCard = Awaited<ReturnType<typeof listStudyCards>>[number];
+
+/** The session to offer resuming, if one was left open. */
+export async function getOpenStudySession(examId: string) {
+  return db.query.studySessions.findFirst({
+    where: and(
+      eq(studySessions.examId, examId),
+      eq(studySessions.mode, "flashcards"),
+      isNull(studySessions.completedAt),
+    ),
+    orderBy: [desc(studySessions.updatedAt)],
+  });
+}
+
+export async function listTopics(examId: string) {
+  const rows = await db
+    .selectDistinct({ topic: flashcards.topic })
+    .from(flashcards)
+    .where(eq(flashcards.examId, examId))
+    .orderBy(flashcards.topic);
+
+  return rows
+    .map((row) => row.topic)
+    .filter((topic): topic is string => Boolean(topic));
 }

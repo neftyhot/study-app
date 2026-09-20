@@ -15,6 +15,13 @@
       "when": 1789929926461,
       "tag": "0001_cultured_impossible_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789931756226,
+      "tag": "0002_naive_hex",
+      "breakpoints": true
     }
   ]
 }

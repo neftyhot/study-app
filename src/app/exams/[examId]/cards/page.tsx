@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -36,12 +37,19 @@ export default async function CardsPage(
         >
           ← {exam.title}
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Flashcards
-          <Badge variant="secondary" className="ml-2 align-middle">
-            {cards.length}
-          </Badge>
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Flashcards
+            <Badge variant="secondary" className="ml-2 align-middle">
+              {cards.length}
+            </Badge>
+          </h1>
+          {cards.length > 0 ? (
+            <Button asChild size="sm">
+              <Link href={`/exams/${examId}/study`}>Study these</Link>
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {cards.length === 0 ? (

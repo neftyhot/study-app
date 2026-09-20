@@ -213,14 +213,54 @@ fabricated quote cannot be evidence of coverage.
 
 ---
 
-## Phase 4 — Normal Flashcard Mode (PRD §4, MVP #4)
+## Phase 4 — Normal Flashcard Mode (PRD §4, MVP #4) ✅
 
-- [ ] Flip/reveal card UI: concise answer + expandable detail, keyboard shortcuts
-- [ ] "Show original slide" provenance drawer
-- [ ] In-place question/answer editing → sets `is_user_edited`
-- [ ] Filtering: topic, starred, missed, full deck; shuffle vs. structured order
-- [ ] Grading inputs: Missed / Difficult / Easy
-- [ ] Exact session resumption state
+**Goal:** Study the deck that was generated, and come back to exactly where you left off.
+
+- [x] Flip/reveal card UI at `/exams/[examId]/study`: concise answer, expandable detail
+- [x] Keyboard shortcuts: space reveals, 1/2/3 grades, arrows move, S stars, E edits
+- [x] "Show original slide" drawer: excerpt, full slide text, and speaker notes
+- [x] In-place question/answer/detail editing → sets `is_user_edited`
+- [x] Filtering: whole deck, by topic, starred, missed; shuffle vs. structured order
+- [x] Grading inputs: Missed / Difficult / Easy, with a session tally
+- [x] Exact session resumption: same deck, same order, same position (`study_sessions`)
+- [x] Session completion markers (PRD §13) — a finished or abandoned run is closed, not deleted
+- [x] Tests: 95 passing (17 new)
+
+**Verified:** `typecheck`, `lint`, `build` (zero warnings), 95 tests. End to end against the
+running app: a shuffled 32-card session parked at card 4 with 1 missed / 1 difficult / 1 easy
+reloaded into the same deck, the same shuffled order, the same position, and the same tally.
+
+**What a flip-card grade is allowed to change:**
+Grading happens *after* the answer is revealed, so it is self-assessed recognition, not
+independent recall. PRD §6 says post-reveal signals must not drive recall intervals, so
+`applyFlashcardGrade` never writes `interval_days` or `next_review_due`, never promotes past
+the recognition tier, and never demotes — a single missed flip does not erase multi-day
+retention credit already earned (granular error accounting). A miss records a lapse, which is
+what the Phase 7 scheduler will read. Four tests pin this.
+
+**Design notes:**
+- The queue is stored as an ordered list of card ids on the session, not recomputed from its
+  filter. Recomputing would reshuffle a shuffled deck and reorder a "missed" deck the moment a
+  card was graded — either way losing the student's place mid-session.
+- Shuffling uses a seeded PRNG so a shuffle is reproducible in tests; the app seeds randomly.
+- Progress is keyed by card, not by session: one row per card, whichever session graded it.
+- Starting a new deck closes the open session rather than deleting it.
+- A session's queue can outlive the cards in it; ids that no longer resolve are dropped rather
+  than resuming onto a blank card. Positions past the end are clamped.
+- Grading and position saves deliberately do not `revalidatePath` — they fire on every card,
+  and re-rendering the page mid-session would cost the student their place.
+
+**Known limits (deliberate, deferred):**
+- The whole deck ships to the client, so answers are present in the page source. They are not
+  shown before reveal, but they are not hidden from someone reading the HTML — it is the
+  student's own material, and it is what makes instant keyboard navigation possible. A very
+  large deck will want windowing.
+- Reversible term/definition cards (PRD §4) are not implemented; no card carries a reversible
+  flag yet.
+- Undo history for edits (PRD §15) is deferred; an edit overwrites in place.
+- Only one open flashcard session per exam. Learn mode (Phase 5) will use the same table with
+  `mode: "learn"`.
 
 ---
 

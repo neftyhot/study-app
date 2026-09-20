@@ -67,9 +67,14 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
           </Link>
         </Button>
         {stats.flashcards > 0 ? (
-          <Button asChild variant="outline">
-            <Link href={`/exams/${examId}/cards`}>Browse cards</Link>
-          </Button>
+          <>
+            <Button asChild>
+              <Link href={`/exams/${examId}/study`}>Study flashcards</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href={`/exams/${examId}/cards`}>Browse cards</Link>
+            </Button>
+          </>
         ) : null}
         {stats.objectives > 0 ? (
           <Button asChild variant="outline">
