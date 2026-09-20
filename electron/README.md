@@ -22,6 +22,26 @@ generation and typed-answer grading call out, and only when asked. Without an
 API key the app still runs: generation is refused with a clear message, and
 typed answers fall back to the provisional keyword grader.
 
+## Before distributing a build
+
+`prepare-standalone.mjs` removes the build machine's absolute paths from
+`server.js` and `required-server-files.json`. Next records where it was built
+(`repoRoot`, `outputFileTracingRoot`, `turbopack.root`), and those strings ship
+with the app — harmless to run, but they publish the developer's home directory
+and username to everyone who downloads it.
+
+Worth re-checking a `.dmg` before handing it out. Mount it and search:
+
+    hdiutil attach "release/Study App-0.1.0-arm64.dmg" -nobrowse -readonly
+    grep -ral "AIzaSy" "/Volumes/Study App 0.1.0-arm64"   # API keys
+    find "/Volumes/Study App 0.1.0-arm64" -name ".env*"   # env files
+    find "/Volumes/Study App 0.1.0-arm64" -name "*.db"    # someone's decks
+
+All three should come back empty. `data/` is outside the `files` globs and the
+settings database lives in the user-data directory, so none of it is packaged —
+but a build that starts prerendering pages again could bake local state into
+HTML, which is how a key hint escaped once already.
+
 ## What must not be packaged
 
 Next's tracer pulls `node_modules/electron` into the standalone output, which

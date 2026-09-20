@@ -6,7 +6,7 @@
  * assets or `public/`, because a normal deployment serves those from a CDN —
  * a desktop app has no CDN, so they are copied in here.
  */
-import { cp, mkdir, access, rm } from "node:fs/promises";
+import { cp, mkdir, access, rm, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -80,7 +80,33 @@ async function main() {
     });
   }
 
+  await scrubBuildPaths();
+
   console.log("Standalone output prepared for packaging.");
+}
+
+/**
+ * Removes the build machine's absolute paths from the shipped server.
+ *
+ * Next records where it was built — `repoRoot`, `outputFileTracingRoot`,
+ * `turbopack.root` — and those strings go out with the app. They are only
+ * build metadata, but they publish the developer's home directory and
+ * username to everyone who downloads it, which is nobody's business.
+ */
+async function scrubBuildPaths() {
+  const root = process.cwd();
+  const files = [
+    join(standalone, "server.js"),
+    join(standalone, ".next", "required-server-files.json"),
+  ];
+
+  for (const file of files) {
+    if (!(await exists(file))) continue;
+
+    const before = await readFile(file, "utf8");
+    const after = before.split(root).join("/app");
+    if (after !== before) await writeFile(file, after);
+  }
 }
 
 main().catch((error) => {
