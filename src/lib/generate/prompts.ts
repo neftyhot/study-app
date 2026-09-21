@@ -129,7 +129,9 @@ BE BRIEF
 - Do NOT generate long explanations, background essays, or misconception lists
   during bulk generation. Keep direct answers concise.
 - directAnswer is one or two sentences. Do not add an explanation paragraph,
-  and do not restate the question inside the answer.
+  and do not restate the question inside the answer: answer "Melatonin", not
+  "The pineal gland synthesizes melatonin". An answer that repeats the
+  question's words gives itself away in multiple choice.
 - Do not write commentary, headings or preamble around the cards.
 
 EMPHASIS
@@ -144,7 +146,7 @@ const PROVENANCE_AND_RUBRICS = `PROVENANCE (non-negotiable)
 - You may shorten a long quote with "..." between the parts you keep, but every
   part you keep must still be copied exactly.
 - If the material does not state something, DO NOT generate a card for it and
-  do not fill the gap from your own knowledge. List it in uncoveredNotes.
+  do not fill the gap from your own knowledge. Make no card instead.
 
 Write questions a student can answer from memory, not questions about the
 slides. Never write "According to slide 7, ...".`;
@@ -279,13 +281,20 @@ SLIDES
 ${renderSlides(slides)}`;
 }
 
+export function objectiveToken(index: number): string {
+  return `O${index + 1}`;
+}
+
 export function objectiveFocusPrompt(
   slides: SourceSlide[],
   objectives: StudyGuideObjective[],
   options?: PromptOptions,
 ): string {
+  // Tokens are per batch, like slide tokens: the model tags each card with
+  // the one it answers, which is how the run knows afterwards which
+  // objectives got no card at all.
   const list = objectives
-    .map((o, i) => `${o.label ?? i + 1}. ${o.promptText}`)
+    .map((o, i) => `[${objectiveToken(i)}] ${o.label ? `${o.label}. ` : ""}${o.promptText}`)
     .join("\n");
 
   return `Generate flashcards that answer the study-guide objectives below,
@@ -304,8 +313,11 @@ everything it covers rather than as a single question.
 - Before moving on from an objective, re-read it and ask what part of it you
   have not yet turned into a card.
 
-If the slides do not contain what an objective asks for, do not invent it:
-record the objective in uncoveredNotes instead.
+Set each card's objective to the token of the objective it answers, e.g. "O2".
+
+These are only the objectives these slides are likely to answer, and other
+slides will be asked about the rest. If the slides do not contain what an
+objective asks for, do not invent it — make no card for it.
 ${applicationSection(options)}
 
 STUDY-GUIDE OBJECTIVES

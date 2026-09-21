@@ -180,6 +180,9 @@ export async function requestAssist(
     prompt: assistPrompt(request.kind, context),
     schema: ASSIST_SCHEMA,
     temperature: 0.2,
+    // Reading an answer off material already in the prompt: thinking first
+    // was most of the cost and none of the quality (see Phase 23 in TASKS.md).
+    thinking: "minimal",
   });
 
   let body = data.body?.trim() || "No help could be generated for this card.";

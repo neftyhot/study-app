@@ -44,13 +44,30 @@ export type ValidationResult = {
  * the check must still fail for fabricated content.
  */
 export function normalizeForMatch(value: string): string {
-  return value
+  return stripBullets(value)
     .toLowerCase()
     .replace(/[‘’‛]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/[‐-―]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * Removes list markers, which are layout rather than content.
+ *
+ * Slides put "•" or "–" at the start of every line, and a model quoting two
+ * lines drops them — so "limited to head • Vision, hearing" on the slide
+ * never matched "limited to head Vision, hearing" in the excerpt, and a card
+ * quoting the slide exactly was thrown away. That was most of the
+ * rejections measured on a real deck. PDF extraction also leaves glyphs from
+ * the Private Use Area (icon-font arrows and bullets) that no model reproduces.
+ */
+function stripBullets(value: string): string {
+  return value
+    .replace(/[\uE000-\uF8FF]/g, " ")
+    .replace(/(^|\n)[ \t]*(?:[•◦▪▫‣⁃●○■□►▸➢✓*]|[-–—](?=\s))[ \t]*/g, "$1")
+    .replace(/[ \t]+[•◦▪▫‣⁃●○■□►▸➢][ \t]+/g, " ");
 }
 
 /** Every piece of text a card may legitimately quote from a slide. */
@@ -75,9 +92,16 @@ function searchableText(slide: SourceSlide): string {
  * they are treated as gaps instead. Each fragment is still matched exactly.
  */
 function excerptFragments(excerpt: string): string[] {
-  return normalizeForMatch(excerpt)
-    .split(/\s*(?:\.{3,}|\u2026)\s*/)
-    .map((fragment) => fragment.trim())
+  // Line and sentence breaks are gaps too. A model quoting three bullets in
+  // order, skipping the sub-bullet between them, has done exactly what "..."
+  // permits — it just did not write the dots. Each piece is still matched
+  // verbatim and in order, so nothing that is not on the slide gets through.
+  return stripBullets(excerpt)
+    // A spaced dash or bullet mid-line is where the model joined two slide
+    // lines ("bony labyrinth – Filled with endolymph").
+    .split(/\n+|(?<=[.;!?])\s+(?=\S)|\s+[–—•]\s+/)
+    .flatMap((line) => normalizeForMatch(line).split(/\s*(?:\.{3,}|\u2026)\s*/))
+    .map((fragment) => fragment.replace(/[.;:,]+$/, "").trim())
     .filter(Boolean);
 }
 

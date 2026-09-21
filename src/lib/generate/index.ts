@@ -27,8 +27,11 @@ import {
   fullCoveragePrompt,
   generationSystem,
   objectiveFocusPrompt,
+  objectiveToken,
 } from "./prompts";
+import { describeRejection, type RejectionView } from "./rejections";
 import { withRetry } from "./retry";
+import { routeObjectives } from "./routing";
 import {
   generatedCardSchema,
   type GenerationDetail,
@@ -99,7 +102,15 @@ export type GenerationSummary = {
    */
   usage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number | null };
   rejections: Rejection[];
-  uncoveredNotes: string[];
+  /**
+   * Study-guide runs: objectives no accepted card was tagged with. Exact and
+   * bounded by the guide — never more entries than it has objectives. Says
+   * nothing about whether the material covers them; the coverage check does.
+   */
+  objectivesWithoutCards: { label: string | null; text: string }[];
+  objectivesTotal: number;
+  /** Each rejected card with what was on it and why, in plain words. */
+  rejectionViews: RejectionView[];
 };
 
 /** 1-based, inclusive — the numbers the student sees in the original file. */
@@ -122,6 +133,11 @@ export type GenerateOptions = {
   detail?: GenerationDetail;
   /** Requests in flight at once. */
   concurrency?: number;
+  /**
+   * Study-guide runs: show each batch only its likely objectives. On by
+   * default; off sends every objective to every batch, as before.
+   */
+  routeObjectives?: boolean;
   onProgress?: (progress: GenerationProgress) => void;
 };
 
@@ -167,7 +183,29 @@ export async function generateCardsForExam(
 
   const batchSize =
     options.batchSize ?? calibrationFor(llm.model).batchSize ?? DEFAULT_BATCH_SIZE;
-  const batches = batchSlides(slides, batchSize);
+  const allBatches = batchSlides(slides, batchSize);
+
+  // Study-guide runs show each batch only the objectives its pages are likely
+  // to answer, and skip a batch that answers none (see `routing.ts`).
+  const routing =
+    objectives.length > 0 && options.routeObjectives !== false
+      ? routeObjectives(allBatches, objectives)
+      : allBatches.map(() => objectives);
+  const work = allBatches
+    .map((batch, index) => ({ batch, objectives: routing[index] }))
+    .filter((entry) => exam.scopeMode !== "objectives" || entry.objectives.length > 0);
+  const batches = work.map((entry) => entry.batch);
+
+  const fileNames = new Map(
+    db
+      .select({ id: sourceFiles.id, filename: sourceFiles.filename, fileType: sourceFiles.fileType })
+      .from(sourceFiles)
+      .where(eq(sourceFiles.examId, examId))
+      .all()
+      .map((file) => [file.id, file]),
+  );
+  const answered = new Set<string>();
+  const rejectionViews: RejectionView[] = [];
 
   // Deduplicate against what is already stored, so re-running generation adds
   // to the deck instead of duplicating it.
@@ -181,7 +219,6 @@ export async function generateCardsForExam(
   );
 
   const rejections: Rejection[] = [];
-  const uncoveredNotes: string[] = [];
   const failedBatches: { batch: number; error: string }[] = [];
   let cardsCreated = 0;
   let completed = 0;
@@ -194,15 +231,28 @@ export async function generateCardsForExam(
   const limit = pLimit(
     Math.max(1, Math.min(batches.length, options.concurrency ?? DEFAULT_CONCURRENCY)),
   );
-  const schema = generatedCardSchema(detail);
+  const schema = generatedCardSchema(detail, {
+    objectives: exam.scopeMode === "objectives",
+  });
+
+  // Report the size of the run before anything finishes, so the bar reads
+  // "0 of 38" straight away instead of an indefinite "reading…".
+  options.onProgress?.({
+    batchIndex: 0,
+    batchCount: batches.length,
+    cardsCreated: 0,
+    cardsRejected: 0,
+    accepted: 0,
+    rejected: 0,
+  });
 
   await Promise.all(
-    batches.map((batch, batchIndex) =>
+    work.map(({ batch, objectives: batchObjectives }, batchIndex) =>
       limit(async () => {
         const promptOptions = { includeApplication: exam.includeApplication };
         const prompt =
           exam.scopeMode === "objectives"
-            ? objectiveFocusPrompt(batch, objectives, promptOptions)
+            ? objectiveFocusPrompt(batch, batchObjectives, promptOptions)
             : fullCoveragePrompt(batch, promptOptions);
 
         try {
@@ -226,7 +276,22 @@ export async function generateCardsForExam(
             existingQuestions.add(validated.card.question);
           }
           rejections.push(...result.rejected);
-          uncoveredNotes.push(...(data.uncoveredNotes ?? []));
+          for (const rejection of result.rejected) {
+            rejectionViews.push(describeRejection(rejection, batch, fileNames));
+          }
+
+          // Resolve each accepted card's tag back to a real objective. A tag
+          // that names no objective in this batch is ignored, not guessed.
+          batchObjectives.forEach((objective, index) => {
+            const token = objectiveToken(index).toLowerCase();
+            if (
+              result.accepted.some(
+                ({ card }) => card.objective?.trim().toLowerCase().replace(/[^a-z0-9]/g, "") === token,
+              )
+            ) {
+              answered.add(objective.id);
+            }
+          });
 
           cardsCreated += persistCards(db, examId, result.accepted);
 
@@ -303,7 +368,11 @@ export async function generateCardsForExam(
     model: llm.model,
     usage: { inputTokens, outputTokens, estimatedCostUsd },
     rejections,
-    uncoveredNotes,
+    objectivesWithoutCards: objectives
+      .filter((objective) => !answered.has(objective.id))
+      .map((objective) => ({ label: objective.label, text: objective.promptText })),
+    objectivesTotal: objectives.length,
+    rejectionViews,
   };
 }
 

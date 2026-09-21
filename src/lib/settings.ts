@@ -16,6 +16,11 @@ import { eq } from "drizzle-orm";
 import { createClient, type Db } from "@/db/client";
 import { appSettings } from "@/db/schema";
 import {
+  DEFAULT_STRICTNESS,
+  isStrictness,
+  type Strictness,
+} from "@/lib/grade/strictness";
+import {
   PROVIDERS,
   type DownloadState,
   type KeyStatus,
@@ -82,6 +87,19 @@ export function writeSetting(key: string, value: string, db?: Db) {
       set: { value: trimmed, updatedAt: new Date().toISOString() },
     })
     .run();
+}
+
+/* -------------------------------------------------------------- Grading */
+
+const STRICTNESS_KEY = "grading_strictness";
+
+export function readGradingStrictness(db?: Db): Strictness {
+  const value = readSetting(STRICTNESS_KEY, db);
+  return isStrictness(value) ? value : DEFAULT_STRICTNESS;
+}
+
+export function writeGradingStrictness(strictness: Strictness, db?: Db) {
+  writeSetting(STRICTNESS_KEY, strictness, db);
 }
 
 /* ------------------------------------------------------------------- Keys */

@@ -26,6 +26,7 @@ import {
   lastMissedPoints,
 } from "@/lib/learn/session";
 import type { TypedGrade, TypedRequest } from "@/lib/learn/typed";
+import { strictnessRules } from "./strictness";
 import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 
 import { getTypedGrader } from "./index";
@@ -403,5 +404,42 @@ describe("attempts and overrides", () => {
 
     expect(db.select().from(answerAttempts).all()).toHaveLength(1);
     expect(db.select().from(studyProgress).all()).toHaveLength(0);
+  });
+});
+
+describe("grading strictness", () => {
+  const points = {
+    required: [
+      { token: "P1", text: "hypothalamus" },
+      { token: "P2", text: "posterior pituitary" },
+    ],
+    optional: [],
+  };
+  const response = {
+    verdict: "partial" as const,
+    metPoints: ["P1"],
+    missedPoints: ["P2"],
+    creditedOptional: [],
+    errorType: "incomplete" as const,
+    feedback: "",
+  };
+
+  it("lenient counts most of the rubric as correct", () => {
+    expect(reconcileGrade(response, points, { strictness: "lenient" }).verdict).toBe("correct");
+  });
+
+  it("standard and strict still need every point", () => {
+    expect(reconcileGrade(response, points, { strictness: "standard" }).verdict).toBe("partial");
+    expect(reconcileGrade(response, points, { strictness: "strict" }).verdict).toBe("partial");
+  });
+
+  it("never forgives a reversed direction, however lenient", () => {
+    const reversed = { ...response, metPoints: ["P1", "P2"], missedPoints: [], errorType: "directionality" as const };
+    expect(reconcileGrade(reversed, points, { strictness: "lenient" }).verdict).toBe("incorrect");
+  });
+
+  it("adds strictness rules to the grading prompt, and nothing for standard", () => {
+    expect(strictnessRules("strict")).toContain("STRICT");
+    expect(strictnessRules("standard")).toBe("");
   });
 });

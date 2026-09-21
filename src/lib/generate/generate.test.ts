@@ -229,18 +229,47 @@ describe("generateCardsForExam", () => {
     expect(db.select().from(flashcards).all()).toHaveLength(1);
   });
 
-  it("surfaces concepts the source never explains instead of inventing them", async () => {
+  it("lists objectives no card answered — exactly, and never more than the guide has", async () => {
     seedSlides(2);
+    db.update(exams).set({ scopeMode: "objectives" }).where(eq(exams.id, examId)).run();
+    db.insert(studyGuideObjectives)
+      .values([
+        { examId, orderIndex: 0, promptText: "Where is slide body line produced?" },
+        { examId, orderIndex: 1, promptText: "Describe the renin-angiotensin cascade" },
+      ])
+      .run();
+
+    const { provider, requests } = stubProvider([
+      { cards: [card({ objective: "O1" }), card({ question: "Second?", objective: "O9" })] },
+    ]);
+
+    const summary = await generateCardsForExam(db, provider, examId, {
+      routeObjectives: false,
+    });
+
+    // O1 was answered; the card tagged "O9" names no objective and is ignored
+    // rather than guessed at, so the cascade is honestly reported as unanswered.
+    expect(summary.objectivesTotal).toBe(2);
+    expect(summary.objectivesWithoutCards).toEqual([
+      { label: null, text: "Describe the renin-angiotensin cascade" },
+    ]);
+    expect(requests[0].prompt).toContain("[O2] Describe the renin-angiotensin cascade");
+  });
+
+  it("explains each rejected card in a sentence", async () => {
+    seedSlides(1);
     const { provider } = stubProvider([
-      { cards: [], uncoveredNotes: ["Renin-angiotensin cascade is not explained"] },
+      { cards: [card({ sourceExcerpt: "Nothing like this is on the slide" })] },
     ]);
 
     const summary = await generateCardsForExam(db, provider, examId);
 
-    expect(summary.cardsCreated).toBe(0);
-    expect(summary.uncoveredNotes).toEqual([
-      "Renin-angiotensin cascade is not explained",
-    ]);
+    expect(summary.rejectionViews[0]).toMatchObject({
+      question: "Where is ADH produced?",
+      excerpt: "Nothing like this is on the slide",
+      where: "slide 1 of deck",
+    });
+    expect(summary.rejectionViews[0].explanation).toMatch(/not word-for-word on slide 1 of deck /);
   });
 
   it("includes speaker notes and tables in the prompt", async () => {
@@ -650,7 +679,8 @@ describe("throughput", () => {
       onProgress: (progress) => seen.push(progress.batchIndex),
     });
 
-    expect(seen).toEqual([1, 2, 3, 4, 5, 6]);
+    // 0 first: the run's size is announced before any batch finishes.
+    expect(seen).toEqual([0, 1, 2, 3, 4, 5, 6]);
   });
 
   it("keeps the cards from the batches that worked when one fails", async () => {

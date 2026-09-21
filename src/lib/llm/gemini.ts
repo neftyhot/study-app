@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel, type ThinkingConfig } from "@google/genai";
 
 import {
   LlmError,
@@ -6,6 +6,7 @@ import {
   type LlmProvider,
   type StructuredRequest,
   type StructuredResult,
+  type ThinkingEffort,
 } from "./types";
 
 export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
@@ -153,6 +154,7 @@ export function createGeminiProvider(options?: {
               responseJsonSchema: request.schema,
               temperature: request.temperature ?? 0,
               maxOutputTokens: request.maxOutputTokens,
+              ...thinkingConfig(model, request.thinking),
             },
           }),
         );
@@ -204,6 +206,31 @@ function outputTokens(
 ): number | undefined {
   if (!usage) return undefined;
   return (usage.candidatesTokenCount ?? 0) + (usage.thoughtsTokenCount ?? 0);
+}
+
+/**
+ * The thinking control, in whichever form this model accepts: Gemini 2.x
+ * takes a token budget (0 turns thinking off), and from 3.x on the budget is
+ * refused in favour of a level.
+ */
+export function thinkingConfig(
+  model: string,
+  thinking: ThinkingEffort | undefined,
+): { thinkingConfig?: ThinkingConfig } {
+  if (!thinking || thinking === "default") return {};
+
+  if (/^gemini-2\./.test(model)) {
+    const budgets = { minimal: 0, low: 1024, medium: 4096, high: 12288 };
+    return { thinkingConfig: { thinkingBudget: budgets[thinking] } };
+  }
+
+  const levels = {
+    minimal: ThinkingLevel.MINIMAL,
+    low: ThinkingLevel.LOW,
+    medium: ThinkingLevel.MEDIUM,
+    high: ThinkingLevel.HIGH,
+  };
+  return { thinkingConfig: { thinkingLevel: levels[thinking] } };
 }
 
 /** A 404 for the model itself, as opposed to any other failed request. */

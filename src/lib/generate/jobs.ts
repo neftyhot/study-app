@@ -158,12 +158,9 @@ export function startGenerationJob(
           batchCount: summary.batchCount,
           cardsCreated: summary.cardsCreated,
           cardsRejected: summary.cardsRejected,
-          uncoveredNotes: summary.uncoveredNotes,
-          rejections: summary.rejections.map((rejection) => ({
-            reason: rejection.reason,
-            detail: rejection.detail,
-            question: rejection.card.question,
-          })),
+          objectivesWithoutCards: summary.objectivesWithoutCards,
+          objectivesTotal: summary.objectivesTotal,
+          rejections: summary.rejectionViews,
         },
       });
     })

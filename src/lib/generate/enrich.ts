@@ -134,6 +134,9 @@ export async function explainCard(
     }),
     schema: ENRICH_SCHEMA,
     temperature: 0.2,
+    // Reading an answer off material already in the prompt: thinking first
+    // was most of the cost and none of the quality (see Phase 23 in TASKS.md).
+    thinking: "minimal",
     // Generous on purpose: a thinking model spends this budget on its thinking
     // before the answer, and 1024 cut the JSON off mid-string on
     // gemini-2.5-flash. The answer itself is a few hundred tokens.

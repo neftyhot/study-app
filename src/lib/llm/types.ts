@@ -12,6 +12,12 @@
 /** A JSON Schema document. Kept loose — providers accept differing subsets. */
 export type JsonSchema = Record<string, unknown>;
 
+/**
+ * How much a reasoning model deliberates before answering. "default" leaves
+ * it to the model; the others cap it, cheapest first.
+ */
+export type ThinkingEffort = "minimal" | "low" | "medium" | "high" | "default";
+
 export type StructuredRequest = {
   /** Persistent role/rules instruction. */
   system: string;
@@ -22,6 +28,13 @@ export type StructuredRequest = {
   /** Lower is better for extraction; providers default to 0. */
   temperature?: number;
   maxOutputTokens?: number;
+  /**
+   * "minimal" asks a reasoning model to answer without deliberating first.
+   * Thinking is billed as output and was more than half the cost of some
+   * calls; tasks that read an answer off material in front of the model do
+   * not need it. Providers without the control ignore this.
+   */
+  thinking?: ThinkingEffort;
 };
 
 export type StructuredResult<T> = {

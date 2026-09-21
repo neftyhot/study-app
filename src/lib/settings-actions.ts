@@ -20,9 +20,11 @@ import {
   readLocalModel,
   readProvider,
   writeApiKey,
+  writeGradingStrictness,
   writeProvider,
   type ProviderId,
 } from "@/lib/settings";
+import { isStrictness } from "@/lib/grade/strictness";
 
 export type SetupSnapshot = {
   provider: ProviderId;
@@ -100,4 +102,12 @@ export async function finishSetup() {
   markSetupComplete(db);
   revalidatePath("/");
   revalidatePath("/settings");
+}
+
+/** How strictly typed answers are marked; applies from the next answer. */
+export async function setGradingStrictness(value: string) {
+  if (!isStrictness(value)) return { ok: false as const, error: "Unknown setting." };
+  writeGradingStrictness(value, db);
+  revalidatePath("/settings");
+  return { ok: true as const };
 }

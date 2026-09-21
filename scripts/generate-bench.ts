@@ -44,8 +44,10 @@ async function main() {
   db.update(exams)
     .set({
       extractionDensity: density as never,
-      // Full coverage: a study-guide run measures the guide, not the deck.
-      scopeMode: "files",
+      // Full coverage by default: a study-guide run measures the guide, not
+      // the deck. BENCH_SCOPE=objectives measures the guide.
+      scopeMode: process.env.BENCH_SCOPE === "objectives" ? "objectives" : "files",
+      // BENCH_ROUTING=off sends every objective to every batch, for comparison.
     })
     .where(eq(exams.id, copy.id))
     .run();
@@ -71,6 +73,7 @@ async function main() {
       concurrency: Number(concurrency),
       sourceFileIds,
       detail: detail as GenerationDetail,
+      routeObjectives: process.env.BENCH_ROUTING !== "off",
       onProgress(progress) {
         if (progress.batchIndex === last) return;
         last = progress.batchIndex;
@@ -86,6 +89,14 @@ async function main() {
     console.log(`cards        ${summary.cardsCreated} (${summary.cardsRejected} rejected)`);
     console.log(`per unit     ${(summary.cardsCreated / summary.unitsUsed).toFixed(2)}`);
     console.log(`duration     ${summary.durationMs} ms (${(summary.durationMs / 1000).toFixed(1)}s)`);
+    if (summary.objectivesTotal > 0) {
+      console.log(
+        `objectives   ${summary.objectivesTotal - summary.objectivesWithoutCards.length} of ${summary.objectivesTotal} got a card`,
+      );
+      for (const objective of summary.objectivesWithoutCards) {
+        console.log(`  none: ${objective.text.slice(0, 90)}`);
+      }
+    }
     console.log(
       `tokens       ${summary.usage.inputTokens} in / ${summary.usage.outputTokens} out · ${formatCost(summary.usage.estimatedCostUsd)} on ${summary.model}`,
     );

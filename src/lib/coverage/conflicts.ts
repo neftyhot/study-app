@@ -8,7 +8,9 @@
  * slides are paired by term overlap first and only the overlapping pairs are
  * sent to the model.
  */
-import type { LlmProvider } from "@/lib/llm";
+import pLimit from "p-limit";
+
+import type { StructuredRequest } from "@/lib/llm";
 
 import { buildIdf, similarity } from "./candidates";
 import {
@@ -149,10 +151,17 @@ export type ConflictScan = {
 export type ConflictOptions = PairOptions & {
   /** Pairs per model call. Small keeps the comparison focused. */
   pairsPerCall?: number;
+  concurrency?: number;
+  onProgress?: (done: number, total: number) => void;
+};
+
+/** Anything that can make a structured call — a provider's, or a meter's. */
+export type StructuredCaller = {
+  call<T>(request: StructuredRequest): Promise<T>;
 };
 
 export async function scanForConflicts(
-  llm: LlmProvider,
+  caller: StructuredCaller,
   slides: LabeledSlide[],
   options: ConflictOptions = {},
 ): Promise<ConflictScan> {
@@ -162,31 +171,44 @@ export async function scanForConflicts(
   }
 
   const pairsPerCall = options.pairsPerCall ?? 3;
-  const conflicts: ResolvedConflict[] = [];
-  let unverified = 0;
-
+  const groups: SlidePair[][] = [];
   for (let i = 0; i < pairs.length; i += pairsPerCall) {
-    const batch = pairs.slice(i, i + pairsPerCall);
-
-    const unique = new Map<string, LabeledSlide>();
-    for (const pair of batch) {
-      unique.set(pair.a.slide.id, pair.a);
-      unique.set(pair.b.slide.id, pair.b);
-    }
-
-    const tokenized = tokenize("S", [...unique.values()]);
-
-    const { data } = await llm.generateStructured<ConflictResponse>({
-      system: CONFLICT_SYSTEM,
-      prompt: conflictPrompt(tokenized),
-      schema: CONFLICT_SCHEMA,
-      temperature: 0,
-    });
-
-    const result = validateConflicts(data, tokenized);
-    conflicts.push(...result.conflicts);
-    unverified += result.unverified;
+    groups.push(pairs.slice(i, i + pairsPerCall));
   }
 
-  return { conflicts, pairsChecked: pairs.length, unverified };
+  const limit = pLimit(options.concurrency ?? 1);
+  let done = 0;
+  options.onProgress?.(0, groups.length);
+
+  const results = await Promise.all(
+    groups.map((batch) =>
+      limit(async () => {
+        const unique = new Map<string, LabeledSlide>();
+        for (const pair of batch) {
+          unique.set(pair.a.slide.id, pair.a);
+          unique.set(pair.b.slide.id, pair.b);
+        }
+
+        const tokenized = tokenize("S", [...unique.values()]);
+
+        const data = await caller.call<ConflictResponse>({
+          system: CONFLICT_SYSTEM,
+          prompt: conflictPrompt(tokenized),
+          schema: CONFLICT_SCHEMA,
+          temperature: 0,
+        });
+
+        const result = validateConflicts(data, tokenized);
+        done += 1;
+        options.onProgress?.(done, groups.length);
+        return result;
+      }),
+    ),
+  );
+
+  return {
+    conflicts: results.flatMap((result) => result.conflicts),
+    pairsChecked: pairs.length,
+    unverified: results.reduce((sum, r) => sum + r.unverified, 0),
+  };
 }

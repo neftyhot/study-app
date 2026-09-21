@@ -67,6 +67,9 @@ export default async function PracticePage(
       </div>
 
       <PracticeRunner
+        // A new paper is a new sitting: remount so the answers, the count and
+        // the timer all start from that paper rather than the last one.
+        key={open?.id ?? "setup"}
         examId={examId}
         topics={topics}
         cardCount={stats.flashcards}

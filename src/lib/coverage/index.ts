@@ -13,6 +13,7 @@
  * with a stubbed provider.
  */
 import { and, eq, inArray, ne } from "drizzle-orm";
+import pLimit from "p-limit";
 
 import type { Db } from "@/db/client";
 import {
@@ -27,7 +28,9 @@ import {
   type Flashcard,
   type StudyGuideObjective,
 } from "@/db/schema";
-import type { LlmProvider } from "@/lib/llm";
+import type { LlmProvider, StructuredRequest } from "@/lib/llm";
+import { estimateCost, formatCost } from "@/lib/llm/pricing";
+import { withRetry } from "@/lib/generate/retry";
 
 import { buildIdf, rank } from "./candidates";
 import { scanForConflicts, type ConflictOptions } from "./conflicts";
@@ -54,9 +57,46 @@ import {
 
 export type CoverageProgress = {
   phase: "mapping" | "review" | "conflicts";
+  /** Calls finished in this phase — counted as they finish, not as they start. */
   batchIndex: number;
   batchCount: number;
 };
+
+/**
+ * Requests in flight at once, per pass.
+ *
+ * Every call in a pass is independent — one objective group's verdict never
+ * depends on another's — so they ran one after another only because they were
+ * written that way. Measured on a 48-objective guide: 5 min 36 s sequential.
+ */
+export const COVERAGE_CONCURRENCY = 12;
+
+/** Adds up what a run spent, across passes that run at the same time. */
+export class UsageMeter {
+  inputTokens = 0;
+  outputTokens = 0;
+  calls = 0;
+
+  constructor(
+    private readonly llm: LlmProvider,
+    private readonly thinking?: StructuredRequest["thinking"],
+  ) {}
+
+  /** A structured call, retried on rate limits, with its tokens counted. */
+  async call<T>(request: StructuredRequest): Promise<T> {
+    const { data, usage } = await withRetry(() =>
+      this.llm.generateStructured<T>({ thinking: this.thinking, ...request }),
+    );
+    this.calls += 1;
+    this.inputTokens += usage?.inputTokens ?? 0;
+    this.outputTokens += usage?.outputTokens ?? 0;
+    return data;
+  }
+
+  get cost(): number | null {
+    return estimateCost(this.llm.model, this);
+  }
+}
 
 export type CoverageSummary = {
   objectives: number;
@@ -74,6 +114,9 @@ export type CoverageSummary = {
   unverifiedCitations: number;
   conflicts: number;
   conflictPairsChecked: number;
+  durationMs?: number;
+  model?: string;
+  usage?: { inputTokens: number; outputTokens: number; estimatedCostUsd: number | null };
 };
 
 export type CoverageOptions = {
@@ -84,6 +127,8 @@ export type CoverageOptions = {
   slidesPerObjective?: number;
   /** Conflict detection is the most expensive pass and the least often needed. */
   skipConflicts?: boolean;
+  concurrency?: number;
+  thinking?: StructuredRequest["thinking"];
   conflicts?: ConflictOptions;
   onProgress?: (progress: CoverageProgress) => void;
 };
@@ -111,18 +156,27 @@ export async function analyzeCoverageForExam(
     .all();
 
   const slides = loadAnswerSlides(db, examId);
+  const meter = new UsageMeter(llm, options.thinking);
+  const startedAt = Date.now();
 
-  const mapping = await runMappingPass(llm, objectives, cards, options);
+  // Contradictions between files depend only on the files, not on the cards,
+  // so that scan runs alongside the mapping instead of after everything else.
+  const scanning = options.skipConflicts
+    ? Promise.resolve({ conflicts: [], pairsChecked: 0, unverified: 0 })
+    : scanForConflicts(meter, slides, {
+        ...options.conflicts,
+        concurrency: options.concurrency ?? COVERAGE_CONCURRENCY,
+        onProgress: (done, total) =>
+          options.onProgress?.({ phase: "conflicts", batchIndex: done, batchCount: total }),
+      });
+
+  // Marked handled now; a failure still surfaces at the `await` below.
+  scanning.catch(() => undefined);
+
+  const mapping = await runMappingPass(meter, objectives, cards, options);
   const gaps = mapping.mappings.filter((m) => m.status !== "covered");
-  const review = await runReviewPass(llm, gaps, slides, options);
-
-  const scan = options.skipConflicts
-    ? { conflicts: [], pairsChecked: 0, unverified: 0 }
-    : await scanForConflicts(llm, slides, options.conflicts ?? {});
-
-  if (!options.skipConflicts && scan.pairsChecked > 0) {
-    options.onProgress?.({ phase: "conflicts", batchIndex: 0, batchCount: 1 });
-  }
+  const review = await runReviewPass(meter, gaps, slides, options);
+  const scan = await scanning;
 
   persist(
     db,
@@ -159,7 +213,20 @@ export async function analyzeCoverageForExam(
     }
   }
 
+  const durationMs = Date.now() - startedAt;
+  console.log(
+    `[coverage] ${examId}: ${objectives.length} objectives, ${meter.calls} calls in ${durationMs}ms, ` +
+      `${meter.inputTokens} in / ${meter.outputTokens} out tokens, ${formatCost(meter.cost)} on ${llm.model}`,
+  );
+
   return {
+    durationMs,
+    model: llm.model,
+    usage: {
+      inputTokens: meter.inputTokens,
+      outputTokens: meter.outputTokens,
+      estimatedCostUsd: meter.cost,
+    },
     objectives: objectives.length,
     covered,
     partiallyCovered,
@@ -177,7 +244,7 @@ export async function analyzeCoverageForExam(
 /* ------------------------------------------------------------------ Passes */
 
 async function runMappingPass(
-  llm: LlmProvider,
+  meter: UsageMeter,
   objectives: StudyGuideObjective[],
   cards: Flashcard[],
   options: CoverageOptions,
@@ -188,55 +255,59 @@ async function runMappingPass(
 
   const idf = buildIdf(cards.map(cardText));
   const batches = chunk(objectives, perCall);
+  const limit = pLimit(options.concurrency ?? COVERAGE_CONCURRENCY);
 
-  const mappings: ResolvedMapping[] = [];
-  let unresolvedReferences = 0;
+  let done = 0;
+  options.onProgress?.({ phase: "mapping", batchIndex: 0, batchCount: batches.length });
 
-  for (const [batchIndex, batch] of batches.entries()) {
-    // Candidates are the union of each objective's best matches, so one
-    // objective with many strong matches cannot crowd the others out.
-    const candidates = new Map<string, Flashcard>();
-    for (const objective of batch) {
-      for (const card of rank(
-        objective.promptText,
-        cards,
-        cardText,
-        idf,
-        { limit: perObjective, minScore: 0 },
-      )) {
-        candidates.set(card.id, card);
-      }
-    }
+  const results = await Promise.all(
+    batches.map((batch) =>
+      limit(async () => {
+        // Candidates are the union of each objective's best matches, so one
+        // objective with many strong matches cannot crowd the others out.
+        const candidates = new Map<string, Flashcard>();
+        for (const objective of batch) {
+          for (const card of rank(
+            objective.promptText,
+            cards,
+            cardText,
+            idf,
+            { limit: perObjective, minScore: 0 },
+          )) {
+            candidates.set(card.id, card);
+          }
+        }
 
-    const tokenizedObjectives = tokenize("O", batch);
-    const tokenizedCards = tokenize(
-      "C",
-      [...candidates.values()].slice(0, maxCards),
-    );
+        const tokenizedObjectives = tokenize("O", batch);
+        const tokenizedCards = tokenize(
+          "C",
+          [...candidates.values()].slice(0, maxCards),
+        );
 
-    const { data } = await llm.generateStructured<CoverageMappingResponse>({
-      system: MAPPING_SYSTEM,
-      prompt: mappingPrompt(tokenizedObjectives, tokenizedCards),
-      schema: COVERAGE_MAPPING_SCHEMA,
-      temperature: 0,
-    });
+        const data = await meter.call<CoverageMappingResponse>({
+          system: MAPPING_SYSTEM,
+          prompt: mappingPrompt(tokenizedObjectives, tokenizedCards),
+          schema: COVERAGE_MAPPING_SCHEMA,
+          temperature: 0,
+        });
 
-    const result = validateMapping(data, tokenizedObjectives, tokenizedCards);
-    mappings.push(...result.mappings);
-    unresolvedReferences += result.unresolvedReferences;
+        const result = validateMapping(data, tokenizedObjectives, tokenizedCards);
+        done += 1;
+        options.onProgress?.({ phase: "mapping", batchIndex: done, batchCount: batches.length });
+        return result;
+      }),
+    ),
+  );
 
-    options.onProgress?.({
-      phase: "mapping",
-      batchIndex,
-      batchCount: batches.length,
-    });
-  }
-
-  return { mappings, unresolvedReferences };
+  // Kept in guide order whatever order the calls finished in.
+  return {
+    mappings: results.flatMap((result) => result.mappings),
+    unresolvedReferences: results.reduce((sum, r) => sum + r.unresolvedReferences, 0),
+  };
 }
 
 async function runReviewPass(
-  llm: LlmProvider,
+  meter: UsageMeter,
   gaps: ResolvedMapping[],
   slides: LabeledSlide[],
   options: CoverageOptions,
@@ -250,49 +321,52 @@ async function runReviewPass(
 
   const idf = buildIdf(slides.map(slideSearchText));
   const batches = chunk(gaps, perCall);
+  const limit = pLimit(options.concurrency ?? COVERAGE_CONCURRENCY);
 
-  const reviews: ResolvedReview[] = [];
-  let unverifiedCitations = 0;
+  let done = 0;
+  options.onProgress?.({ phase: "review", batchIndex: 0, batchCount: batches.length });
 
-  for (const [batchIndex, batch] of batches.entries()) {
-    const candidates = new Map<string, LabeledSlide>();
-    for (const gap of batch) {
-      for (const labeled of rank(
-        gap.objective.promptText,
-        slides,
-        slideSearchText,
-        idf,
-        { limit: perObjective, minScore: 0 },
-      )) {
-        candidates.set(labeled.slide.id, labeled);
-      }
-    }
+  const results = await Promise.all(
+    batches.map((batch) =>
+      limit(async () => {
+        const candidates = new Map<string, LabeledSlide>();
+        for (const gap of batch) {
+          for (const labeled of rank(
+            gap.objective.promptText,
+            slides,
+            slideSearchText,
+            idf,
+            { limit: perObjective, minScore: 0 },
+          )) {
+            candidates.set(labeled.slide.id, labeled);
+          }
+        }
 
-    const tokenizedObjectives = tokenize(
-      "O",
-      batch.map((gap) => gap.objective),
-    );
-    const tokenizedSlides = tokenize("S", [...candidates.values()]);
+        const tokenizedObjectives = tokenize(
+          "O",
+          batch.map((gap) => gap.objective),
+        );
+        const tokenizedSlides = tokenize("S", [...candidates.values()]);
 
-    const { data } = await llm.generateStructured<CoverageReviewResponse>({
-      system: REVIEW_SYSTEM,
-      prompt: reviewPrompt(tokenizedObjectives, tokenizedSlides),
-      schema: COVERAGE_REVIEW_SCHEMA,
-      temperature: 0,
-    });
+        const data = await meter.call<CoverageReviewResponse>({
+          system: REVIEW_SYSTEM,
+          prompt: reviewPrompt(tokenizedObjectives, tokenizedSlides),
+          schema: COVERAGE_REVIEW_SCHEMA,
+          temperature: 0,
+        });
 
-    const result = validateReview(data, tokenizedObjectives, tokenizedSlides);
-    reviews.push(...result.reviews);
-    unverifiedCitations += result.unverifiedCitations;
+        const result = validateReview(data, tokenizedObjectives, tokenizedSlides);
+        done += 1;
+        options.onProgress?.({ phase: "review", batchIndex: done, batchCount: batches.length });
+        return result;
+      }),
+    ),
+  );
 
-    options.onProgress?.({
-      phase: "review",
-      batchIndex,
-      batchCount: batches.length,
-    });
-  }
-
-  return { reviews, unverifiedCitations };
+  return {
+    reviews: results.flatMap((result) => result.reviews),
+    unverifiedCitations: results.reduce((sum, r) => sum + r.unverifiedCitations, 0),
+  };
 }
 
 /* ------------------------------------------------------------- Persistence */

@@ -1067,6 +1067,64 @@ explanation on demand: about $0.003, then free.
 
 ---
 
+## Phase 23 — Honest reports, visible progress, cheaper judgement ✅
+
+- [x] "Not covered by your material" replaced. Each batch saw eight pages and
+      listed every objective those pages did not mention: 1,459 notes (7,153
+      words) for a 48-objective guide, repeated up to 25 times each, and paid
+      for as output. Cards are now tagged with the objective they answer, and
+      the run reports the objectives no card answered — exact, and never more
+      than the guide has. Whether the files cover them is the coverage check's
+      job, and the panel says so
+- [x] Objectives routed by term overlap: each batch sees the ~5 objectives its
+      pages discuss (always at least an objective's best 3 batches) instead of
+      all 48
+- [x] Rejected cards show the question, answer, the quote offered as proof,
+      the page, and one sentence on why
+- [x] Excerpt check ignores list bullets and treats a line break, sentence
+      break or spaced dash as a gap. Every piece is still verbatim and in
+      order, but "limited to head • Vision" now matches "limited to head
+      Vision". Most rejections on a real deck were this
+- [x] Coverage check runs its calls in parallel, scans for conflicts alongside
+      the mapping, and runs as a background job with a per-phase progress bar
+- [x] Generation progress bar moved under the button, polled every 0.7s, and
+      sized from the start ("0 of 40")
+- [x] Thinking switched off where the model reads an answer off the text in
+      front of it: grading, explanations, hints, question rewording, search
+- [x] Grading strictness in Settings: lenient / standard / strict
+- [x] Practice exam: answered count no longer carries the last paper's
+      answers (21 of 20); a new paper remounts the runner, timer included
+- [x] Multiple choice: options no longer repeat the question ("The pineal
+      gland synthesizes melatonin" → "Melatonin"), and new cards are told not to
+- [x] Tests: 17
+
+Study-guide run on a 48-objective guide (314 pages, gemini-3.1-flash-lite):
+
+| | Before | After |
+|---|---|---|
+| "Not covered" entries | 1,459 notes, 7,153 words | 2 objectives |
+| Excerpt rejections | 29 | 6 |
+| Cost | $0.111 | $0.072 |
+| Time | 11.8s | 7.8s |
+
+Coverage check on the same guide: **5 min 36 s → 45 s**, same model, same
+verdicts (47/48 agreement between runs). Cheaper settings were measured and
+refused, because they change the verdicts:
+
+| Setting | Time | Cost | Agrees with reference |
+|---|---|---|---|
+| gemini-2.5-flash, full thinking | 45s | $0.19 | 47/48 |
+| gemini-2.5-flash, low thinking | 24s | $0.11 | 36/48 |
+| gemini-2.5-flash, no thinking | 16s | $0.05 | 32/48 |
+| gemini-3.1-flash-lite, medium thinking | 19s | $0.06 | 38/48 |
+| gemini-3.1-flash-lite, high thinking | 5 min | $1.11 | 41/48 |
+
+Grading, by contrast, scored 12/12 fixtures with thinking off as with it on,
+at a quarter of the cost; an explanation dropped from ~5s / $0.003 to
+1.9s / $0.0007.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
 Note-image ingestion with OCR (§1) · full progress analytics dashboard (§13) ·

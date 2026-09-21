@@ -110,6 +110,9 @@ export async function semanticSearch(
     prompt: buildPrompt(query, tokenized),
     schema: SEMANTIC_SCHEMA,
     temperature: 0,
+    // Reading an answer off material already in the prompt: thinking first
+    // was most of the cost and none of the quality (see Phase 23 in TASKS.md).
+    thinking: "minimal",
   });
 
   const hits: SemanticHit[] = [];

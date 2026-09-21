@@ -35,6 +35,70 @@ export type McqOptions = {
   seed?: number;
 };
 
+const FILLER = new Set(
+  "a an the is are was were of in on by to for and or its it this that which with from into at as be been".split(" "),
+);
+
+/** Crude stem, enough that "synthesizes" matches "synthesized". */
+function stem(word: string): string {
+  const w = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return w.length > 5 ? w.slice(0, 5) : w;
+}
+
+/**
+ * Removes the part of an option that just repeats the question.
+ *
+ * Asked "Which hormone does the pineal gland synthesize?", the option "The
+ * pineal gland synthesizes melatonin" is the right one on sight: it is the
+ * only option that echoes the question, and the distractors — answers to
+ * other questions — never do. The answer is the part that is new:
+ * "Melatonin". Every option gets the same treatment, so none is marked out
+ * by being shorter either.
+ *
+ * Words are only trimmed from the ends, never the middle, and an option that
+ * is nothing but echo is left alone rather than reduced to nothing.
+ */
+export function stripQuestionEcho(option: string, question: string): string {
+  const questionStems = new Set(
+    question.split(/[^A-Za-z0-9]+/).filter(Boolean).map(stem),
+  );
+  const echoes = (token: string) => {
+    // A bracketed aside is part of the answer ("Leydig cells (interstitial
+    // cells)"); trimming into it would leave half a bracket.
+    if (/[()[\]]/.test(token)) return false;
+    const key = stem(token);
+    return !key || FILLER.has(key) || questionStems.has(key);
+  };
+  const content = (token: string) => {
+    const key = stem(token);
+    return Boolean(key) && !FILLER.has(key);
+  };
+
+  const words = option.trim().split(/\s+/);
+  let start = 0;
+  let end = words.length;
+
+  // Leading echo, only if it includes a real word from the question.
+  let i = 0;
+  while (i < end && echoes(words[i])) i += 1;
+  if (i < end && words.slice(0, i).some(content)) start = i;
+
+  // Trailing echo, keeping at least two words of a longer option.
+  const keep = words.length - start >= 3 ? 2 : 1;
+  let j = end;
+  while (j - start > keep && echoes(words[j - 1])) j -= 1;
+  if (words.slice(j, end).some(content)) end = j;
+
+  if (start === 0 && end === words.length) return option.trim();
+
+  const trimmed = words
+    .slice(start, end)
+    .join(" ")
+    .replace(/^[,;:–—-]\s*/, "")
+    .replace(/\s*[,;:–—-]$/, "");
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
 function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:]+$/, "").trim();
 }
@@ -103,16 +167,19 @@ export function buildMcq(
   }
 
   const chosen = distractors.slice(0, optionCount - 1);
+  const all = [
+    { text: card.directAnswer, correct: true, debrief: "Correct." },
+    ...chosen,
+  ];
 
-  return shuffle(
-    [
-      {
-        text: card.directAnswer,
-        correct: true,
-        debrief: "Correct.",
-      },
-      ...chosen,
-    ],
-    seed,
-  );
+  // Strip every option's echo of the question. If trimming would make two
+  // options read the same, keep them all as written instead: a duplicate is
+  // a worse tell than an echo.
+  const trimmed = all.map((option) => ({
+    ...option,
+    text: stripQuestionEcho(option.text, card.question),
+  }));
+  const distinct = new Set(trimmed.map((option) => normalize(option.text)));
+
+  return shuffle(distinct.size === trimmed.length ? trimmed : all, seed);
 }

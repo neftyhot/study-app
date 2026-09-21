@@ -118,6 +118,9 @@ export async function rewriteQuestions(
     prompt,
     schema: REWRITE_SCHEMA,
     temperature: 0.4,
+    // Reading an answer off material already in the prompt: thinking first
+    // was most of the cost and none of the quality (see Phase 23 in TASKS.md).
+    thinking: "minimal",
   });
 
   for (const entry of data.questions ?? []) {

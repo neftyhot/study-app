@@ -9,10 +9,35 @@
  */
 import { GRADING_FIXTURES } from "../src/lib/grade/fixtures";
 import { createSemanticGrader } from "../src/lib/grade/semantic";
-import { getProvider } from "../src/lib/llm";
+import {
+  createGeminiProvider,
+  estimateCost,
+  formatCost,
+  getProvider,
+  type LlmProvider,
+  type ThinkingEffort,
+} from "../src/lib/llm";
 
 async function main() {
-  const grader = createSemanticGrader(getProvider());
+  // GRADE_MODEL and GRADE_THINKING compare settings; tokens are totalled so
+  // the comparison has a price as well as a score.
+  const base = process.env.GRADE_MODEL
+    ? createGeminiProvider({ model: process.env.GRADE_MODEL })
+    : getProvider();
+  const usage = { inputTokens: 0, outputTokens: 0 };
+  const provider: LlmProvider = {
+    name: base.name,
+    model: base.model,
+    async generateStructured(request) {
+      const result = await base.generateStructured(request);
+      usage.inputTokens += result.usage?.inputTokens ?? 0;
+      usage.outputTokens += result.usage?.outputTokens ?? 0;
+      return result as never;
+    },
+  };
+  const grader = createSemanticGrader(provider, {
+    thinking: process.env.GRADE_THINKING as ThinkingEffort | undefined,
+  });
   let passed = 0;
   const failures: string[] = [];
 
@@ -45,6 +70,9 @@ async function main() {
   }
 
   console.log(`\n${passed}/${GRADING_FIXTURES.length} fixtures passed`);
+  console.log(
+    `${usage.inputTokens} in / ${usage.outputTokens} out tokens, ${formatCost(estimateCost(base.model, usage))} on ${base.model} (thinking ${process.env.GRADE_THINKING ?? "default"})`,
+  );
   for (const failure of failures) console.log(`\n  ${failure}`);
 
   process.exitCode = failures.length > 0 ? 1 : 0;

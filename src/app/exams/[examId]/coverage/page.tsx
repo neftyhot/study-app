@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/card";
 import { ConflictCard } from "@/components/coverage/conflict-card";
 import { CoveragePanel } from "@/components/coverage/coverage-panel";
+import { coverageJob, coveragePercent } from "@/lib/coverage/jobs";
 import {
   countReadyAnswerFiles,
   getCoverageFreshness,
@@ -94,6 +95,10 @@ export default async function CoveragePage(
 
       <CoveragePanel
         examId={examId}
+        initialJob={(() => {
+          const job = coverageJob(examId);
+          return job ? { ...job, percent: coveragePercent(job) } : null;
+        })()}
         objectiveCount={rows.length}
         cardCount={stats.flashcards}
         fileCount={fileCount}

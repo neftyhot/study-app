@@ -1,19 +1,18 @@
 /**
  * Coverage analysis endpoint.
  *
- * Inline like ingestion and generation; `analyzeCoverageForExam` is queue-ready
- * unchanged. Conflict detection is opt-out via `?conflicts=false` because it is
- * the slowest pass and is pointless with a single source file.
+ * POST starts a check in the background and returns at once; GET reports its
+ * progress. Conflict detection is opt-out via `?conflicts=false` because it is
+ * pointless with a single source file.
  */
 import { eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 
 import { db } from "@/db";
 import { exams } from "@/db/schema";
-import { analyzeCoverageForExam } from "@/lib/coverage";
-import { getProvider, LlmError } from "@/lib/llm";
+import { coverageJob, coveragePercent, startCoverageJob } from "@/lib/coverage/jobs";
+import { getProvider } from "@/lib/llm";
 
-export const maxDuration = 300;
 
 export async function POST(
   request: NextRequest,
@@ -36,20 +35,29 @@ export async function POST(
     );
   }
 
+  if (coverageJob(examId)?.status === "running") {
+    return Response.json(
+      { error: "A coverage check is already running for this deck." },
+      { status: 409 },
+    );
+  }
+
   const skipConflicts =
     request.nextUrl.searchParams.get("conflicts") === "false";
 
-  try {
-    const summary = await analyzeCoverageForExam(db, provider, examId, {
-      skipConflicts,
-    });
+  const job = startCoverageJob(db, provider, examId, { skipConflicts });
+  return Response.json({ job: view(job) }, { status: 202 });
+}
 
-    return Response.json(summary);
-  } catch (error) {
-    const status = error instanceof LlmError ? 502 : 400;
-    return Response.json(
-      { error: error instanceof Error ? error.message : String(error) },
-      { status },
-    );
-  }
+export async function GET(
+  _request: NextRequest,
+  ctx: RouteContext<"/api/exams/[examId]/coverage">,
+) {
+  const { examId } = await ctx.params;
+  const job = coverageJob(examId);
+  return Response.json({ job: job ? view(job) : null });
+}
+
+function view(job: NonNullable<ReturnType<typeof coverageJob>>) {
+  return { ...job, percent: coveragePercent(job) };
 }

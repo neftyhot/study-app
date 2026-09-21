@@ -10,7 +10,7 @@
  * matter what verdict came back. Those are the errors that pass for knowledge
  * and are not, and PRD §7 says they fail.
  */
-import type { LlmProvider } from "@/lib/llm";
+import type { LlmProvider, ThinkingEffort } from "@/lib/llm";
 import type {
   TypedAnswerGrader,
   TypedGrade,
@@ -18,6 +18,11 @@ import type {
 } from "@/lib/learn/typed";
 
 import { gradingPrompt, GRADING_SYSTEM, tokenizePoints } from "./prompts";
+import {
+  DEFAULT_STRICTNESS,
+  strictnessRules,
+  type Strictness,
+} from "./strictness";
 import { GRADE_SCHEMA, type GradeResponse } from "./schemas";
 
 type Points = ReturnType<typeof tokenizePoints>;
@@ -53,7 +58,7 @@ function resolve(tokens: string[] | undefined, pool: Points["required"]) {
 export function reconcileGrade(
   response: GradeResponse,
   points: Points,
-  options: { provisional?: boolean } = {},
+  options: { provisional?: boolean; strictness?: Strictness } = {},
 ): TypedGrade {
   const required = points.required.map((point) => point.text);
 
@@ -71,9 +76,16 @@ export function reconcileGrade(
   const gateBroken =
     response.errorType === "directionality" || response.errorType === "mechanism";
 
+  // Lenient marking accepts most of the rubric: at least half the required
+  // points, and never an answer that broke a gate.
+  const enough =
+    options.strictness === "lenient"
+      ? met.length > 0 && met.length >= Math.ceil(required.length / 2)
+      : missedPoints.length === 0 && met.length > 0;
+
   const verdict: TypedGrade["verdict"] = gateBroken
     ? "incorrect"
-    : missedPoints.length === 0 && met.length > 0
+    : enough
       ? "correct"
       : met.length > 0
         ? "partial"
@@ -111,9 +123,14 @@ function fallbackFeedback(
   return "That does not answer the question.";
 }
 
-export function createSemanticGrader(llm: LlmProvider): TypedAnswerGrader {
+export function createSemanticGrader(
+  llm: LlmProvider,
+  options: { strictness?: Strictness; thinking?: ThinkingEffort } = {},
+): TypedAnswerGrader {
+  const strictness = options.strictness ?? DEFAULT_STRICTNESS;
+
   return {
-    name: `semantic (${llm.model})`,
+    name: `semantic (${llm.model}, ${strictness})`,
 
     async grade(request: TypedRequest): Promise<TypedGrade> {
       const points = tokenizePoints(request);
@@ -132,13 +149,14 @@ export function createSemanticGrader(llm: LlmProvider): TypedAnswerGrader {
       }
 
       const { data } = await llm.generateStructured<GradeResponse>({
-        system: GRADING_SYSTEM,
+        system: GRADING_SYSTEM + strictnessRules(strictness),
         prompt: gradingPrompt(request, points),
         schema: GRADE_SCHEMA,
         temperature: 0,
+        thinking: options.thinking,
       });
 
-      return reconcileGrade(data, points);
+      return reconcileGrade(data, points, { strictness });
     },
   };
 }

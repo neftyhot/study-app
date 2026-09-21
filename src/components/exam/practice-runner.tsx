@@ -85,9 +85,13 @@ export function PracticeRunner({
   const [rephrase, setRephrase] = useState(true);
   const [chosen, setChosen] = useState<string[]>([]);
 
+  // Counted over this paper's questions only. Counting every stored answer
+  // carried the last paper's answers into the next one: 21 of 20, 22 of 20.
   const answered = useMemo(
-    () => Object.values(answers).filter((value) => value.trim() !== "").length,
-    [answers],
+    () =>
+      questions.filter((question) => (answers[question.id] ?? "").trim() !== "")
+        .length,
+    [answers, questions],
   );
 
   // A timed paper submits itself: running out of time is part of the exercise.
@@ -129,7 +133,9 @@ export function PracticeRunner({
       toast.info("Questions kept the deck's wording — no model was available.");
     }
 
-    setQuestions(await loadQuestions(result.paperId));
+    const next = await loadQuestions(result.paperId);
+    setQuestions(next);
+    setAnswers(Object.fromEntries(next.map((q) => [q.id, q.answer ?? ""])));
     router.refresh();
   }
 

@@ -64,6 +64,8 @@ export type GenerationDetail = "lean" | "full";
 
 export function generatedCardSchema(
   detail: GenerationDetail = "lean",
+  /** Study-guide runs tag each card with the objective it answers. */
+  options: { objectives?: boolean } = {},
 ): JsonSchema {
   const schema = structuredClone(GENERATED_CARD_SCHEMA) as {
     properties: {
@@ -92,6 +94,16 @@ export function generatedCardSchema(
 
     (item.properties.essentialPoints as { description: string }).description =
       "Between one and three short points a typed answer MUST contain.";
+  }
+
+  if (options.objectives) {
+    const item = schema.properties.cards.items;
+    item.properties.objective = {
+      type: "string",
+      description:
+        "The token of the study-guide objective this card answers, e.g. 'O3'.",
+    };
+    item.required.push("objective");
   }
 
   return schema as JsonSchema;
@@ -183,13 +195,11 @@ export const GENERATED_CARD_SCHEMA: JsonSchema = {
         additionalProperties: false,
       },
     },
-    /** Lets the model report silence instead of inventing an answer. */
-    uncoveredNotes: {
-      type: "array",
-      items: { type: "string" },
-      description:
-        "Concepts referenced by the material but not actually explained in it.",
-    },
+    // No free-text "not covered" list. Each batch sees a few pages, so it
+    // reported everything those pages happen not to mention — 1,459 notes,
+    // 7,000 words, for a 48-objective guide, paid for as output tokens. What
+    // is actually uncovered is worked out after the run from the cards, in
+    // `generateCardsForExam`, where every batch's answer is known.
   },
   required: ["cards"],
   additionalProperties: false,
@@ -210,9 +220,10 @@ export type GeneratedCard = {
   optionalPoints?: string[];
   commonMisconceptions?: string[];
   professorEmphasis?: boolean;
+  /** Study-guide runs only: the O-token of the objective answered. */
+  objective?: string;
 };
 
 export type GenerationResponse = {
   cards: GeneratedCard[];
-  uncoveredNotes?: string[];
 };

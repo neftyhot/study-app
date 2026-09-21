@@ -235,3 +235,50 @@ describe("normalizeForMatch", () => {
     );
   });
 });
+
+describe("excerptAppearsIn — layout is not content", () => {
+  // Real slide text from a reproductive-physiology deck, bullets and all.
+  const uterus = slide(8, {
+    rawText:
+      "• Perimetrium—external serosa layer\n• Myometrium—middle muscular layer\n– Constitutes most of the uterine wall\n• Endometrium—inner mucosa",
+  });
+  const senses = slide(12, {
+    rawText: "– Special senses: limited to head\n• Vision, hearing, equilibrium, taste, and smell",
+  });
+
+  it("accepts a quote that drops the bullet markers", () => {
+    expect(
+      excerptAppearsIn("Special senses: limited to head Vision, hearing, equilibrium, taste, and smell", senses),
+    ).toBe(true);
+  });
+
+  it("accepts lines quoted in order with a sub-bullet skipped", () => {
+    expect(
+      excerptAppearsIn(
+        "Perimetrium—external serosa layer\nMyometrium—middle muscular layer\nEndometrium—inner mucosa",
+        uterus,
+      ),
+    ).toBe(true);
+  });
+
+  it("still rejects a line the slide does not contain", () => {
+    expect(
+      excerptAppearsIn("Perimetrium—external serosa layer\nMyometrium—the layer that secretes estrogen", uterus),
+    ).toBe(false);
+  });
+
+  it("accepts two lines joined with a spaced dash", () => {
+    const ear = slide(55, {
+      rawText: "• Membranous labyrinth—fleshy tubes lining bony\nlabyrinth\n– Filled with endolymph",
+    });
+    expect(
+      excerptAppearsIn("Membranous labyrinth—fleshy tubes lining bony labyrinth – Filled with endolymph", ear),
+    ).toBe(true);
+  });
+
+  it("still rejects lines quoted out of order", () => {
+    expect(
+      excerptAppearsIn("Endometrium—inner mucosa\nPerimetrium—external serosa layer", uterus),
+    ).toBe(false);
+  });
+});

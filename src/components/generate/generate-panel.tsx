@@ -72,8 +72,29 @@ type Summary = {
   batchCount: number;
   cardsCreated: number;
   cardsRejected: number;
-  uncoveredNotes: string[];
-  rejections: { reason: string; detail: string; question: string }[];
+  /** Older runs stored a free-text list here; it is no longer shown. */
+  uncoveredNotes?: string[];
+  objectivesWithoutCards?: { label: string | null; text: string }[];
+  objectivesTotal?: number;
+  rejections: RejectionEntry[];
+};
+
+/** Current runs store the full view; older ones only reason and question. */
+type RejectionEntry = {
+  reason: string;
+  question: string;
+  answer?: string;
+  excerpt?: string;
+  where?: string | null;
+  explanation?: string;
+  detail?: string;
+};
+
+const REJECTION_HEADINGS: Record<string, string> = {
+  excerpt_not_in_source: "Quote not found in your material",
+  unknown_citation: "Cited a page it was not given",
+  duplicate: "Already in your deck",
+  empty_content: "Blank card",
 };
 
 export function GeneratePanel({
@@ -154,7 +175,8 @@ export function GeneratePanel({
       }
     };
 
-    const timer = setInterval(() => void tick(), 1500);
+    // Quick enough to see a twenty-second run move, not just finish.
+    const timer = setInterval(() => void tick(), 700);
     void tick();
 
     return () => {
@@ -287,9 +309,17 @@ export function GeneratePanel({
             ) : (
               <Sparkles className="size-4" />
             )}
-            {busy || running ? "Generating…" : "Generate"}
+            {running && job?.batchCount
+              ? `Generating… ${job.batchIndex}/${job.batchCount}`
+              : busy || running
+                ? "Generating…"
+                : "Generate"}
           </Button>
         </div>
+
+        {/* Right under the button, where the eye already is — below the
+            options it was easy to miss a run that finishes in twenty seconds. */}
+        {job?.status === "running" ? <JobProgress job={job} /> : null}
 
         <div className="flex items-start gap-2">
           <Checkbox
@@ -339,8 +369,6 @@ export function GeneratePanel({
           </>
         )}
 
-        {job?.status === "running" ? <JobProgress job={job} /> : null}
-
         {job?.status === "failed" ? (
           <p className="text-destructive text-sm">{job.error}</p>
         ) : null}
@@ -375,33 +403,24 @@ export function GeneratePanel({
               </p>
             ) : null}
 
-            {summary.uncoveredNotes.length > 0 ? (
-              <div>
-                <p className="font-medium">Not covered by your material</p>
-                <ul className="text-muted-foreground list-disc pl-5">
-                  {summary.uncoveredNotes.map((note) => (
-                    <li key={note}>{note}</li>
-                  ))}
-                </ul>
-              </div>
+            {summary.objectivesWithoutCards?.length ? (
+              <ObjectivesWithoutCards
+                examId={summary.examId ?? examId}
+                objectives={summary.objectivesWithoutCards}
+                total={summary.objectivesTotal ?? 0}
+              />
+            ) : summary.objectivesTotal ? (
+              <p className="text-muted-foreground text-xs">
+                Every one of the {summary.objectivesTotal} study-guide
+                objectives got at least one card.
+              </p>
             ) : null}
 
             {summary.rejections.length > 0 ? (
-              <details>
-                <summary className="cursor-pointer font-medium">
-                  Rejected cards ({summary.rejections.length})
-                </summary>
-                <ul className="text-muted-foreground mt-2 space-y-1.5">
-                  {summary.rejections.map((rejection, i) => (
-                    <li key={i}>
-                      <span className="font-mono text-xs">
-                        {rejection.reason}
-                      </span>{" "}
-                      — {rejection.question}
-                    </li>
-                  ))}
-                </ul>
-              </details>
+              <Rejections
+                rejections={summary.rejections}
+                created={summary.cardsCreated}
+              />
             ) : null}
           </div>
         ) : null}
@@ -469,7 +488,7 @@ function JobProgress({ job }: { job: GenerationJobView }) {
         <span className="flex items-center gap-2">
           <Loader2 className="size-3.5 animate-spin" />
           {job.batchCount
-            ? `Batch ${job.batchIndex} of ${job.batchCount}`
+            ? `${job.batchIndex} of ${job.batchCount} batches done`
             : "Reading your material…"}
         </span>
         <span className="text-muted-foreground">
@@ -511,5 +530,100 @@ function Choice({
       </span>
       <span className="text-muted-foreground mt-1 block text-xs">{body}</span>
     </button>
+  );
+}
+
+function ObjectivesWithoutCards({
+  examId,
+  objectives,
+  total,
+}: {
+  examId: string;
+  objectives: { label: string | null; text: string }[];
+  total: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <p className="font-medium">
+        {objectives.length} of {total} objectives got no card
+      </p>
+      <p className="text-muted-foreground text-xs">
+        This does not mean your material skips them — only that no card was
+        written for them this run. The{" "}
+        <a href={`/exams/${examId}/coverage`} className="underline">
+          coverage check
+        </a>{" "}
+        reads your slides to tell which are genuinely missing from your files.
+      </p>
+      <ul className="text-muted-foreground list-disc pl-5 text-xs">
+        {objectives.map((objective, i) => (
+          <li key={i}>
+            {objective.label ? `${objective.label}. ` : ""}
+            {objective.text}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/**
+ * The cards that were thrown away, and why, in the student's terms.
+ *
+ * Each one shows what the card said and one sentence of reason, so the check
+ * reads as something working on their behalf rather than cards going missing.
+ */
+function Rejections({
+  rejections,
+  created,
+}: {
+  rejections: RejectionEntry[];
+  created: number;
+}) {
+  const groups = new Map<string, RejectionEntry[]>();
+  for (const rejection of rejections) {
+    const list = groups.get(rejection.reason) ?? [];
+    list.push(rejection);
+    groups.set(rejection.reason, list);
+  }
+
+  return (
+    <details>
+      <summary className="cursor-pointer font-medium">
+        {rejections.length} card{rejections.length === 1 ? "" : "s"} discarded
+        by the source check
+      </summary>
+      <div className="mt-2 space-y-3">
+        <p className="text-muted-foreground text-xs">
+          Every card has to quote the page its answer came from, word for word.
+          These did not, so they were not saved — the {created} you got all
+          passed. Nothing here needs you to do anything.
+        </p>
+
+        {[...groups].map(([reason, list]) => (
+          <div key={reason} className="space-y-1.5">
+            <p className="text-xs font-medium">
+              {REJECTION_HEADINGS[reason] ?? reason} ({list.length})
+            </p>
+            <ul className="space-y-2">
+              {list.map((rejection, i) => (
+                <li key={i} className="bg-muted/40 space-y-1 rounded p-2 text-xs">
+                  <p className="font-medium">{rejection.question}</p>
+                  {rejection.answer ? (
+                    <p className="text-muted-foreground">A: {rejection.answer}</p>
+                  ) : null}
+                  {rejection.excerpt ? (
+                    <blockquote className="text-muted-foreground border-l-2 pl-2 italic">
+                      “{rejection.excerpt}”
+                    </blockquote>
+                  ) : null}
+                  <p>{rejection.explanation ?? rejection.detail}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </details>
   );
 }
