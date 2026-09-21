@@ -858,6 +858,8 @@ marked on recognition.
 
 **Known limits (deliberate, deferred):**
 - One open paper per deck; sitting a new one discards the old.
+- The release folder keeps a second copy of the app that Spotlight also indexes;
+  `rm -rf release` after installing if a duplicate entry is unwanted.
 - Marking a typed answer costs a model call each, so a long paper with many
   typed questions takes a while to mark on a local model.
 - No per-question timing, and no "flag for review" while sitting.
