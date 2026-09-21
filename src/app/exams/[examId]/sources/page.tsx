@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FileText, Presentation, TriangleAlert } from "lucide-react";
 
+import { CreateDrillDialog } from "@/components/diagrams/create-drill-dialog";
 import { UploadPanel } from "@/components/ingest/upload-panel";
 import { SourceFileActions } from "@/components/manage/source-file-actions";
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +13,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { db } from "@/db";
+import { drillCountsBySlide } from "@/lib/diagrams";
 import { getExam, listObjectives, listSourceFiles } from "@/lib/queries";
+
+/** Formats a page can be drawn on: the ones that have a page to draw. */
+const DRILLABLE = new Set(["pdf", "pptx", "image"]);
 
 /** What one extracted unit is called in each format. */
 const UNIT_NOUN: Record<string, string> = {
@@ -44,6 +50,8 @@ export default async function SourcesPage(
     listSourceFiles(examId),
     listObjectives(examId),
   ]);
+
+  const drillCounts = drillCountsBySlide(db, examId);
 
   return (
     <div className="space-y-8">
@@ -185,6 +193,25 @@ export default async function SourcesPage(
                               </table>
                             </div>
                           ))}
+
+                          {DRILLABLE.has(file.fileType) ? (
+                            <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                              <CreateDrillDialog
+                                examId={examId}
+                                slideId={slide.id}
+                                title={slide.title}
+                                unitLabel={`${UNIT_NOUN_SINGULAR[file.fileType] ?? "Section"} ${slide.index}`}
+                                existingDrills={drillCounts[slide.id] ?? 0}
+                              />
+                              {drillCounts[slide.id] ? (
+                                <span className="text-muted-foreground text-xs">
+                                  {drillCounts[slide.id]} drill
+                                  {drillCounts[slide.id] === 1 ? "" : "s"} from
+                                  this page
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
 
                           {slide.speakerNotes ? (
                             <div className="bg-muted/50 rounded p-2">

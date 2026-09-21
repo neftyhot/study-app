@@ -243,7 +243,15 @@ export const flashcards = sqliteTable(
     starred: integer("starred", { mode: "boolean" }).notNull().default(false),
     excluded: integer("excluded", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
-    updatedAt: createdAt(),
+    /**
+     * When the card was last edited. Null means never — it is still exactly
+     * what generation produced.
+     *
+     * Nullable rather than defaulted because SQLite cannot add a column with
+     * `current_timestamp` as its default to a table that already has rows,
+     * and because "never edited" is a fact worth being able to state.
+     */
+    updatedAt: text("updated_at"),
   },
   (t) => [
     index("flashcards_exam_idx").on(t.examId),
@@ -698,6 +706,56 @@ export const appSettings = sqliteTable("app_settings", {
     .default(sql`(current_timestamp)`),
 });
 
+/* ---------------------------------------------------- DiagramOcclusion */
+
+/**
+ * A mask over part of a diagram: the rectangle to cover, and the label
+ * underneath it.
+ *
+ * Coordinates are percentages of the image, not pixels, so a drill built on a
+ * laptop still lines up on a phone and survives the image being re-rendered
+ * at a different scale.
+ */
+export type OcclusionMask = {
+  id: string;
+  /** All four are 0-100, measured from the top-left of the image. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** What is hidden underneath — the thing being recalled. */
+  label: string;
+  /** Optional nudge, shown only after the student asks for it. */
+  tip?: string;
+};
+
+export const diagramOcclusions = sqliteTable(
+  "diagram_occlusions",
+  {
+    id: id(),
+    /** The card this drill is; deleting the card deletes the drill. */
+    flashcardId: text("flashcard_id")
+      .notNull()
+      .references(() => flashcards.id, { onDelete: "cascade" }),
+    /** Provenance, as for any other card. */
+    sourceSlideId: text("source_slide_id").references(() => sourceSlides.id, {
+      onDelete: "set null",
+    }),
+    /** Image path relative to the uploads root. */
+    imagePath: text("image_path").notNull(),
+    maskCoordinates: text("mask_coordinates", { mode: "json" })
+      .$type<OcclusionMask[]>()
+      .notNull()
+      .default([]),
+    createdAt: createdAt(),
+    updatedAt: text("updated_at"),
+  },
+  (t) => [
+    uniqueIndex("diagram_occlusions_card_idx").on(t.flashcardId),
+    index("diagram_occlusions_slide_idx").on(t.sourceSlideId),
+  ],
+);
+
 /* ------------------------------------------------------------ GenerationJob */
 
 export const jobStatuses = ["running", "done", "failed"] as const;
@@ -880,6 +938,7 @@ export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
   revisions: many(cardRevisions),
   assists: many(assistEvents),
   diagnosis: one(errorDiagnoses),
+  occlusion: one(diagramOcclusions),
 }));
 
 export const cardRevisionsRelations = relations(cardRevisions, ({ one }) => ({
@@ -888,6 +947,20 @@ export const cardRevisionsRelations = relations(cardRevisions, ({ one }) => ({
     references: [flashcards.id],
   }),
 }));
+
+export const diagramOcclusionsRelations = relations(
+  diagramOcclusions,
+  ({ one }) => ({
+    flashcard: one(flashcards, {
+      fields: [diagramOcclusions.flashcardId],
+      references: [flashcards.id],
+    }),
+    sourceSlide: one(sourceSlides, {
+      fields: [diagramOcclusions.sourceSlideId],
+      references: [sourceSlides.id],
+    }),
+  }),
+);
 
 export const cardRubricsRelations = relations(cardRubrics, ({ one }) => ({
   flashcard: one(flashcards, {

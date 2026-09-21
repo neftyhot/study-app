@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     // llama.cpp bindings: native code plus runtime-resolved binaries, which a
     // bundler can only get wrong. Left external so it loads from node_modules.
     "node-llama-cpp",
+    // Skia bindings used to rasterize a PDF page for diagram drills. Native,
+    // and resolved per platform at runtime.
+    "@napi-rs/canvas",
   ],
 
   /**

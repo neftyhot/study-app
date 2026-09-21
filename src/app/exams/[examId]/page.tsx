@@ -13,6 +13,7 @@ import {
 import { GeneratePanel } from "@/components/generate/generate-panel";
 import { ExamSettings } from "@/components/manage/exam-settings";
 import { db } from "@/db";
+import { listDrills } from "@/lib/diagrams";
 import { latestJob } from "@/lib/generate/jobs";
 import {
   countAnswerSlides,
@@ -41,6 +42,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   if (!exam) notFound();
 
   const job = latestJob(db, examId);
+  const drills = listDrills(db, examId);
 
   const [
     stats,
@@ -124,6 +126,13 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
               <Link href={`/exams/${examId}/cards`}>Browse cards</Link>
             </Button>
           </>
+        ) : null}
+        {drills.length > 0 ? (
+          <Button asChild variant="outline">
+            <Link href={`/exams/${examId}/diagrams`}>
+              Diagram drills ({drills.length})
+            </Link>
+          </Button>
         ) : null}
         {stats.objectives > 0 ? (
           <Button asChild variant="outline">

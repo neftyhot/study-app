@@ -65,7 +65,14 @@ async function main() {
   // invisible to static analysis. The traced copy of the Metal binding came to
   // 8 KB of a 14 MB package, which loads fine right up until someone picks the
   // offline model. Copying the real directories over the stubs fixes that.
-  for (const native of ["@node-llama-cpp", "node-llama-cpp"]) {
+  for (const native of [
+    "@node-llama-cpp",
+    "node-llama-cpp",
+    // Skia, used to rasterize a page for a diagram drill. Same problem: the
+    // platform binding is resolved at runtime, so the tracer never sees it.
+    "@napi-rs/canvas",
+    `@napi-rs/canvas-${process.platform}-${process.arch}`,
+  ]) {
     const source = join(root, "node_modules", native);
     if (!(await exists(source))) continue;
 
