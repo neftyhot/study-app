@@ -52,7 +52,7 @@ export async function POST(
 
   let provider;
   try {
-    provider = getProvider();
+    provider = getProvider(undefined, "bulk");
   } catch (error) {
     // A missing API key is a setup problem, not a server fault.
     return Response.json(

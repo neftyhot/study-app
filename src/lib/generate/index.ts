@@ -20,8 +20,9 @@ import {
   type StudyGuideObjective,
 } from "@/db/schema";
 import type { LlmProvider } from "@/lib/llm";
+import { estimateCost, formatCost } from "@/lib/llm/pricing";
 
-import type { DensityMode } from "./density";
+import { calibrationFor, type DensityMode } from "./density";
 import {
   fullCoveragePrompt,
   generationSystem,
@@ -90,6 +91,13 @@ export type GenerationSummary = {
   durationMs: number;
   /** Batches that failed outright, after their retries. */
   failedBatches: { batch: number; error: string }[];
+  /** The model the batches ran on. */
+  model: string;
+  /**
+   * Tokens across every batch that returned, and what they cost at the
+   * model's published rate. Null cost means the rate is not known.
+   */
+  usage: { inputTokens: number; outputTokens: number; estimatedCostUsd: number | null };
   rejections: Rejection[];
   uncoveredNotes: string[];
 };
@@ -143,6 +151,7 @@ export async function generateCardsForExam(
     density,
     options.densityRatio ?? exam.extractionRatio,
     detail,
+    calibrationFor(llm.model).overshoot,
   );
 
   const objectives =
@@ -156,7 +165,8 @@ export async function generateCardsForExam(
     );
   }
 
-  const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
+  const batchSize =
+    options.batchSize ?? calibrationFor(llm.model).batchSize ?? DEFAULT_BATCH_SIZE;
   const batches = batchSlides(slides, batchSize);
 
   // Deduplicate against what is already stored, so re-running generation adds
@@ -175,6 +185,8 @@ export async function generateCardsForExam(
   const failedBatches: { batch: number; error: string }[] = [];
   let cardsCreated = 0;
   let completed = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   const startedAt = Date.now();
   // Never more slots than batches: a limiter wider than the work does nothing
@@ -194,7 +206,8 @@ export async function generateCardsForExam(
             : fullCoveragePrompt(batch, promptOptions);
 
         try {
-          const { data } = await withRetry(() =>
+          const batchStarted = Date.now();
+          const { data, usage } = await withRetry(() =>
             llm.generateStructured<GenerationResponse>({
               system,
               prompt,
@@ -216,6 +229,19 @@ export async function generateCardsForExam(
           uncoveredNotes.push(...(data.uncoveredNotes ?? []));
 
           cardsCreated += persistCards(db, examId, result.accepted);
+
+          const batchUsage = {
+            inputTokens: usage?.inputTokens ?? 0,
+            outputTokens: usage?.outputTokens ?? 0,
+          };
+          inputTokens += batchUsage.inputTokens;
+          outputTokens += batchUsage.outputTokens;
+          console.log(
+            `[generate] batch ${batchIndex + 1}/${batches.length}: ${batch.length} units -> ${result.accepted.length} cards` +
+              (result.rejected.length > 0 ? ` (${result.rejected.length} rejected)` : "") +
+              `, ${batchUsage.inputTokens} in / ${batchUsage.outputTokens} out tokens, ` +
+              `${formatCost(estimateCost(llm.model, batchUsage))} on ${llm.model}, ${Date.now() - batchStarted}ms`,
+          );
 
           completed += 1;
           options.onProgress?.({
@@ -257,8 +283,10 @@ export async function generateCardsForExam(
   }
 
   const durationMs = Date.now() - startedAt;
+  const estimatedCostUsd = estimateCost(llm.model, { inputTokens, outputTokens });
   console.log(
-    `[generate] ${examId}: ${cardsCreated} cards from ${slides.length} units in ${batches.length} batch(es), ${durationMs}ms` +
+    `[generate] ${examId}: ${cardsCreated} cards from ${slides.length} units in ${batches.length} batch(es), ${durationMs}ms, ` +
+      `${inputTokens} in / ${outputTokens} out tokens, ${formatCost(estimatedCostUsd)} on ${llm.model}` +
       (failedBatches.length > 0 ? ` (${failedBatches.length} batch(es) failed)` : ""),
   );
 
@@ -272,6 +300,8 @@ export async function generateCardsForExam(
     cardsRejected: rejections.length,
     durationMs,
     failedBatches,
+    model: llm.model,
+    usage: { inputTokens, outputTokens, estimatedCostUsd },
     rejections,
     uncoveredNotes,
   };
@@ -317,11 +347,14 @@ function persistCards(
           topic: card.topic,
           question: card.question,
           directAnswer: card.directAnswer,
+          // Null on a lean run: the explanation is written on demand, the
+          // first time someone asks for it (POST /api/cards/[id]/explain).
           fullExplanation: card.fullExplanation || null,
           cardType: card.cardType,
           sourceSlideId: slide.id,
           sourceExcerpt: card.sourceExcerpt,
-          hasAiSupplement: card.hasAiSupplement,
+          hasAiSupplement: card.hasAiSupplement === true,
+          professorEmphasis: card.professorEmphasis === true,
         })
         .returning({ id: flashcards.id })
         .all();

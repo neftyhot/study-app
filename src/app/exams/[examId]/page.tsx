@@ -17,6 +17,7 @@ import { ExamSettings } from "@/components/manage/exam-settings";
 import { db } from "@/db";
 import { listDrills } from "@/lib/diagrams";
 import { latestJob } from "@/lib/generate/jobs";
+import { bulkModelName } from "@/lib/llm";
 import {
   countAnswerSlides,
   listAnswerSources,
@@ -220,6 +221,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         density={exam.extractionDensity}
         densityRatio={exam.extractionRatio}
         observedRatio={observedRatio}
+        bulkModel={bulkModelName()}
         initialJob={
           job
             ? {

@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
 
 import { BulkBar, type DeckTarget } from "@/components/cards/bulk-bar";
 import { DeckSearch } from "@/components/search/deck-search";
@@ -17,7 +16,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { clozeRevealed } from "@/lib/cards/cloze";
-import { enrichCardAction } from "@/lib/generate/actions";
+import {
+  ExplainButton,
+  MisconceptionList,
+} from "@/components/cards/explain-button";
 
 export type DeckCardView = {
   id: string;
@@ -217,7 +219,6 @@ export function DeckCardList({
  * it was asked for, rather than for the whole deck on the off chance.
  */
 function Explanation({
-  examId,
   card,
   query,
 }: {
@@ -226,42 +227,26 @@ function Explanation({
   query: string;
 }) {
   const [text, setText] = useState(card.fullExplanation);
-  const [busy, setBusy] = useState(false);
+  const [misconceptions, setMisconceptions] = useState<string[]>([]);
 
   if (text) {
     return (
-      <p className="text-muted-foreground break-words">
-        <Highlighted text={text} query={query} />
-      </p>
+      <div className="space-y-1">
+        <p className="text-muted-foreground break-words whitespace-pre-line">
+          <Highlighted text={text} query={query} />
+        </p>
+        <MisconceptionList items={misconceptions} />
+      </div>
     );
   }
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-7 px-2 text-xs"
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          const result = await enrichCardAction(examId, card.id);
-          if (!result.ok) {
-            toast.error(result.error);
-            return;
-          }
-          setText(result.fullExplanation);
-        } finally {
-          setBusy(false);
-        }
+    <ExplainButton
+      cardId={card.id}
+      onExplained={(result) => {
+        setText(result.fullExplanation);
+        setMisconceptions(result.commonMisconceptions);
       }}
-    >
-      {busy ? (
-        <Loader2 className="size-3.5 animate-spin" />
-      ) : (
-        <Sparkles className="size-3.5" />
-      )}
-      {busy ? "Working…" : "Explain in depth"}
-    </Button>
+    />
   );
 }

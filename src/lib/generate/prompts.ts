@@ -126,9 +126,16 @@ const RUBRICS_LEAN = `RUBRICS
   between one and three, each short and independently checkable.
 
 BE BRIEF
+- Do NOT generate long explanations, background essays, or misconception lists
+  during bulk generation. Keep direct answers concise.
 - directAnswer is one or two sentences. Do not add an explanation paragraph,
   and do not restate the question inside the answer.
-- Do not write commentary, headings or preamble around the cards.`;
+- Do not write commentary, headings or preamble around the cards.
+
+EMPHASIS
+- Set professorEmphasis to true only when the material itself marks the point
+  as important: "know this", "will be on the exam", a stated learning
+  objective, or a speaker note stressing it. Otherwise false.`;
 
 const PROVENANCE_AND_RUBRICS = `PROVENANCE (non-negotiable)
 - Every card cites the slide token it came from, e.g. "S7".
@@ -171,11 +178,15 @@ export function nearestPreset(ratio: number): Exclude<DensityMode, "custom"> {
  * `npm run generate:bench` if the default model changes.
  */
 export const MODEL_OVERSHOOT = 1.9;
+// Per-model values now live in `MODEL_CALIBRATION` (density.ts); this remains
+// the default for callers that do not say which model will read the prompt.
 
 export function generationSystem(
   density: DensityMode = "exhaustive",
   customRatio?: number | null,
   detail: GenerationDetail = "full",
+  /** The running model's measured overshoot; see `MODEL_CALIBRATION`. */
+  overshoot: number = MODEL_OVERSHOOT,
 ): string {
   const ratio = ratioFor(density, customRatio);
   const selection = SELECTION[density === "custom" ? nearestPreset(ratio) : density];
@@ -188,7 +199,7 @@ export function generationSystem(
   const target =
     density === "exhaustive"
       ? ""
-      : `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio / MODEL_OVERSHOOT)} per slide on average across this batch.\nThis is a ceiling on how finely to cut, not a quota: fewer is right when a\nslide is thin, and you must never invent a card or pad with trivia to reach it.`;
+      : `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio / overshoot)} per slide on average across this batch.\nThis is a ceiling on how finely to cut, not a quota: fewer is right when a\nslide is thin, and you must never invent a card or pad with trivia to reach it.`;
 
   const rubrics = detail === "lean" ? RUBRICS_LEAN : RUBRICS_FULL;
 

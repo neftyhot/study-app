@@ -44,6 +44,7 @@ export default async function StudyPage(
     canUndo: undoable.has(card.id),
     hasAiSupplement: card.hasAiSupplement,
     essentialPoints: card.rubric?.essentialPoints ?? [],
+    commonMisconceptions: card.rubric?.commonMisconceptions ?? [],
     lastGrade: card.progress?.lastGrade ?? null,
     source: card.sourceSlide
       ? {

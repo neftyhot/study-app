@@ -45,6 +45,10 @@ import type { StudyScope } from "@/lib/study/queue";
 import { CardEditor } from "@/components/cards/card-editor";
 import { CardImage, CardQuestion } from "@/components/cards/card-face";
 import {
+  ExplainButton,
+  MisconceptionList,
+} from "@/components/cards/explain-button";
+import {
   beginStudySession,
   finishStudySession,
   gradeStudyCard,
@@ -71,6 +75,8 @@ export type StudyCardView = {
   canUndo: boolean;
   hasAiSupplement: boolean;
   essentialPoints: string[];
+  /** Empty until an explanation is written, by a full run or on request. */
+  commonMisconceptions?: string[];
   lastGrade: Grade | null;
   source: {
     label: string;
@@ -429,6 +435,29 @@ export function StudyDeck({
                     <CardImage cardId={current.id} side="back" />
                   ) : null}
 
+                  {!current.fullExplanation ? (
+                    <ExplainButton
+                      key={current.id}
+                      cardId={current.id}
+                      onExplained={(result) => {
+                        setDeck((prev) =>
+                          prev.map((card) =>
+                            card.id === result.cardId
+                              ? {
+                                  ...card,
+                                  fullExplanation: result.fullExplanation,
+                                  hasAiSupplement: result.hasAiSupplement,
+                                  commonMisconceptions:
+                                    result.commonMisconceptions,
+                                }
+                              : card,
+                          ),
+                        );
+                        setDetail(true);
+                      }}
+                    />
+                  ) : null}
+
                   {current.fullExplanation || current.essentialPoints.length ? (
                     <div>
                       <Button
@@ -443,7 +472,7 @@ export function StudyDeck({
                       {detail ? (
                         <div className="space-y-2 pt-1 text-sm">
                           {current.fullExplanation ? (
-                            <p className="text-muted-foreground">
+                            <p className="text-muted-foreground whitespace-pre-line">
                               {current.fullExplanation}
                               {current.hasAiSupplement ? (
                                 <Badge
@@ -468,6 +497,9 @@ export function StudyDeck({
                               </ul>
                             </div>
                           ) : null}
+                          <MisconceptionList
+                            items={current.commonMisconceptions ?? []}
+                          />
                         </div>
                       ) : null}
                     </div>

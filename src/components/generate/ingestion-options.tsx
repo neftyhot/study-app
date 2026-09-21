@@ -51,6 +51,7 @@ export function IngestionOptions({
   onChange,
   disabled,
   observedRatio,
+  model,
 }: {
   sources: SourceOption[];
   state: OptionsState;
@@ -58,9 +59,11 @@ export function IngestionOptions({
   disabled?: boolean;
   /** Cards per unit this deck actually produced last time, when it has. */
   observedRatio?: number | null;
+  /** The model a run will use, whose measured yields the estimate follows. */
+  model?: string | null;
 }) {
   // What the setting produces, not what it asks for — see `expectedPerUnit`.
-  const ratio = expectedFor(state.density, state.ratio);
+  const ratio = expectedFor(state.density, state.ratio, model);
   const units = useMemo(
     () => selectedUnits(sources, state.choices),
     [sources, state.choices],
@@ -100,7 +103,7 @@ export function IngestionOptions({
                 {DENSITY_PRESETS[mode].label}
               </span>
               <span className="text-muted-foreground block text-xs tabular-nums">
-                ~{DENSITY_PRESETS[mode].expectedPerUnit} per{" "}
+                ~{expectedFor(mode, null, model)} per{" "}
                 {unitWord(sources[0]?.fileType ?? "pdf")}
               </span>
             </button>

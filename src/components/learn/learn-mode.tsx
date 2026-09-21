@@ -53,6 +53,10 @@ import {
 import type { AssistKind } from "@/lib/assist";
 import type { TypedGrade } from "@/lib/learn/typed";
 import { CardEditor } from "@/components/cards/card-editor";
+import {
+  ExplainButton,
+  MisconceptionList,
+} from "@/components/cards/explain-button";
 import type { StudyScope } from "@/lib/study/queue";
 
 /** PRD §14's assistance buttons, in the order a stuck student wants them. */
@@ -325,6 +329,7 @@ export function LearnMode({
 
           {reveal ? (
             <RevealPanel
+              key={`${shown.cardId}:${reveal.attemptId ?? reveal.directAnswer}`}
               reveal={reveal}
               cardId={shown.cardId}
               question={shown.question}
@@ -451,6 +456,12 @@ function RevealPanel({
   const [drilling, setDrilling] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Written on request when the deck was built without explanations.
+  const [explained, setExplained] = useState<{
+    fullExplanation: string | null;
+    commonMisconceptions: string[];
+  } | null>(null);
+  const fullExplanation = reveal.fullExplanation ?? explained?.fullExplanation;
 
   const missed = reveal.grade?.missedPoints ?? [];
 
@@ -521,10 +532,23 @@ function RevealPanel({
 
       <div className="bg-muted/50 space-y-2 rounded p-3 text-sm">
         <p>{reveal.directAnswer}</p>
-        {reveal.fullExplanation ? (
-          <p className="text-muted-foreground text-xs">
-            {reveal.fullExplanation}
+        {fullExplanation ? (
+          <p className="text-muted-foreground text-xs whitespace-pre-line">
+            {fullExplanation}
           </p>
+        ) : (
+          <ExplainButton
+            cardId={cardId}
+            onExplained={(result) =>
+              setExplained({
+                fullExplanation: result.fullExplanation,
+                commonMisconceptions: result.commonMisconceptions,
+              })
+            }
+          />
+        )}
+        {explained ? (
+          <MisconceptionList items={explained.commonMisconceptions} />
         ) : null}
         {reveal.sourceExcerpt ? (
           <blockquote className="text-muted-foreground border-l-2 pl-2 text-xs italic">
@@ -548,7 +572,7 @@ function RevealPanel({
             card={{
               question,
               directAnswer: reveal.directAnswer,
-              fullExplanation: reveal.fullExplanation,
+              fullExplanation: fullExplanation ?? null,
             }}
             canUndo={canUndo}
             onClose={() => setEditing(false)}

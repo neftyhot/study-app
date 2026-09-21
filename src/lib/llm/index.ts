@@ -7,13 +7,22 @@ import {
 } from "@/lib/settings";
 
 import { createAnthropicProvider } from "./anthropic";
-import { createGeminiProvider } from "./gemini";
+import {
+  createGeminiProvider,
+  DEFAULT_GEMINI_BULK_MODEL,
+  DEFAULT_GEMINI_MODEL,
+} from "./gemini";
 import { createLocalProvider } from "./local";
 import { createOpenAiProvider } from "./openai";
 import { LlmError, type LlmProvider } from "./types";
 
 export * from "./types";
-export { createGeminiProvider, DEFAULT_GEMINI_MODEL } from "./gemini";
+export {
+  createGeminiProvider,
+  DEFAULT_GEMINI_BULK_MODEL,
+  DEFAULT_GEMINI_MODEL,
+} from "./gemini";
+export * from "./pricing";
 export { createAnthropicProvider, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 export { createOpenAiProvider, DEFAULT_OPENAI_MODEL } from "./openai";
 export { createLocalProvider, unloadLocalModel } from "./local";
@@ -33,7 +42,30 @@ export {
  * everything above this line still knows only `LlmProvider`. Nothing in
  * generation, coverage, grading, or assistance changed to add any of them.
  */
-export function getProvider(override?: ProviderId): LlmProvider {
+/**
+ * What the model is being used for.
+ *
+ * "bulk" is deck generation: hundreds of cards, nobody waiting on any single
+ * one, cost dominated by volume. "interactive" is everything else. Only Gemini
+ * currently has a cheaper tier worth routing to; other providers answer both
+ * roles with the model the student configured.
+ */
+export type ProviderRole = "bulk" | "interactive";
+
+/**
+ * The model a bulk run will use, without constructing a provider — so the
+ * panel can show a calibrated estimate even before a key is entered.
+ */
+export function bulkModelName(): string | null {
+  const provider = readProvider();
+  if (provider !== "gemini") return null;
+  return process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL;
+}
+
+export function getProvider(
+  override?: ProviderId,
+  role: ProviderRole = "interactive",
+): LlmProvider {
   const provider = override ?? readProvider();
 
   switch (provider) {
@@ -60,6 +92,16 @@ export function getProvider(override?: ProviderId): LlmProvider {
 
     case "gemini":
     default:
-      return createGeminiProvider({ apiKey: readApiKey("gemini") });
+      return createGeminiProvider({
+        apiKey: readApiKey("gemini"),
+        model:
+          role === "bulk"
+            ? (process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL)
+            : undefined,
+        fallbackModel:
+          role === "bulk"
+            ? (process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL)
+            : undefined,
+      });
   }
 }

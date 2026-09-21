@@ -1017,6 +1017,56 @@ first deletion. Fixed, with a regression test.
 
 ---
 
+## Phase 22 — Cost: a cheap bulk model, lean cards, explanations on demand ✅
+
+- [x] Bulk generation on a Flash-Lite model; tutor, diagrams, grading and
+      single-card explanations stay on gemini-2.5-flash
+- [x] Lean card: question, answer, topic, 1–3 essential points, citation,
+      verbatim excerpt, professor emphasis. No explanation, misconceptions or
+      facet, and the prompt says so in as many words
+- [x] `POST /api/cards/[cardId]/explain`: returns a stored explanation free,
+      otherwise writes two paragraphs and two misconceptions once and stores them
+- [x] "Explain with AI" in study, learn (the diagnostic panel) and the deck list
+- [x] Tokens and estimated cost logged per batch and per run, and kept in the
+      job summary
+- [x] Density calibration per model: overshoot, batch size, expected yield
+- [x] Tests: 12
+
+**gemini-2.5-flash-lite is not the default because a new key cannot call it.**
+Google answers 404 "no longer available to new users". The cheapest model a new
+key can reach is gemini-3.1-flash-lite ($0.25 in / $1.50 out per million).
+`GEMINI_BULK_MODEL` overrides it for an older key, and a retired model falls
+back to gemini-2.5-flash rather than failing the run.
+
+Endocrine chapter, 96 pages, standard density, lean cards, thinking tokens
+counted:
+
+| Model | Cards | Time | Cost | Per card |
+|---|---|---|---|---|
+| gemini-2.5-flash | 158 | 57s | $0.147 | $0.00093 |
+| gemini-3.5-flash-lite | 78 | 9.7s | $0.034 | $0.00043 |
+| gemini-3.1-flash-lite, batch 18 | 49 | 4.8s | $0.015 | $0.00031 |
+| gemini-3.1-flash-lite, calibrated (batch 8) | 91 | 5.2s | $0.027 | $0.00030 |
+
+Whole 314-page deck on the default: 291 cards in 30.6s for $0.088. One
+explanation on demand: about $0.003, then free.
+
+**Found while measuring:**
+- Output token counts left out thinking tokens, which Google bills as output
+  and which were more than half of gemini-2.5-flash's bill. Now counted.
+- Flash-Lite follows a stated target literally and covers half as much on a
+  batch of 18, so it has its own calibration: batch 8, target doubled. It lands
+  at 0.6 / 0.95 / 2.1 cards a page (flash: 0.6 / 1.4 / 3.0). Exhaustive is the
+  one setting where it is still leaner than flash.
+- The explanation call capped output at 1024 tokens, which a thinking model
+  spent before finishing the JSON. Raised to 8192.
+- A "keep excerpts short" instruction was tried and dropped: it saved under 8%
+  of output and nearly doubled excerpt rejections.
+- When twenty batches hit a retired model at once, only the first retried on
+  the fallback. Each attempt now remembers which model it used.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
 Note-image ingestion with OCR (§1) · full progress analytics dashboard (§13) ·

@@ -65,6 +65,56 @@ export const DENSITY_PRESETS: Record<
 
 export const DEFAULT_DENSITY: DensityMode = "standard";
 
+type Preset = Exclude<DensityMode, "custom">;
+
+/**
+ * How one model responds to being told a density.
+ *
+ * Models do not follow a stated target the same way. Told "about half a card
+ * a page", gemini-2.5-flash produced nearly three times that while
+ * gemini-3.1-flash-lite produced almost exactly it. So the number put in the
+ * prompt is divided by the model's measured `overshoot`, and the estimate the
+ * student sees uses the model's own measured yield rather than one model's
+ * numbers applied to another.
+ *
+ * Every figure here is from `npm run generate:bench` on the same 96-page
+ * Endocrine chapter. Re-measure when adding or changing a model.
+ */
+export type ModelCalibration = {
+  overshoot: number;
+  /**
+   * Pages per request. Smaller models attend to fewer pages at once: on a
+   * batch of 18 gemini-3.1-flash-lite covered about half of what it did on a
+   * batch of 8, whatever it was told.
+   */
+  batchSize?: number;
+  expectedPerUnit: Record<Preset, number>;
+};
+
+export const MODEL_CALIBRATION: Record<string, ModelCalibration> = {
+  "gemini-2.5-flash": {
+    overshoot: 1.9,
+    // 64, 138 and 321 cards.
+    expectedPerUnit: { high_yield: 0.6, standard: 1.4, exhaustive: 3 },
+  },
+  "gemini-3.1-flash-lite": {
+    // Told 0.5 a page it produced 0.5, so it follows a stated target almost
+    // literally — and undershoots the prose. Asking for twice the density
+    // lands on it.
+    overshoot: 0.5,
+    batchSize: 8,
+    // 56, 91 and 200 cards, each in 5-8 seconds.
+    expectedPerUnit: { high_yield: 0.6, standard: 0.95, exhaustive: 2.1 },
+  },
+};
+
+/** The calibration measured first, used for any model not yet measured. */
+const FALLBACK_CALIBRATION = MODEL_CALIBRATION["gemini-2.5-flash"];
+
+export function calibrationFor(model?: string | null): ModelCalibration {
+  return (model && MODEL_CALIBRATION[model]) || FALLBACK_CALIBRATION;
+}
+
 /** The narrowest and widest a custom ratio may be set. */
 export const MIN_RATIO = 0.1;
 export const MAX_RATIO = 4;
@@ -92,9 +142,15 @@ export function ratioFor(mode: DensityMode, custom?: number | null): number {
  * taken at its word; the observed average shown beside the estimate is what
  * corrects it after the first run.
  */
-export function expectedFor(mode: DensityMode, custom?: number | null): number {
+export function expectedFor(
+  mode: DensityMode,
+  custom?: number | null,
+  model?: string | null,
+): number {
   if (mode === "custom") return ratioFor(mode, custom);
-  return DENSITY_PRESETS[mode].expectedPerUnit;
+  return model
+    ? calibrationFor(model).expectedPerUnit[mode]
+    : DENSITY_PRESETS[mode].expectedPerUnit;
 }
 
 /**

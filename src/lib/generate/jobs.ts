@@ -153,6 +153,8 @@ export function startGenerationJob(
           unitsUsed: summary.unitsUsed,
           durationMs: summary.durationMs,
           failedBatches: summary.failedBatches,
+          model: summary.model,
+          usage: summary.usage,
           batchCount: summary.batchCount,
           cardsCreated: summary.cardsCreated,
           cardsRejected: summary.cardsRejected,

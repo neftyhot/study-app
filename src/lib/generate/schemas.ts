@@ -82,7 +82,13 @@ export function generatedCardSchema(
     delete item.properties.hasAiSupplement;
     delete item.properties.optionalPoints;
     delete item.properties.commonMisconceptions;
-    item.required = item.required.filter((key) => key !== "hasAiSupplement");
+    // Never stored: it steered the model's decomposition in exhaustive runs,
+    // and a lean run is not asking for that decomposition.
+    delete item.properties.facet;
+    item.required = item.required.filter(
+      (key) => key !== "hasAiSupplement" && key !== "facet",
+    );
+    item.required.push("professorEmphasis");
 
     (item.properties.essentialPoints as { description: string }).description =
       "Between one and three short points a typed answer MUST contain.";
@@ -157,6 +163,11 @@ export const GENERATED_CARD_SCHEMA: JsonSchema = {
             description:
               "Plausible wrong answers, especially reversed directionality.",
           },
+          professorEmphasis: {
+            type: "boolean",
+            description:
+              "True only when the material itself flags this as important: 'know this', 'on the exam', a learning objective, or a speaker note stressing it.",
+          },
         },
         required: [
           "topic",
@@ -186,7 +197,8 @@ export const GENERATED_CARD_SCHEMA: JsonSchema = {
 
 export type GeneratedCard = {
   topic: string;
-  facet: CardFacet;
+  /** Absent from lean runs. */
+  facet?: CardFacet;
   cardType: (typeof CARD_TYPES)[number];
   question: string;
   directAnswer: string;
@@ -197,6 +209,7 @@ export type GeneratedCard = {
   essentialPoints: string[];
   optionalPoints?: string[];
   commonMisconceptions?: string[];
+  professorEmphasis?: boolean;
 };
 
 export type GenerationResponse = {

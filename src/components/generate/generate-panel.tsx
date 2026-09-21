@@ -87,6 +87,7 @@ export function GeneratePanel({
   density,
   densityRatio,
   observedRatio,
+  bulkModel = null,
 }: {
   examId: string;
   scopeMode: "files" | "objectives";
@@ -98,6 +99,8 @@ export function GeneratePanel({
   densityRatio: number | null;
   /** Cards per unit this deck has actually produced, when it has any. */
   observedRatio: number | null;
+  /** The model bulk generation runs on, for a calibrated estimate. */
+  bulkModel?: string | null;
   /** A run already in flight, so the panel comes back mid-generation. */
   initialJob: GenerationJobView | null;
   /** PRD §9 higher-order questions, persisted on the exam. */
@@ -326,6 +329,7 @@ export function GeneratePanel({
               onChange={setOptions}
               disabled={disabled}
               observedRatio={observedRatio}
+              model={bulkModel}
             />
             <p className="text-muted-foreground text-xs">
               {chosenUnits === 0
