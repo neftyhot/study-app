@@ -19,7 +19,11 @@ export function resolveDbPath() {
 }
 
 export function createClient() {
-  const sqlite = new Database(resolveDbPath());
+  const dbPath = resolveDbPath();
+  const fs = require("node:fs");
+  const path = require("node:path");
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  const sqlite = new Database(dbPath);
   // WAL keeps ingestion writes from blocking study-session reads.
   sqlite.pragma("journal_mode = WAL");
   sqlite.pragma("foreign_keys = ON");
