@@ -209,8 +209,8 @@ fabricated quote cannot be evidence of coverage.
   run and `partially_covered` on the next; at temperature 0 the models still vary.
 - Analysis runs inline in the request; `analyzeCoverageForExam` takes a `Db` and an
   `LlmProvider`, so the Phase 8 queue can call it unchanged.
-- Regenerating cards does not re-run coverage automatically — the matrix shows the state as of
-  its last analysis.
+- ~~Regenerating cards does not re-run coverage automatically~~ — the matrix now records the
+  deck size it described and says when that no longer matches (Phase 15).
 
 ---
 
@@ -426,7 +426,8 @@ and left the tier alone; two cards backdated six days came back at the head of t
 **Known limits (deliberate, deferred):**
 - One global schedule per card. Exam-date-aware prioritisation and daily load balancing are
   PRD §12, deferred past the MVP.
-- No "bury siblings" or daily review cap; a large backlog arrives all at once.
+- No "bury siblings". ~~No daily review cap~~ — a due session is now capped to the stated
+  daily budget (Phase 15).
 - The review queue is the ordinary study queue with a `due` scope rather than its own mode.
 
 ## Phase 8 — MVP Hardening ✅
@@ -731,8 +732,8 @@ a row, progress is written as batches complete, and the panel polls it, so
 "batch 3 of 12" means three batches are safely stored and the end is the end.
 
 **Known limits (deliberate, deferred):**
-- A job interrupted by quitting the app stays marked running until something
-  clears it; there is no startup sweep yet.
+- ~~A job interrupted by quitting the app stays marked running~~ — a job whose progress has
+  stopped for fifteen minutes is now closed out when next looked at (Phase 13).
 - Local generation is slower than any hosted model, and a large deck on a small
   machine will take a long time. The progress bar makes that visible rather than
   fixing it.
@@ -785,15 +786,81 @@ Nothing is deleted by choosing one — they are a reading order, not a purge.
       is the one that died.
 
 **Known limits (deliberate, deferred):**
-- The plan describes today; it does not build the queue. Starting a session
-  still picks its own scope, so a student could follow the plan's numbers with a
-  different set of cards.
+- ~~The plan describes today; it does not build the queue~~ — "Start today's reviews" builds
+  the session the plan described, from the same rules (Phase 15).
 - Time estimates are uniform per card type. A one-line definition and a
   five-step pathway are costed the same.
 - Choosing a cut is advice, not an action: it does not exclude those cards for
   you.
 - After a migration, restart `next dev` — the database client is cached on
   `globalThis` to survive hot reloads, so it holds the schema it started with.
+
+---
+
+## Phase 14 — Universal Search (no PRD section; asked for in use) ✅
+
+- [x] Instant literal search across every subject and deck, the way Cmd-F works
+- [x] Lexical fallback weighting distinctive words, still instant and local
+- [x] Model-backed search by meaning, offered rather than assumed
+- [x] Cards, study-guide objectives, and the source material itself
+- [x] Filters: subject, deck, kind, card type, and how well a card is known
+- [x] The same search inside a deck's card list, bound to Cmd-F
+- [x] Tests: 21
+
+**Exact always outranks clever.** A search that reorders a literal hit beneath a
+better guess stops being trusted, and an untrusted search is not used. Quoting a
+phrase means the phrase and nothing else — someone who types quotes has told us
+they know what they are looking for.
+
+Measured on the 867-card deck: 2 ms for a quoted phrase, 11 ms unquoted, and a
+descriptive query with no literal match still finding the right card.
+
+---
+
+## Phase 15 — Practice Exam Mode (PRD §11) ✅
+
+- [x] Configurable paper: question count, topics, optional timer
+- [x] Questions asked in different words from the cards
+- [x] Topics interleaved, so no two neighbours share one
+- [x] Nothing marked or revealed until submitted; a timed paper submits itself
+- [x] Post-exam diagnostic linking every error to its source page
+- [x] Tests: 26
+
+**An exam that leaks feedback is a study session.** Nothing on the paper shows a
+tick, a colour, or a running score, because the value of sitting one is finding
+out what you know without the support that practice gives you. The prompt is
+stored on the paper rather than read from the card, so editing a card mid-exam
+cannot change a question someone is halfway through.
+
+**Recognising a phrasing is not knowing the answer**, so every prompt is
+rewritten — and checked: a rewrite that is really the same sentence, or that has
+started explaining rather than asking, is rejected and the original kept. A
+paper with some familiar wording is worth more than one that quietly asks
+something else. Verified live on the real deck: 6 of 6 reworded, "What is the
+target tissue for ACTH?" becoming "Which specific tissue is acted upon by
+ACTH?".
+
+Selection is weighted towards what is not yet known but never only that — a
+paper made entirely of weak material measures morale, not readiness. Typed
+questions go to cards with a real rubric, because a card without one can only be
+marked on recognition.
+
+### Also fixed
+
+- [x] **The coverage matrix described a deck that no longer existed.** Each run
+      now records how many cards it saw, and the page says when that no longer
+      matches. Confidently wrong information is worse than none.
+- [x] **A due session handed over the entire backlog.** Two hundred overdue cards
+      became a session nobody finishes; it is now capped to the stated daily
+      budget, longest overdue first, with the cap shown in the picker.
+- [x] **The plan could not start what it described.** It now builds the session,
+      from the same rules and the same budget.
+
+**Known limits (deliberate, deferred):**
+- One open paper per deck; sitting a new one discards the old.
+- Marking a typed answer costs a model call each, so a long paper with many
+  typed questions takes a while to mark on a local model.
+- No per-question timing, and no "flag for review" while sitting.
 
 ---
 

@@ -727,6 +727,89 @@ export const generationJobs = sqliteTable(
   (t) => [index("generation_jobs_exam_idx").on(t.examId)],
 );
 
+/* ------------------------------------------------------------ PracticeExam */
+
+export const practiceStatuses = ["sitting", "submitted", "abandoned"] as const;
+export const questionFormats = ["mcq", "typed"] as const;
+
+/**
+ * A mock exam (PRD §11).
+ *
+ * Separate from `study_sessions` because it is a different thing: a study
+ * session teaches, and tells you how you did as you go. An exam measures, and
+ * must not — the whole value of sitting one is finding out what you know
+ * without the feedback that props you up.
+ */
+export const practiceExams = sqliteTable(
+  "practice_exams",
+  {
+    id: id(),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    status: text("status", { enum: practiceStatuses }).notNull().default("sitting"),
+    /** Null for an untimed paper. */
+    durationMinutes: integer("duration_minutes"),
+    /** Topics it was drawn from; empty means the whole deck. */
+    topics: text("topics", { mode: "json" }).$type<string[]>().notNull().default([]),
+    questionCount: integer("question_count").notNull().default(0),
+    /** Marks earned once submitted. */
+    score: integer("score"),
+    /** True when the paper's wording was rewritten rather than reused. */
+    rephrased: integer("rephrased", { mode: "boolean" }).notNull().default(false),
+    startedAt: createdAt(),
+    submittedAt: text("submitted_at"),
+  },
+  (t) => [index("practice_exams_exam_idx").on(t.examId)],
+);
+
+/**
+ * One question on a paper.
+ *
+ * The prompt is stored rather than read from the card at display time: a paper
+ * is a fixed artefact, and editing a card mid-exam must not change the
+ * question someone is halfway through answering.
+ */
+export const practiceQuestions = sqliteTable(
+  "practice_questions",
+  {
+    id: id(),
+    practiceExamId: text("practice_exam_id")
+      .notNull()
+      .references(() => practiceExams.id, { onDelete: "cascade" }),
+    flashcardId: text("flashcard_id").references(() => flashcards.id, {
+      onDelete: "set null",
+    }),
+    position: integer("position").notNull(),
+    format: text("format", { enum: questionFormats }).notNull(),
+    prompt: text("prompt").notNull(),
+    /** Present for multiple choice; the correct one is marked separately. */
+    options: text("options", { mode: "json" }).$type<string[]>().notNull().default([]),
+    correctOption: text("correct_option"),
+    /** The model answer, kept so the diagnostic can show it afterwards. */
+    expectedAnswer: text("expected_answer").notNull(),
+    essentialPoints: text("essential_points", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    answer: text("answer"),
+    verdict: text("verdict", { enum: verdicts }),
+    errorType: text("error_type"),
+    missedPoints: text("missed_points", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
+    feedback: text("feedback"),
+  },
+  (t) => [
+    index("practice_questions_exam_idx").on(t.practiceExamId),
+    uniqueIndex("practice_questions_position_idx").on(
+      t.practiceExamId,
+      t.position,
+    ),
+  ],
+);
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -899,6 +982,8 @@ export type CardRubric = typeof cardRubrics.$inferSelect;
 export type CardRevision = typeof cardRevisions.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type GenerationJob = typeof generationJobs.$inferSelect;
+export type PracticeExam = typeof practiceExams.$inferSelect;
+export type PracticeQuestion = typeof practiceQuestions.$inferSelect;
 export type CoverageMapping = typeof coverageMappings.$inferSelect;
 export type ObjectiveCoverage = typeof objectiveCoverage.$inferSelect;
 export type ContentConflict = typeof contentConflicts.$inferSelect;

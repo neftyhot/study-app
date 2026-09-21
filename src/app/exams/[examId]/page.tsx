@@ -162,6 +162,9 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
               </Button>
             ) : null}
             <Button asChild variant="outline">
+              <Link href={`/exams/${examId}/practice`}>Practice exam</Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href={`/exams/${examId}/plan`}>
                 {exam.date ? "Study plan" : "Set an exam date"}
               </Link>

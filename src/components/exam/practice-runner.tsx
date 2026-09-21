@@ -1,0 +1,334 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { Clock, FileText, Loader2, Send } from "lucide-react";
+import { toast } from "sonner";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  abandon,
+  answerQuestion,
+  loadQuestions,
+  startPaper,
+  submit,
+} from "@/lib/exam/actions";
+
+export type Question = {
+  id: string;
+  position: number;
+  format: "mcq" | "typed";
+  prompt: string;
+  options: string[];
+  answer: string | null;
+};
+
+export type PaperView = {
+  id: string;
+  questionCount: number;
+  durationMinutes: number | null;
+  remainingMs: number | null;
+  rephrased: boolean;
+};
+
+/**
+ * Sitting a practice exam.
+ *
+ * Nothing here tells the student how they are doing. There is no tick, no
+ * colour, no count of right answers — an exam that leaks feedback is a study
+ * session, and the point of sitting one is to find out what you know without
+ * that support.
+ */
+export function PracticeRunner({
+  examId,
+  topics,
+  cardCount,
+  paper,
+  initialQuestions,
+}: {
+  examId: string;
+  topics: string[];
+  cardCount: number;
+  paper: PaperView | null;
+  initialQuestions: Question[];
+}) {
+  const router = useRouter();
+  const [questions, setQuestions] = useState(initialQuestions);
+  const [answers, setAnswers] = useState<Record<string, string>>(() =>
+    Object.fromEntries(initialQuestions.map((q) => [q.id, q.answer ?? ""])),
+  );
+  const [busy, setBusy] = useState(false);
+  const [remaining, setRemaining] = useState(paper?.remainingMs ?? null);
+
+  // Setup form
+  const [count, setCount] = useState("20");
+  const [duration, setDuration] = useState("none");
+  const [rephrase, setRephrase] = useState(true);
+  const [chosen, setChosen] = useState<string[]>([]);
+
+  const answered = useMemo(
+    () => Object.values(answers).filter((value) => value.trim() !== "").length,
+    [answers],
+  );
+
+  // A timed paper submits itself: running out of time is part of the exercise.
+  useEffect(() => {
+    if (remaining === null || !paper) return;
+
+    const timer = setInterval(() => {
+      setRemaining((value) => {
+        if (value === null) return null;
+        const next = Math.max(0, value - 1000);
+        if (next === 0) void handleSubmit(true);
+        return next;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paper?.id, remaining !== null]);
+
+  async function handleStart() {
+    setBusy(true);
+    const result = await startPaper(examId, {
+      questionCount: Number(count),
+      durationMinutes: duration === "none" ? null : Number(duration),
+      topics: chosen,
+      rephrase,
+    });
+    setBusy(false);
+
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+
+    if (result.set < result.askedFor) {
+      toast.info(`Set ${result.set} questions — that is all the deck has.`);
+    }
+    if (rephrase && !result.rephrased) {
+      toast.info("Questions kept the deck's wording — no model was available.");
+    }
+
+    setQuestions(await loadQuestions(result.paperId));
+    router.refresh();
+  }
+
+  async function handleSubmit(automatic = false) {
+    if (!paper) return;
+    setBusy(true);
+
+    const marked = await submit(examId, paper.id);
+    setBusy(false);
+
+    if (!marked) return;
+    toast.success(
+      automatic
+        ? `Time up — ${marked.score} of ${marked.total}`
+        : `${marked.score} of ${marked.total}`,
+    );
+    router.refresh();
+  }
+
+  if (!paper) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Set a paper</CardTitle>
+          <CardDescription>
+            Questions are drawn from this deck, weighted towards what you have
+            not yet learned, and asked in different words from the cards.
+            Nothing is marked until you submit.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Questions</Label>
+              <Select value={count} onValueChange={setCount}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {["10", "20", "30", "50"].map((n) => (
+                    <SelectItem key={n} value={n}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Time limit</Label>
+              <Select value={duration} onValueChange={setDuration}>
+                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Untimed</SelectItem>
+                  {["15", "30", "45", "60", "90"].map((n) => (
+                    <SelectItem key={n} value={n}>{n} minutes</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {topics.length > 1 ? (
+            <div className="space-y-2">
+              <Label className="text-xs">
+                Topics {chosen.length === 0 ? "(all)" : `(${chosen.length} chosen)`}
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {topics.map((topic) => (
+                  <Button
+                    key={topic}
+                    type="button"
+                    size="sm"
+                    variant={chosen.includes(topic) ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() =>
+                      setChosen((previous) =>
+                        previous.includes(topic)
+                          ? previous.filter((item) => item !== topic)
+                          : [...previous, topic],
+                      )
+                    }
+                  >
+                    {topic}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex items-start gap-2">
+            <Checkbox
+              id="rephrase"
+              checked={rephrase}
+              onCheckedChange={(value) => setRephrase(value === true)}
+            />
+            <div className="space-y-0.5">
+              <Label htmlFor="rephrase" className="text-sm font-normal">
+                Ask in different words
+              </Label>
+              <p className="text-muted-foreground text-xs">
+                You have drilled these cards, and recognising a phrasing is not
+                knowing the answer. Needs a model, and takes a moment.
+              </p>
+            </div>
+          </div>
+
+          <Button disabled={busy || cardCount === 0} onClick={() => void handleStart()}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
+            {busy ? "Setting the paper…" : "Begin"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-background/90 sticky top-14 z-10 space-y-2 border-b py-3 backdrop-blur">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm">
+            {answered} of {questions.length} answered
+            {paper.rephrased ? (
+              <Badge variant="outline" className="ml-2">reworded</Badge>
+            ) : null}
+          </p>
+
+          <div className="flex items-center gap-2">
+            {remaining !== null ? (
+              <Badge variant={remaining < 60_000 ? "destructive" : "secondary"} className="gap-1 tabular-nums">
+                <Clock className="size-3" />
+                {Math.floor(remaining / 60_000)}:
+                {String(Math.floor((remaining % 60_000) / 1000)).padStart(2, "0")}
+              </Badge>
+            ) : null}
+
+            <Button size="sm" disabled={busy} onClick={() => void handleSubmit()}>
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+              Submit
+            </Button>
+          </div>
+        </div>
+        <Progress value={(answered / Math.max(questions.length, 1)) * 100} />
+      </div>
+
+      {questions.map((question) => (
+        <Card key={question.id}>
+          <CardHeader>
+            <CardTitle className="text-base leading-snug break-words">
+              <span className="text-muted-foreground mr-2 tabular-nums">
+                {question.position + 1}.
+              </span>
+              {question.prompt}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {question.format === "mcq" ? (
+              <div className="space-y-2">
+                {question.options.map((option) => (
+                  <Button
+                    key={option}
+                    variant={answers[question.id] === option ? "default" : "outline"}
+                    className="h-auto w-full justify-start py-2.5 text-left whitespace-normal"
+                    onClick={() => {
+                      setAnswers((prev) => ({ ...prev, [question.id]: option }));
+                      void answerQuestion(question.id, option);
+                    }}
+                  >
+                    {option}
+                  </Button>
+                ))}
+              </div>
+            ) : (
+              <Textarea
+                value={answers[question.id] ?? ""}
+                placeholder="Your answer…"
+                className="min-h-24"
+                onChange={(event) =>
+                  setAnswers((prev) => ({ ...prev, [question.id]: event.target.value }))
+                }
+                onBlur={(event) => void answerQuestion(question.id, event.target.value)}
+              />
+            )}
+          </CardContent>
+        </Card>
+      ))}
+
+      <div className="flex flex-wrap gap-2 pb-8">
+        <Button disabled={busy} onClick={() => void handleSubmit()}>
+          <Send className="size-4" />
+          Submit paper
+        </Button>
+        <Button
+          variant="ghost"
+          disabled={busy}
+          onClick={async () => {
+            await abandon(examId, paper.id);
+            router.refresh();
+          }}
+        >
+          Discard
+        </Button>
+      </div>
+    </div>
+  );
+}
