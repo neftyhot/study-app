@@ -17,6 +17,32 @@ export async function setScopeMode(examId: string, mode: "files" | "objectives")
 }
 
 /**
+ * The exam date and the time available each day (PRD §12).
+ *
+ * Both are the student's own estimate, and both are allowed to be empty — the
+ * planner simply says less when it knows less, rather than inventing a
+ * deadline.
+ */
+export async function setExamSchedule(
+  examId: string,
+  date: string | null,
+  dailyMinutes: number | null,
+) {
+  const minutes =
+    dailyMinutes === null || !Number.isFinite(dailyMinutes)
+      ? null
+      : Math.min(Math.max(Math.round(dailyMinutes), 5), 600);
+
+  db.update(exams)
+    .set({ date: date?.trim() || null, dailyMinutes: minutes })
+    .where(eq(exams.id, examId))
+    .run();
+
+  revalidatePath(`/exams/${examId}`);
+  revalidatePath(`/exams/${examId}/plan`);
+}
+
+/**
  * Higher-order application questions on or off (PRD §9).
  *
  * Stored on the exam so it applies to every later generation run, rather than

@@ -78,6 +78,13 @@
       "when": 1789943138145,
       "tag": "0010_even_hannibal_king",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1789951958633,
+      "tag": "0011_lumpy_rockslide",
+      "breakpoints": true
     }
   ]
 }

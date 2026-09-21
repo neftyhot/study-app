@@ -58,6 +58,8 @@ export const exams = sqliteTable(
     scopeMode: text("scope_mode", { enum: ["files", "objectives"] })
       .notNull()
       .default("files"),
+    /** Minutes the student can give this deck on an ordinary day (PRD §12). */
+    dailyMinutes: integer("daily_minutes"),
     /**
      * Whether generation also produces higher-order application cards
      * (PRD §9). Off by default: they are worth more once the underlying

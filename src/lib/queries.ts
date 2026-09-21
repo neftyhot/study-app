@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { todayIso } from "@/lib/srs";
 import {
   assistEvents,
+  coverageMappings,
   cardRevisions,
   contentConflicts,
   errorDiagnoses,
@@ -291,4 +292,61 @@ export async function countAssists(examId: string) {
     .where(eq(flashcards.examId, examId));
 
   return rows.length;
+}
+
+/**
+ * Everything the planner needs, in one pass (PRD §12).
+ *
+ * Coverage is folded in here rather than queried per card: whether a card
+ * answers any objective, and whether any objective it answers is
+ * professor-emphasised, are what the triage options are built from.
+ */
+export async function loadPlanCards(examId: string) {
+  const rows = await db
+    .select({
+      id: flashcards.id,
+      cardType: flashcards.cardType,
+      excluded: flashcards.excluded,
+      state: studyProgress.state,
+      lapses: studyProgress.lapses,
+      nextReviewDue: studyProgress.nextReviewDue,
+    })
+    .from(flashcards)
+    .leftJoin(studyProgress, eq(studyProgress.flashcardId, flashcards.id))
+    .where(eq(flashcards.examId, examId));
+
+  const mappings = await db
+    .select({
+      flashcardId: coverageMappings.flashcardId,
+      emphasis: studyGuideObjectives.professorEmphasis,
+    })
+    .from(coverageMappings)
+    .innerJoin(
+      studyGuideObjectives,
+      eq(studyGuideObjectives.id, coverageMappings.objectiveId),
+    )
+    .where(eq(studyGuideObjectives.examId, examId));
+
+  const mapped = new Set<string>();
+  const emphasised = new Set<string>();
+
+  for (const row of mappings) {
+    if (!row.flashcardId) continue;
+    mapped.add(row.flashcardId);
+    if (row.emphasis) emphasised.add(row.flashcardId);
+  }
+
+  return {
+    hasCoverage: mappings.length > 0,
+    cards: rows.map((row) => ({
+      id: row.id,
+      cardType: row.cardType,
+      excluded: row.excluded,
+      state: row.state,
+      lapses: row.lapses ?? 0,
+      nextReviewDue: row.nextReviewDue,
+      mapsToObjective: mapped.has(row.id),
+      emphasised: emphasised.has(row.id),
+    })),
+  };
 }

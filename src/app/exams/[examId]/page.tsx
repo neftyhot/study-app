@@ -22,7 +22,9 @@ import {
   getExamStats,
   getMasteryBreakdown,
   listDiagnosedCards,
+  loadPlanCards,
 } from "@/lib/queries";
+import { buildPlan, formatMinutes } from "@/lib/plan";
 
 const DIAGNOSIS_LABELS: Record<string, string> = {
   missing_prerequisite: "missing prerequisite",
@@ -39,7 +41,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
 
   const job = latestJob(db, examId);
 
-  const [stats, slideCount, coverage, dueCount, mastery, diagnoses] =
+  const [stats, slideCount, coverage, dueCount, mastery, diagnoses, planData] =
     await Promise.all([
       getExamStats(examId),
       countAnswerSlides(examId),
@@ -47,7 +49,15 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       countDueCards(examId),
       getMasteryBreakdown(examId),
       listDiagnosedCards(examId),
+      loadPlanCards(examId),
     ]);
+
+  const plan = buildPlan({
+    cards: planData.cards,
+    examDate: exam.date,
+    dailyMinutes: exam.dailyMinutes,
+    hasCoverage: planData.hasCoverage,
+  });
 
   return (
     <div className="space-y-8">
@@ -108,27 +118,55 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       {stats.flashcards > 0 ? (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              {dueCount > 0
-                ? `${dueCount} card${dueCount === 1 ? "" : "s"} due for review`
-                : "Nothing due today"}
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+              Today
+              <Badge variant="secondary">
+                about {formatMinutes(plan.today.minutes)}
+              </Badge>
+              {plan.daysLeft !== null ? (
+                <Badge variant="outline">
+                  {plan.daysLeft === 0
+                    ? "Exam today"
+                    : `${plan.daysLeft} day${plan.daysLeft === 1 ? "" : "s"} to go`}
+                </Badge>
+              ) : null}
+              {plan.workload.deficitMinutes ? (
+                <Badge variant="destructive">More material than time</Badge>
+              ) : null}
             </CardTitle>
             <CardDescription>
-              {mastery.studied === 0
-                ? "Reviews are scheduled as you study — nothing has been graded yet."
-                : `${mastery.retained} retained across days · ${mastery.immediateRecall} recalled unaided · ${mastery.recognition} recognized · ${stats.flashcards - mastery.studied} unstudied.`}
+              {dueCount > 0
+                ? `${dueCount} review${dueCount === 1 ? "" : "s"} due`
+                : "Nothing due"}
+              {plan.today.fresh > 0
+                ? ` · ${plan.today.fresh} new concept${plan.today.fresh === 1 ? "" : "s"}`
+                : ""}
+              {plan.today.struggling > 0
+                ? ` · ${plan.today.struggling} stuck`
+                : ""}
+              {mastery.studied > 0
+                ? ` · ${mastery.retained} retained across days`
+                : ""}
+              .
             </CardDescription>
           </CardHeader>
-          {dueCount > 0 ? (
-            <CardContent className="flex flex-wrap gap-2">
+          <CardContent className="flex flex-wrap gap-2">
+            {dueCount > 0 ? (
               <Button asChild>
                 <Link href={`/exams/${examId}/study`}>Review now</Link>
               </Button>
-              <Button asChild variant="outline">
-                <Link href={`/exams/${examId}/learn`}>Review in Learn</Link>
+            ) : null}
+            {plan.today.fresh > 0 ? (
+              <Button asChild variant={dueCount > 0 ? "outline" : "default"}>
+                <Link href={`/exams/${examId}/learn`}>Learn something new</Link>
               </Button>
-            </CardContent>
-          ) : null}
+            ) : null}
+            <Button asChild variant="outline">
+              <Link href={`/exams/${examId}/plan`}>
+                {exam.date ? "Study plan" : "Set an exam date"}
+              </Link>
+            </Button>
+          </CardContent>
         </Card>
       ) : null}
 

@@ -740,6 +740,63 @@ a row, progress is written as batches complete, and the panel polls it, so
 
 ---
 
+## Phase 13 — Exam-Date Planning & Load Management (PRD §12) ✅
+
+**Goal:** Turn a deck too big to finish into a plan for today, and say so early
+when the days left are not enough.
+
+- [x] Exam date and minutes-a-day on the deck
+- [x] Today's plan: due reviews, then stuck cards, then new concepts, to budget
+- [x] Workload against the calendar, reviews included
+- [x] Triage when work exceeds time, with what each cut actually saves
+- [x] Summary on the exam overview, detail at `/exams/[examId]/plan`
+- [x] Tests: 23
+
+**Why this one:** the deck in use here has 867 cards and three of them studied.
+Without a plan, the first serious study session schedules hundreds of reviews
+and the student discovers the shortfall the night before. With a date set, the
+page says it plainly: **about 55 hours of work remains, 10 hours 30 minutes
+before the exam, which would need 3 hr 55 min a day.** That is worth knowing
+two weeks out.
+
+**The estimates are guesses with a stated basis.** A new concept is costed at
+the whole ladder — recognise, recall, recall again, delayed check — not one
+look at a card, which is why it is ten times a flip review. They lean
+pessimistic on purpose: a plan that overruns teaches a student to distrust it.
+
+**Reviews are counted along the real ladder.** `reviewsWithin(days)` walks the
+scheduler's own intervals (1, 3, 7, 17…) rather than assuming a review a day,
+so a fortnight costs three reviews per card rather than fourteen. A planner
+that got this wrong would either panic the student or lull them.
+
+**Cuts are offered in order of what is least load-bearing:** application
+questions first, then cards no objective asks for, then everything outside the
+professor's emphasis. The middle two appear only when a coverage matrix exists,
+because without one "covers no objective" is not something the app knows.
+Nothing is deleted by choosing one — they are a reading order, not a purge.
+
+### Also fixed
+
+- [x] **A generation job left running by a crash locked the deck forever.** The
+      route refuses a second run while one is active, so a row stuck in
+      "running" was a permanent block, not a stale spinner. A job whose progress
+      has stopped for fifteen minutes is now closed out when it is next looked
+      at — nothing else can do it, since the process that would have finished it
+      is the one that died.
+
+**Known limits (deliberate, deferred):**
+- The plan describes today; it does not build the queue. Starting a session
+  still picks its own scope, so a student could follow the plan's numbers with a
+  different set of cards.
+- Time estimates are uniform per card type. A one-line definition and a
+  five-step pathway are costed the same.
+- Choosing a cut is advice, not an action: it does not exclude those cards for
+  you.
+- After a migration, restart `next dev` — the database client is cached on
+  `globalThis` to survive hot reloads, so it holds the schema it started with.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
-Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · exam-date planning and load management (§12) · full progress analytics dashboard (§13) · full undo history (§15).
+Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · full progress analytics dashboard (§13) · full undo history (§15).

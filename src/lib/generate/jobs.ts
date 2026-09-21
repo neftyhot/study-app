@@ -20,8 +20,29 @@ import { generateCardsForExam, type GenerateOptions } from "./index";
 
 export type JobMode = "append" | "replace" | "separate";
 
-export function activeJob(db: Db, examId: string): GenerationJob | undefined {
-  return db
+/**
+ * How long a job may go without a progress write before it is presumed dead.
+ *
+ * Generous: a single batch against a slow local model can take minutes. But it
+ * has to be finite, because a job left "running" by a crash or a quit would
+ * block this deck from ever generating again — the route refuses a second run,
+ * so a stuck row is a permanent lock rather than a stale display.
+ */
+export const STALE_AFTER_MS = 15 * 60_000;
+
+/**
+ * The run currently in flight, if there is one.
+ *
+ * A job whose progress has stopped for longer than `STALE_AFTER_MS` is closed
+ * out here rather than reported as running. Nothing else can do it: the
+ * process that would have finished the job is the one that died.
+ */
+export function activeJob(
+  db: Db,
+  examId: string,
+  now: number = Date.now(),
+): GenerationJob | undefined {
+  const job = db
     .select()
     .from(generationJobs)
     .where(
@@ -29,6 +50,21 @@ export function activeJob(db: Db, examId: string): GenerationJob | undefined {
     )
     .orderBy(desc(generationJobs.startedAt))
     .get();
+
+  if (!job) return undefined;
+
+  const lastSeen = Date.parse(job.updatedAt);
+  if (Number.isFinite(lastSeen) && now - lastSeen > STALE_AFTER_MS) {
+    touch(db, job.id, {
+      status: "failed",
+      error:
+        "Generation stopped unexpectedly — the app was closed or the model became unavailable. The cards it had already saved were kept.",
+      finishedAt: new Date(now).toISOString(),
+    });
+    return undefined;
+  }
+
+  return job;
 }
 
 /** The job to show: whatever is running, else the most recent result. */

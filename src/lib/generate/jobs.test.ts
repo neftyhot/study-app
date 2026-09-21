@@ -21,7 +21,12 @@ import {
 } from "@/db/schema";
 import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 
-import { activeJob, latestJob, startGenerationJob } from "./jobs";
+import {
+  activeJob,
+  latestJob,
+  startGenerationJob,
+  STALE_AFTER_MS,
+} from "./jobs";
 import type { GenerationResponse } from "./schemas";
 
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -211,5 +216,36 @@ describe("startGenerationJob", () => {
 
     expect(db.select().from(generationJobs).where(eq(generationJobs.id, job.id)).get()
       ?.targetExamId).toBe(other.id);
+  });
+});
+
+describe("a job whose process died", () => {
+  it("is closed out rather than blocking the deck forever", () => {
+    seedSlides(8);
+    const job = startGenerationJob(db, stubProvider(), examId);
+
+    // Simulate the app being quit mid-run: the row stays "running" because
+    // the process that would have finished it is gone.
+    const longAgo = new Date(Date.now() - STALE_AFTER_MS - 60_000).toISOString();
+    db.update(generationJobs)
+      .set({ updatedAt: longAgo })
+      .where(eq(generationJobs.id, job.id))
+      .run();
+
+    // The route refuses a second run while one is active, so a stuck row is a
+    // permanent lock, not just a stale spinner.
+    expect(activeJob(db, examId)).toBeUndefined();
+
+    const closed = latestJob(db, examId)!;
+    expect(closed.status).toBe("failed");
+    expect(closed.error).toContain("stopped unexpectedly");
+    expect(closed.finishedAt).not.toBeNull();
+  });
+
+  it("leaves a job that is still writing progress alone", () => {
+    seedSlides(8);
+    startGenerationJob(db, stubProvider(), examId);
+
+    expect(activeJob(db, examId)).toBeDefined();
   });
 });
