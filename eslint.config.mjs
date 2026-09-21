@@ -15,8 +15,12 @@ const eslintConfig = defineConfig([
     // Packaged desktop output: built artifacts, not source.
     "release/**",
     // Electron's main process is CommonJS by necessity; the web app's rules
-    // (ESM imports, React hooks) do not apply to it.
+    // (ESM imports, React hooks) do not apply to it. Same for the License
+    // Authority, which is a separate Electron app.
     "electron/**",
+    "tools/**",
+    // Packaged admin tooling: built artifacts, not source.
+    "dist-admin/**",
   ]),
 ]);
 

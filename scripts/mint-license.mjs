@@ -7,12 +7,12 @@
  * Developer-only. It reads `.license-private-key.pem`, which is gitignored and
  * never packaged — the shipped app carries only the public half, which is the
  * whole point of signing these asymmetrically.
+ *
+ * Every key minted here is also recorded in `licenses.json`, the same ledger
+ * the license manager reads: a key issued at the command line and one issued
+ * in the GUI are the same thing and belong in the same place.
  */
-import { createPrivateKey, sign } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
-
-const PRIVATE_KEY_PATH = ".license-private-key.pem";
+import { daysLeft, mintLicense, paths } from "./license-store.mjs";
 
 function parseArgs(argv) {
   const args = {};
@@ -34,78 +34,51 @@ function parseArgs(argv) {
 function usage(message) {
   console.error(
     `${message}\n\n` +
-      "  node scripts/mint-license.mjs --type admin\n" +
-      "  node scripts/mint-license.mjs --type student --days 14 [--machine <id>] [--name <who>]\n",
+      "  node scripts/mint-license.mjs --type admin [--name <who>]\n" +
+      "  node scripts/mint-license.mjs --type student --days 14 [--machine <id>] [--name <who>]\n\n" +
+      "  npm run license:manager   for the GUI\n",
   );
   process.exit(1);
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const type = args.type;
 
-  if (type !== "admin" && type !== "student") {
+  if (args.type !== "admin" && args.type !== "student") {
     usage("--type must be 'admin' or 'student'.");
   }
 
-  let key;
-  try {
-    key = createPrivateKey(readFileSync(PRIVATE_KEY_PATH));
-  } catch {
-    usage(
-      `Could not read ${PRIVATE_KEY_PATH}. It is the developer's signing key and is never committed.`,
+  if (args.type === "student" && typeof args.machine !== "string") {
+    console.error(
+      "warning: no --machine given, so this key will work on any computer.\n",
     );
   }
 
-  if (key.asymmetricKeyType !== "ed25519") {
-    usage(`${PRIVATE_KEY_PATH} is not an Ed25519 key.`);
+  let record;
+  try {
+    record = mintLicense({
+      name: typeof args.name === "string" ? args.name : undefined,
+      type: args.type,
+      days: args.days,
+      machineId: typeof args.machine === "string" ? args.machine : null,
+    });
+  } catch (error) {
+    usage(error.message);
   }
 
-  const payload = {
-    id: randomUUID(),
-    type,
-    issuedAt: Date.now(),
-  };
-
-  if (args.name && typeof args.name === "string") payload.name = args.name;
-
-  if (type === "student") {
-    const days = Number(args.days ?? 14);
-    if (!Number.isFinite(days) || days <= 0) {
-      usage("--days must be a positive number.");
-    }
-
-    payload.expiresAt = Date.now() + days * 86_400_000;
-
-    if (typeof args.machine === "string") {
-      payload.machineId = args.machine;
-    } else {
-      console.error(
-        "warning: no --machine given, so this key will work on any computer.\n",
-      );
-    }
-  }
-
-  // The exact bytes that get signed are the bytes that travel, so verification
-  // never has to reproduce this serialisation.
-  const payloadBytes = Buffer.from(JSON.stringify(payload), "utf8");
-  const signature = sign(null, payloadBytes, key);
-
-  const token = Buffer.from(
-    JSON.stringify({
-      payload: payloadBytes.toString("base64"),
-      signature: signature.toString("base64"),
-    }),
-    "utf8",
-  ).toString("base64");
+  const remaining = daysLeft(record);
 
   console.error(
-    `${type} license${payload.expiresAt ? `, expires ${new Date(payload.expiresAt).toISOString().slice(0, 10)}` : ", never expires"}${
-      payload.machineId ? `, locked to ${payload.machineId}` : ""
-    }\n`,
+    `${record.type} license${
+      record.expiresAt
+        ? `, expires ${new Date(record.expiresAt).toISOString().slice(0, 10)} (${remaining} days)`
+        : ", never expires"
+    }${record.machineId ? `, locked to ${record.machineId}` : ""}\n` +
+      `recorded in ${paths().licenses}\n`,
   );
+
   // The token alone goes to stdout, so it can be piped or copied cleanly.
-  console.log(token);
+  console.log(record.token);
 }
 
 main();

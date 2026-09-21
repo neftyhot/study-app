@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Study Suite - License Authority</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0b0d; --panel: #131316; --fg: #f4f4f5; --muted: #a1a1aa;
+        --border: #27272a; --accent: #f4f4f5; --accent-fg: #18181b;
+        --bad: #f87171; --bad-bg: #1f1315; --good: #4ade80; --warn: #fbbf24;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; background: var(--bg); color: var(--fg);
+        font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      header {
+        padding: 38px 24px 14px; border-bottom: 1px solid var(--border);
+        -webkit-app-region: drag;
+      }
+      header h1 { margin: 0; font-size: 16px; letter-spacing: -0.01em; }
+      header p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+      main { padding: 20px 24px 40px; display: grid; gap: 20px; }
+      .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+      .panel > h2 {
+        margin: 0; padding: 14px 16px; font-size: 13px; font-weight: 600;
+        border-bottom: 1px solid var(--border);
+      }
+      .panel > .body { padding: 16px; }
+      .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+      label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+      input, select {
+        width: 100%; padding: 8px 10px; border-radius: 6px; font: inherit;
+        background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+      }
+      input:disabled { opacity: 0.45; }
+      button {
+        border: 1px solid var(--border); border-radius: 6px; padding: 7px 12px;
+        background: var(--panel); color: var(--fg); font: inherit; font-size: 12px;
+        cursor: pointer; white-space: nowrap;
+      }
+      button:hover:not(:disabled) { border-color: var(--muted); }
+      button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); font-weight: 500; }
+      button.danger { color: var(--bad); }
+      button:disabled { opacity: 0.45; cursor: default; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+      th { color: var(--muted); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+      tr:last-child td { border-bottom: none; }
+      td.mono, code { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .tag {
+        display: inline-block; padding: 2px 7px; border-radius: 999px;
+        border: 1px solid var(--border); font-size: 11px;
+      }
+      .tag.admin { border-color: var(--good); color: var(--good); }
+      .tag.student { border-color: var(--muted); color: var(--muted); }
+      .tag.revoked { border-color: var(--bad); color: var(--bad); }
+      .tag.expiring { border-color: var(--warn); color: var(--warn); }
+      .alert { border: 1px solid var(--bad); background: var(--bad-bg); color: var(--bad);
+               border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; }
+      .alert[hidden], .empty[hidden] { display: none; }
+      .empty { color: var(--muted); padding: 22px 6px; text-align: center; }
+      .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .spacer { flex: 1; }
+      .paths { color: var(--muted); font-size: 11px; }
+      .paths code { color: var(--fg); overflow-wrap: anywhere; }
+      .actions { display: flex; gap: 6px; justify-content: flex-end; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Study Suite — License Authority</h1>
+      <p>Signs offline licences for the student app. Runs only on this machine.</p>
+    </header>
+
+    <main>
+      <div id="alert" class="alert" role="alert" hidden></div>
+
+      <section class="panel">
+        <h2>Mint a key</h2>
+        <div class="body">
+          <div class="grid">
+            <div>
+              <label for="name">Name / label</label>
+              <input id="name" placeholder="Megan" autocomplete="off" />
+            </div>
+            <div>
+              <label for="type">Tier</label>
+              <select id="type">
+                <option value="student">Student — exam window</option>
+                <option value="admin">Admin — lifetime</option>
+              </select>
+            </div>
+            <div>
+              <label for="days">Valid for (days)</label>
+              <input id="days" type="number" min="1" max="3650" value="14" />
+            </div>
+            <div>
+              <label for="machine">Machine ID (optional)</label>
+              <input id="machine" placeholder="Locks the key to one computer" autocomplete="off" />
+            </div>
+          </div>
+
+          <div class="row" style="margin-top: 14px">
+            <button id="mint" class="primary" type="button">Generate key</button>
+            <span id="mint-status" class="paths"></span>
+            <span class="spacer"></span>
+            <button id="copy-last" type="button" hidden>Copy new token</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Issued keys</h2>
+        <div class="body" style="padding: 0">
+          <div id="empty" class="empty">No keys issued yet.</div>
+          <table id="table" hidden>
+            <thead>
+              <tr>
+                <th>Name</th><th>Tier</th><th>Machine</th>
+                <th>Expires</th><th>Status</th><th>Token</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Storage</h2>
+        <div class="body">
+          <p class="paths">Signing key<br /><code id="path-key">…</code></p>
+          <p class="paths">Ledger<br /><code id="path-ledger">…</code></p>
+          <div class="row" style="margin-top: 12px">
+            <button id="choose" type="button">Change folder…</button>
+            <button id="reveal" type="button">Show in Finder</button>
+            <span id="key-status" class="paths"></span>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const alertBox = $("alert");
+      let lastToken = null;
+
+      function fail(message) {
+        alertBox.textContent = message;
+        alertBox.hidden = false;
+      }
+      function clearAlert() { alertBox.hidden = true; }
+
+      function formatDate(ms) {
+        return ms ? new Date(ms).toLocaleDateString() : "—";
+      }
+
+      function expiryCell(record) {
+        if (!record.expiresAt) return "Never";
+        const left = record.daysLeft;
+        const cls = left === 0 ? "revoked" : left <= 3 ? "expiring" : "student";
+        const label = left === 0 ? "expired" : `${left}d left`;
+        return `${formatDate(record.expiresAt)} <span class="tag ${cls}">${label}</span>`;
+      }
+
+      function render(state) {
+        $("path-key").textContent = state.paths.privateKey;
+        $("path-ledger").textContent = state.paths.licenses;
+        $("key-status").textContent = state.hasPrivateKey
+          ? "Signing key found."
+          : "No signing key in this folder — minting is disabled.";
+        $("mint").disabled = !state.hasPrivateKey;
+
+        const rows = $("rows");
+        rows.textContent = "";
+
+        const records = [...state.licenses].sort((a, b) => b.issuedAt - a.issuedAt);
+        $("table").hidden = records.length === 0;
+        $("empty").hidden = records.length !== 0;
+
+        for (const record of records) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${record.name ? escapeHtml(record.name) : "<span class='paths'>unnamed</span>"}</td>
+            <td><span class="tag ${record.type}">${record.type}</span></td>
+            <td class="mono">${record.machineId ? escapeHtml(record.machineId) : "<span class='paths'>any</span>"}</td>
+            <td>${expiryCell(record)}</td>
+            <td><span class="tag ${record.status === "revoked" ? "revoked" : "student"}">${record.status}</span></td>
+            <td class="mono">${record.token.slice(0, 12)}…</td>
+            <td class="actions"></td>`;
+
+          const actions = tr.querySelector(".actions");
+          actions.append(
+            button("Copy", () => copy(record.token)),
+            button(record.status === "revoked" ? "Restore" : "Revoke", async () => {
+              render(await window.authority.setStatus(
+                record.id,
+                record.status === "revoked" ? "active" : "revoked",
+              ));
+            }, record.status === "revoked" ? "" : "danger"),
+            button("Delete", async () => {
+              if (!confirm(`Delete the record for ${record.name ?? "this key"}?\n\nThe key itself keeps working until it expires — deleting only forgets it here. Revoke instead if you want a record.`)) return;
+              render(await window.authority.remove(record.id));
+            }, "danger"),
+          );
+
+          rows.append(tr);
+        }
+      }
+
+      function button(label, onClick, className = "") {
+        const element = document.createElement("button");
+        element.type = "button";
+        element.textContent = label;
+        if (className) element.className = className;
+        element.addEventListener("click", onClick);
+        return element;
+      }
+
+      function escapeHtml(value) {
+        return String(value).replace(/[&<>"']/g, (c) => (
+          { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+        ));
+      }
+
+      async function copy(text) {
+        await window.authority.copy(text);
+        $("mint-status").textContent = "Token copied to the clipboard.";
+        setTimeout(() => ($("mint-status").textContent = ""), 2000);
+      }
+
+      $("type").addEventListener("change", () => {
+        const student = $("type").value === "student";
+        $("days").disabled = !student;
+        $("machine").disabled = !student;
+        if (student && !$("days").value) $("days").value = "14";
+      });
+
+      $("mint").addEventListener("click", async () => {
+        clearAlert();
+        $("mint").disabled = true;
+        $("mint-status").textContent = "Signing…";
+
+        const result = await window.authority.mint({
+          name: $("name").value,
+          type: $("type").value,
+          days: Number($("days").value || 14),
+          machineId: $("machine").value,
+        });
+
+        $("mint").disabled = false;
+
+        if (!result.ok) {
+          $("mint-status").textContent = "";
+          fail(result.error);
+          return;
+        }
+
+        lastToken = result.record.token;
+        $("copy-last").hidden = false;
+        $("mint-status").textContent = "Key generated and recorded.";
+        $("name").value = "";
+        $("machine").value = "";
+        render(result.state);
+      });
+
+      $("copy-last").addEventListener("click", () => lastToken && copy(lastToken));
+      $("reveal").addEventListener("click", () => window.authority.reveal());
+      $("choose").addEventListener("click", async () => {
+        clearAlert();
+        render(await window.authority.chooseFolder());
+      });
+
+      window.authority.state().then(render).catch((error) => fail(String(error)));
+    </script>
+  </body>
+</html>

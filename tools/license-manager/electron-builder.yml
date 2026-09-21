@@ -1,0 +1,41 @@
+# Packaging for the License Authority.
+#
+# Deliberately a separate config from the student client's: this app contains
+# the tooling that signs licences and must never be built into, or alongside,
+# the app that checks them. Different appId, different output directory,
+# different file set.
+#
+#   npm run license-manager:build   ->  dist-admin/License Manager.app
+appId: app.study.license-authority
+productName: License Manager
+copyright: Local developer tooling — not for distribution
+
+directories:
+  output: dist-admin
+
+# Only the manager's own files and the shared ledger module. Notably absent:
+# the signing key and licenses.json, which stay on the machine that made them.
+files:
+  - tools/license-manager/main.js
+  - tools/license-manager/preload.js
+  - tools/license-manager/index.html
+  - tools/license-manager/handlers.js
+  - package.json
+  - "!**/node_modules/**"
+
+extraFiles:
+  # The store is ESM and loaded by path at runtime, so it travels beside the
+  # main file rather than being bundled into it.
+  - from: scripts/license-store.mjs
+    to: Resources/app/tools/license-manager/license-store.mjs
+
+extraMetadata:
+  main: tools/license-manager/main.js
+
+asar: false
+npmRebuild: false
+
+mac:
+  target:
+    - dir
+  category: public.app-category.developer-tools

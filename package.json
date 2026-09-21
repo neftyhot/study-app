@@ -21,7 +21,11 @@
     "electron:dev": "concurrently -k -n next,electron -c cyan,magenta \"next dev\" \"wait-on tcp:3000 && electron .\"",
     "electron:build": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder",
     "electron:pack": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder --dir",
-    "electron:compile": "ELECTRON_RUN_AS_NODE=1 electron scripts/compile-main.mjs"
+    "electron:compile": "ELECTRON_RUN_AS_NODE=1 electron scripts/compile-main.mjs",
+    "license-manager:dev": "electron tools/license-manager/main.js",
+    "license-manager:build": "electron-builder --config tools/license-manager/electron-builder.yml --mac --arm64",
+    "license:manager": "npm run license-manager:dev",
+    "license-manager:selftest": "electron tools/license-manager/selftest.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
@@ -81,6 +85,10 @@
       ".next/standalone/**/*",
       "!**/node_modules/.bin/**",
       "!**/node_modules/electron/**",
+      "!tools/**",
+      "!licenses.json",
+      "!revocations.json",
+      "!.license-private-key.pem",
       "package.json"
     ],
     "extraMetadata": {
