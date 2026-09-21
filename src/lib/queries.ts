@@ -128,6 +128,49 @@ export async function getCoverageMatrix(examId: string) {
 
 export type CoverageRow = Awaited<ReturnType<typeof getCoverageMatrix>>[number];
 
+/**
+ * Whether the coverage matrix still describes the deck it was built from.
+ *
+ * A matrix is a snapshot. Regenerate, or delete a source file, and it keeps
+ * answering confidently about cards that no longer exist — which is worse than
+ * having no matrix at all, because it is believed.
+ */
+export async function getCoverageFreshness(examId: string) {
+  const [run] = await db
+    .select({
+      reviewedAt: objectiveCoverage.reviewedAt,
+      cardsConsidered: objectiveCoverage.cardsConsidered,
+    })
+    .from(objectiveCoverage)
+    .innerJoin(
+      studyGuideObjectives,
+      eq(objectiveCoverage.objectiveId, studyGuideObjectives.id),
+    )
+    .where(eq(studyGuideObjectives.examId, examId))
+    .orderBy(desc(objectiveCoverage.reviewedAt))
+    .limit(1);
+
+  if (!run) return { analyzed: false, stale: false, cardsNow: 0, cardsThen: 0 };
+
+  const [cards] = await db
+    .select({ n: count() })
+    .from(flashcards)
+    .where(and(eq(flashcards.examId, examId), eq(flashcards.excluded, false)));
+
+  const cardsNow = cards?.n ?? 0;
+  const cardsThen = run.cardsConsidered;
+
+  return {
+    analyzed: true,
+    // A run recorded before this field existed reports zero; treat that as
+    // unknown rather than as "every card is new".
+    stale: cardsThen > 0 && cardsNow !== cardsThen,
+    cardsNow,
+    cardsThen,
+    reviewedAt: run.reviewedAt,
+  };
+}
+
 /** Headline coverage counts for the exam overview. */
 export async function getCoverageStats(examId: string) {
   const rows = await db

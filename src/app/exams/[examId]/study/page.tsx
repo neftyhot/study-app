@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StudyDeck, type StudyCardView } from "@/components/study/study-deck";
+import { MINUTES } from "@/lib/plan/estimate";
 import {
   countDueCards,
   getExam,
@@ -70,6 +71,11 @@ export default async function StudyPage(
         cards={views}
         topics={topics}
         dueCount={dueCount}
+        reviewCap={
+          exam.dailyMinutes
+            ? Math.max(1, Math.floor(exam.dailyMinutes / MINUTES.typedReview))
+            : null
+        }
         session={
           session
             ? {

@@ -1,0 +1,1 @@
+ALTER TABLE `objective_coverage` ADD `cards_considered` integer DEFAULT 0 NOT NULL;

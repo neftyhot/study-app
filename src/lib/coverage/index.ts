@@ -124,7 +124,15 @@ export async function analyzeCoverageForExam(
     options.onProgress?.({ phase: "conflicts", batchIndex: 0, batchCount: 1 });
   }
 
-  persist(db, examId, objectives, mapping.mappings, review.reviews, scan.conflicts);
+  persist(
+    db,
+    examId,
+    objectives,
+    mapping.mappings,
+    review.reviews,
+    scan.conflicts,
+    cards.length,
+  );
 
   const reviewByObjective = new Map(
     review.reviews.map((r) => [r.objective.id, r]),
@@ -302,6 +310,7 @@ function persist(
   mappings: ResolvedMapping[],
   reviews: ResolvedReview[],
   conflicts: Awaited<ReturnType<typeof scanForConflicts>>["conflicts"],
+  cardCount: number,
 ) {
   const objectiveIds = objectives.map((o) => o.id);
   const reviewByObjective = new Map(reviews.map((r) => [r.objective.id, r]));
@@ -330,6 +339,7 @@ function persist(
       tx.insert(objectiveCoverage)
         .values({
           objectiveId: entry.objective.id,
+          cardsConsidered: cardCount,
           status: entry.status,
           rationale: entry.rationale || null,
           missingPoints: mergePoints(

@@ -100,12 +100,14 @@ export function StudyDeck({
   cards,
   topics,
   dueCount,
+  reviewCap,
   session: initialSession,
 }: {
   examId: string;
   cards: StudyCardView[];
   topics: string[];
   dueCount: number;
+  reviewCap: number | null;
   session: SessionView | null;
 }) {
   const [deck, setDeck] = useState(cards);
@@ -304,6 +306,7 @@ export function StudyDeck({
         cards={deck}
         topics={topics}
         dueCount={dueCount}
+        reviewCap={reviewCap}
         onStart={start}
       />
     );
@@ -592,11 +595,14 @@ function DeckPicker({
   cards,
   topics,
   dueCount,
+  reviewCap,
   onStart,
 }: {
   cards: StudyCardView[];
   topics: string[];
   dueCount: number;
+  /** Reviews the stated daily budget allows, if one is set. */
+  reviewCap: number | null;
   onStart: (filter: {
     scope: StudyScope;
     topic: string | null;
@@ -719,6 +725,9 @@ function DeckPicker({
           </Button>
           <span className="text-muted-foreground text-sm">
             {available} card{available === 1 ? "" : "s"} in this deck
+            {scope === "due" && reviewCap && available > reviewCap
+              ? ` — today's session will take the ${reviewCap} longest overdue`
+              : ""}
           </span>
         </div>
       </CardContent>

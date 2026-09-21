@@ -34,6 +34,15 @@ export type QueueFilter = {
    * a deck without them behaves exactly as it did before they existed.
    */
   includeApplication?: boolean;
+  /**
+   * Most cards to put in the session.
+   *
+   * A backlog is the normal state of an SRS deck, and handing someone four
+   * hundred due cards is how a deck gets abandoned. Capping keeps the session
+   * finishable; the rest stay due and come back tomorrow, longest-overdue
+   * first, which is the order that matters.
+   */
+  limit?: number;
 };
 
 export type QueueCard = {
@@ -96,7 +105,8 @@ export function buildQueue(
         )
       : selected;
 
-  return ordered.map((card) => card.id);
+  const ids = ordered.map((card) => card.id);
+  return filter.limit && filter.limit > 0 ? ids.slice(0, filter.limit) : ids;
 }
 
 export { todayIso };

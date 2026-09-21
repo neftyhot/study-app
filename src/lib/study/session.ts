@@ -9,11 +9,13 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
+  exams,
   flashcards,
   studyProgress,
   studySessions,
   type StudySession,
 } from "@/db/schema";
+import { MINUTES } from "@/lib/plan/estimate";
 
 import { qualityForGrade, scheduleFor } from "@/lib/srs";
 
@@ -36,6 +38,35 @@ export function loadQueueCards(db: Db, examId: string): QueueCard[] {
     .where(eq(flashcards.examId, examId))
     .orderBy(flashcards.topic, flashcards.createdAt)
     .all();
+}
+
+/**
+ * How many reviews one sitting should hold.
+ *
+ * Only applies to a due queue: a backlog is the normal state of a spaced deck,
+ * and a session of four hundred cards is one nobody finishes. The cap comes
+ * from the time the student said they have, so it is their number rather than
+ * an arbitrary one. Without a stated budget there is no cap, because guessing
+ * one would be worse than showing everything.
+ */
+export function reviewCap(
+  db: Db,
+  examId: string,
+  filter: QueueFilter,
+): number | undefined {
+  if (filter.scope !== "due") return undefined;
+
+  const exam = db
+    .select({ dailyMinutes: exams.dailyMinutes })
+    .from(exams)
+    .where(eq(exams.id, examId))
+    .get();
+
+  if (!exam?.dailyMinutes) return undefined;
+
+  // Reviews get the whole budget here; the plan page is where the day is
+  // split between reviews and new material.
+  return Math.max(1, Math.floor(exam.dailyMinutes / MINUTES.typedReview));
 }
 
 export function openSession(db: Db, examId: string): StudySession | undefined {
@@ -64,7 +95,10 @@ export function startSession(
   examId: string,
   filter: QueueFilter,
 ): StudySession {
-  const order = buildQueue(loadQueueCards(db, examId), filter);
+  const order = buildQueue(loadQueueCards(db, examId), {
+    ...filter,
+    limit: filter.limit ?? reviewCap(db, examId, filter),
+  });
 
   const existing = openSession(db, examId);
   if (existing) completeSession(db, existing.id);

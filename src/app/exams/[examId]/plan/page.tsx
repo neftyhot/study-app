@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { CalendarClock, Scissors, TriangleAlert } from "lucide-react";
 
 import { ScheduleForm } from "@/components/plan/schedule-form";
+import { StartToday } from "@/components/plan/start-today";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -91,6 +92,18 @@ export default async function PlanPage(
             <Slice label="Reviews due" value={plan.today.due} href={`/exams/${examId}/study`} />
             <Slice label="Stuck cards" value={plan.today.struggling} href={`/exams/${examId}/learn`} />
             <Slice label="New concepts" value={plan.today.fresh} href={`/exams/${examId}/learn`} />
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <StartToday examId={examId} due={plan.today.due} />
+            {plan.today.fresh > 0 ? (
+              <Button asChild variant={plan.today.due > 0 ? "outline" : "default"}>
+                <Link href={`/exams/${examId}/learn`}>
+                  Learn {plan.today.fresh} new concept
+                  {plan.today.fresh === 1 ? "" : "s"}
+                </Link>
+              </Button>
+            ) : null}
           </div>
 
           {plan.today.reviewsFillTheDay ? (

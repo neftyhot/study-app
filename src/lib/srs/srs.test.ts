@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
 import { courses, exams, flashcards, studyProgress } from "@/db/schema";
-import { gradeCard } from "@/lib/study/session";
+import { gradeCard, startSession } from "@/lib/study/session";
 import { buildQueue, filterCards, type QueueCard } from "@/lib/study/queue";
 
 import {
@@ -359,5 +359,96 @@ describe("scheduling through a graded session", () => {
     expect(row?.lapses).toBe(1);
     expect(row?.intervalDays).toBe(1);
     expect(row?.nextReviewDue).not.toBeNull();
+  });
+});
+
+describe("a backlog does not become an unfinishable session", () => {
+  type TestDb2 = ReturnType<typeof drizzle<typeof schema>>;
+  let db2: TestDb2;
+  let examId2: string;
+
+  beforeEach(() => {
+    const sqlite = new Database(":memory:");
+    sqlite.pragma("foreign_keys = ON");
+    db2 = drizzle(sqlite, { schema });
+    migrate(db2, { migrationsFolder: "./drizzle" });
+
+    const courseId = db2
+      .insert(courses)
+      .values({ title: "Physiology" })
+      .returning()
+      .get().id;
+    examId2 = db2
+      .insert(exams)
+      .values({ courseId, title: "Exam", dailyMinutes: 30 })
+      .returning()
+      .get().id;
+
+    const ids = db2
+      .insert(flashcards)
+      .values(
+        Array.from({ length: 200 }, (_, i) => ({
+          examId: examId2,
+          question: `Q${i}`,
+          directAnswer: `A${i}`,
+        })),
+      )
+      .returning()
+      .all()
+      .map((row) => row.id);
+
+    // Every card overdue by a different amount, as a real backlog is.
+    db2
+      .insert(studyProgress)
+      .values(
+        ids.map((flashcardId, i) => ({
+          flashcardId,
+          state: "retained" as const,
+          intervalDays: 5,
+          nextReviewDue: addDays(todayIso(), -(i % 30) - 1),
+        })),
+      )
+      .run();
+  });
+
+  it("caps a due session at what the stated budget allows", () => {
+    const session = startSession(db2, examId2, { scope: "due" });
+
+    // 30 minutes of typed reviews at 0.6 each is fifty cards, not two hundred.
+    expect(session.cardOrder).toHaveLength(50);
+  });
+
+  it("still leads with the longest overdue", () => {
+    const session = startSession(db2, examId2, { scope: "due" });
+    const first = db2
+      .select()
+      .from(studyProgress)
+      .where(eq(studyProgress.flashcardId, session.cardOrder[0]))
+      .get()!;
+
+    const due = db2.select().from(studyProgress).all();
+    const oldest = due
+      .map((row) => row.nextReviewDue!)
+      .sort()[0];
+
+    expect(first.nextReviewDue).toBe(oldest);
+  });
+
+  it("does not cap the whole deck, only the review queue", () => {
+    const session = startSession(db2, examId2, { scope: "all" });
+    expect(session.cardOrder).toHaveLength(200);
+  });
+
+  it("shows everything when no daily budget has been stated", () => {
+    db2.update(exams).set({ dailyMinutes: null }).where(eq(exams.id, examId2)).run();
+
+    // Guessing a cap would be worse than showing the backlog honestly.
+    const session = startSession(db2, examId2, { scope: "due" });
+    expect(session.cardOrder).toHaveLength(200);
+  });
+
+  it("respects an explicit limit over the budget", () => {
+    const session = startSession(db2, examId2, { scope: "due", limit: 12 });
+    expect(session.cardOrder).toHaveLength(12);
   });
 });

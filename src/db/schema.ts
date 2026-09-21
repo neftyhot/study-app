@@ -325,6 +325,15 @@ export const objectiveCoverage = sqliteTable(
       .default([]),
     /** Secondary review pass: does the source material support this at all? */
     sourceSupport: text("source_support", { enum: sourceSupportLevels }),
+    /**
+     * How many cards the deck held when this verdict was reached.
+     *
+     * A coverage matrix describes a deck at a moment. Regenerate, or delete a
+     * source file, and it silently describes a deck that no longer exists —
+     * so the count is recorded and compared, and the page says when it is out
+     * of date rather than presenting stale verdicts as current.
+     */
+    cardsConsidered: integer("cards_considered").notNull().default(0),
     /** Where the review found supporting material, when it found any. */
     supportingSlideId: text("supporting_slide_id").references(
       () => sourceSlides.id,

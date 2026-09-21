@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CircleAlert, CircleCheck, CircleSlash, FileWarning } from "lucide-react";
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleSlash,
+  FileWarning,
+  TriangleAlert,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,6 +20,7 @@ import { ConflictCard } from "@/components/coverage/conflict-card";
 import { CoveragePanel } from "@/components/coverage/coverage-panel";
 import {
   countReadyAnswerFiles,
+  getCoverageFreshness,
   getCoverageMatrix,
   getExam,
   getExamStats,
@@ -28,11 +35,12 @@ export default async function CoveragePage(
   const exam = await getExam(examId);
   if (!exam) notFound();
 
-  const [rows, conflicts, stats, fileCount] = await Promise.all([
+  const [rows, conflicts, stats, fileCount, freshness] = await Promise.all([
     getCoverageMatrix(examId),
     listConflicts(examId),
     getExamStats(examId),
     countReadyAnswerFiles(examId),
+    getCoverageFreshness(examId),
   ]);
 
   const analyzed = rows.filter((row) => row.verdict);
@@ -67,6 +75,22 @@ export default async function CoveragePage(
           those cards came from.
         </p>
       </div>
+
+      {freshness.stale ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TriangleAlert className="size-4" />
+              This matrix is out of date
+            </CardTitle>
+            <CardDescription>
+              It was built when the deck held {freshness.cardsThen} cards; there
+              are {freshness.cardsNow} now. The verdicts below describe the
+              older deck — run the analysis again before trusting them.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
 
       <CoveragePanel
         examId={examId}
