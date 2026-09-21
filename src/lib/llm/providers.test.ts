@@ -4,6 +4,10 @@
  * Four implementations now sit behind one interface. What matters is that the
  * schema each caller writes survives the trip to whichever one is configured.
  */
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -18,6 +22,7 @@ import {
   recommendedModel,
 } from "./catalog";
 import { createGeminiProvider } from "./gemini";
+import { getProvider } from ".";
 import { toGrammarSchema } from "./local";
 import { toStrictSchema } from "./openai";
 import { saveSession } from "@/main/auth/tokenStore";
@@ -324,5 +329,47 @@ describe("Gemini signed in with Google", () => {
       { email: "s@gmail.com", accessToken: "a", refreshToken: "r", expiresIn: 3600 },
     );
     expect(isAnswerable(db)).toBe(true);
+  });
+});
+
+describe("with nothing configured", () => {
+  const saved = {
+    DATABASE_URL: process.env.DATABASE_URL,
+    MODELS_DIR: process.env.MODELS_DIR,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  };
+  let scratch: string;
+
+  // getProvider reads the default database; point it at an empty one so a
+  // developer's own saved keys or sign-in cannot decide the outcome.
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), "no-provider-"));
+    process.env.DATABASE_URL = join(scratch, "empty.db");
+    process.env.MODELS_DIR = join(scratch, "models");
+    delete process.env.GEMINI_API_KEY;
+  });
+
+  afterEach(() => {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    rmSync(scratch, { recursive: true, force: true });
+  });
+
+  it("asks for a Google sign-in or a key, never an offline model", () => {
+    expect(readProvider(db)).toBe("gemini");
+    expect(isAnswerable(db)).toBe(false);
+
+    expect(() => getProvider()).toThrow(/Sign in with Google|API key/);
+    expect(() => getProvider()).not.toThrow(/offline/i);
+  });
+
+  it("starts no download and loads no local model on its own", () => {
+    expect(() => getProvider()).toThrow();
+    expect(() => getProvider(undefined, "bulk")).toThrow();
+
+    expect(existsSync(process.env.MODELS_DIR!)).toBe(false);
+    expect(readdirSync(scratch)).not.toContain("models");
   });
 });

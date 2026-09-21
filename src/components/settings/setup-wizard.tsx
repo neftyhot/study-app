@@ -5,6 +5,10 @@ import { useState } from "react";
 import { Check, Cloud, HardDrive, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import {
+  ExperimentalLocalSection,
+  ResourceWarning,
+} from "@/components/settings/experimental-local";
 import { GoogleSignIn } from "@/components/settings/google-sign-in";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { Badge } from "@/components/ui/badge";
@@ -40,10 +44,10 @@ type Step = "choose" | "local" | "api" | "done";
 /**
  * First-run setup.
  *
- * One decision, asked once: should the app think on this machine or through
- * somebody's API. Everything after that is handled for them — picking a model
- * starts the download and moves straight on, because a student wanting to make
- * flashcards should never have to learn what a quantisation is.
+ * One decision, asked once, with the answer most students want up front:
+ * Gemini on their own Google account, free and fast. Running a model on the
+ * machine is still offered, but as an experimental option behind a warning,
+ * and nothing is downloaded unless the student asks for it here.
  */
 export function SetupWizard({
   snapshot,
@@ -81,19 +85,22 @@ export function SetupWizard({
       {step === "choose" ? (
         <div className="space-y-3">
           <Choice
-            icon={<HardDrive className="size-5" />}
-            title="Work entirely offline"
-            body="Download a model that runs on this machine. Nothing you upload and nothing you write ever leaves it, and the whole app works with no internet. Costs nothing to run."
-            footnote="Needs a few gigabytes of disk and a few minutes to download."
-            onClick={() => setStep("local")}
-          />
-          <Choice
             icon={<Cloud className="size-5" />}
-            title="Use a cloud model"
-            body="Sign in with Google to use Gemini on your own account, or connect Claude, Gemini, or OpenAI with an API key. Faster and stronger than anything that runs locally, especially for decomposing a broad topic exhaustively."
+            title="Use Google Gemini (recommended)"
+            body="Sign in with your Google account to use Gemini at no cost — no key to create or paste. Or connect Claude, Gemini, or OpenAI with an API key. Fast, and strong enough to decompose a broad topic exhaustively."
             footnote="Google sign-in uses your account's free quota; with a key, you pay the provider for what you use. Studying still works offline."
             onClick={() => setStep("api")}
+            recommended
           />
+          <ExperimentalLocalSection>
+            <Choice
+              icon={<HardDrive className="size-5" />}
+              title="Work entirely offline"
+              body="Download a model that runs on this machine. Nothing you upload and nothing you write ever leaves it."
+              footnote="Slower and weaker than Gemini on most laptops."
+              onClick={() => setStep("local")}
+            />
+          </ExperimentalLocalSection>
           <p className="text-muted-foreground text-center text-xs">
             Either way, studying, reviews, and editing never need a model or a
             network.
@@ -112,6 +119,7 @@ export function SetupWizard({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <ResourceWarning />
             <ModelPicker
               models={models}
               snapshot={state}
@@ -173,18 +181,22 @@ function Choice({
   body,
   footnote,
   onClick,
+  recommended = false,
 }: {
   icon: React.ReactNode;
   title: string;
   body: string;
   footnote: string;
   onClick: () => void;
+  recommended?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="hover:bg-muted/60 focus-visible:ring-ring w-full rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+      className={`hover:bg-muted/60 focus-visible:ring-ring w-full rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none ${
+        recommended ? "border-primary bg-primary/5" : ""
+      }`}
     >
       <span className="flex items-center gap-2 font-medium">
         {icon}

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Cloud, Download, HardDrive, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { ExperimentalLocalSection } from "@/components/settings/experimental-local";
 import { GoogleSignIn } from "@/components/settings/google-sign-in";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { Badge } from "@/components/ui/badge";
@@ -44,68 +45,60 @@ export function ProviderSettings({
   const [state, setState] = useState(snapshot);
   const [busy, setBusy] = useState(false);
 
+  async function choose(id: ProviderId) {
+    if (state.provider === id) return;
+    setBusy(true);
+    setState(await chooseProvider(id));
+    setBusy(false);
+    toast.success(`Now using ${PROVIDER_LABELS[id]}`);
+  }
+
+  const usingLocal = state.provider === "local";
+
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">What answers your questions</CardTitle>
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            <Cloud className="size-4" />
+            Cloud (Google Gemini)
+            <Badge>Recommended</Badge>
+          </CardTitle>
           <CardDescription>
-            Generating cards and grading typed answers need a model.
-            Everything else — studying, reviews, browsing, editing — works with
-            no model and no network at all.
+            Generating cards and grading typed answers need a model. Sign in
+            with Google to use Gemini on your own account at no cost, or use
+            an API key. Everything else — studying, reviews, browsing,
+            editing — works with no model and no network at all.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/*
-            Shown as visible choices rather than a dropdown: switching to the
-            offline model is the option people most need to find, and an
-            option inside a closed select is an option nobody knows exists.
-          */}
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(["local", ...API_PROVIDERS] as ProviderId[]).map((id) => {
+          <div className="grid gap-2 sm:grid-cols-3">
+            {API_PROVIDERS.map((id) => {
               const selected = state.provider === id;
-              const key =
-                id === "local"
-                  ? null
-                  : state.keys.find((item) => item.provider === id);
+              const key = state.keys.find((item) => item.provider === id);
 
               return (
                 <button
                   key={id}
                   type="button"
                   disabled={busy}
-                  onClick={async () => {
-                    if (selected) return;
-                    setBusy(true);
-                    setState(await chooseProvider(id));
-                    setBusy(false);
-                    toast.success(`Now using ${PROVIDER_LABELS[id]}`);
-                  }}
+                  onClick={() => void choose(id)}
                   className={`rounded-md border p-3 text-left transition-colors ${
                     selected ? "border-primary bg-primary/5" : "hover:bg-muted/60"
                   }`}
                 >
                   <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                    {id === "local" ? (
-                      <HardDrive className="size-4" />
-                    ) : (
-                      <Cloud className="size-4" />
-                    )}
                     {PROVIDER_LABELS[id]}
                     {selected ? <Badge variant="secondary">In use</Badge> : null}
                   </span>
                   <span className="text-muted-foreground mt-1 block text-xs">
-                    {id === "local"
-                      ? state.download?.status === "ready"
-                        ? "A model is installed. Works with no internet."
-                        : "Download a model that runs here. Free, private, works offline."
-                      : id === "gemini" && state.google
-                        ? `Signed in as ${state.google.email ?? "a Google account"}.`
-                        : key?.present
-                          ? `Key ending …${key.hint} saved.`
-                          : id === "gemini"
-                            ? "Sign in with Google, or add an API key."
-                            : "Needs an API key."}
+                    {id === "gemini" && state.google
+                      ? `Signed in as ${state.google.email ?? "a Google account"}.`
+                      : key?.present
+                        ? `Key ending …${key.hint} saved.`
+                        : id === "gemini"
+                          ? "Free with a Google account, or an API key."
+                          : "Needs an API key (paid)."}
                   </span>
                 </button>
               );
@@ -113,20 +106,18 @@ export function ProviderSettings({
           </div>
 
           <p className="text-muted-foreground text-xs">
-            {state.answerable
-              ? "Ready to generate and grade."
-              : "Not ready yet — finish setting up the option above."}
+            {usingLocal
+              ? "Currently using the experimental offline model. Choose a cloud provider above to switch."
+              : state.answerable
+                ? "Ready to generate and grade."
+                : state.provider === "gemini"
+                  ? "Not ready yet — sign in with Google below, or add an API key."
+                  : "Not ready yet — add an API key below."}
           </p>
         </CardContent>
       </Card>
 
-      {state.provider === "local" ? (
-        <LocalModelSection
-          models={models}
-          snapshot={state}
-          onChange={setState}
-        />
-      ) : (
+      {usingLocal ? null : (
         <>
           {state.provider === "gemini" ? (
             <Card>
@@ -145,6 +136,32 @@ export function ProviderSettings({
           <ApiKeySection snapshot={state} onChange={setState} />
         </>
       )}
+
+      {/*
+        Closed unless the student is already on a local model or one is
+        downloading — then hiding its controls would only get in the way.
+      */}
+      <ExperimentalLocalSection
+        defaultOpen={
+          usingLocal || state.download?.status === "downloading"
+        }
+      >
+        {!usingLocal && state.download?.status === "ready" ? (
+          <Button
+            variant="outline"
+            disabled={busy}
+            onClick={() => void choose("local")}
+          >
+            <HardDrive className="size-4" />
+            Use the installed offline model
+          </Button>
+        ) : null}
+        <LocalModelSection
+          models={models}
+          snapshot={state}
+          onChange={setState}
+        />
+      </ExperimentalLocalSection>
     </div>
   );
 }
@@ -172,37 +189,37 @@ function LocalModelSection({
     return () => clearInterval(timer);
   }, [download?.status]);
 
+  // Already inside the experimental section's frame, so no card of its own.
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="flex items-center gap-2 text-sm font-medium">
           <Download className="size-4" />
           Offline model
-        </CardTitle>
-        <CardDescription>
+        </p>
+        <p className="text-muted-foreground text-sm">
           Runs on this machine. Nothing leaves it, and it works with no
           internet once the download is finished.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {download?.status === "ready" ? (
-          <p className="flex items-center gap-2 text-sm">
-            <Check className="size-4" />
-            {models.find((model) => model.id === download.modelId)?.name ??
-              download.modelId}{" "}
-            is installed and in use
-          </p>
-        ) : null}
+        </p>
+      </div>
 
-        <ModelPicker
-          models={models}
-          snapshot={snapshot}
-          download={download}
-          onDownloadChange={setDownload}
-          onSnapshotChange={onChange}
-        />
-      </CardContent>
-    </Card>
+      {download?.status === "ready" ? (
+        <p className="flex items-center gap-2 text-sm">
+          <Check className="size-4" />
+          {models.find((model) => model.id === download.modelId)?.name ??
+            download.modelId}{" "}
+          is installed{snapshot.provider === "local" ? " and in use" : ""}
+        </p>
+      ) : null}
+
+      <ModelPicker
+        models={models}
+        snapshot={snapshot}
+        download={download}
+        onDownloadChange={setDownload}
+        onSnapshotChange={onChange}
+      />
+    </div>
   );
 }
 
