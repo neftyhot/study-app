@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, Settings } from "lucide-react";
+import { GraduationCap, Search, Settings } from "lucide-react";
 
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,11 @@ export async function SiteHeader() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
+          <Button asChild variant="ghost" size="icon" aria-label="Search everything">
+            <Link href="/search">
+              <Search className="size-4" />
+            </Link>
+          </Button>
           <DownloadChip initial={download} models={LOCAL_MODELS} />
           <DeckSwitcher
             courses={courses.map((course) => ({
