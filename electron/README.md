@@ -22,6 +22,27 @@ generation and typed-answer grading call out, and only when asked. Without an
 API key the app still runs: generation is refused with a clear message, and
 typed answers fall back to the provisional keyword grader.
 
+## Sign in with Google
+
+Gemini can run on the student's own Google account instead of a pasted key.
+The flow (PKCE with a loopback redirect) and the token store live in
+`src/main/auth/`; `google-auth.cjs` wires them to `shell`, `safeStorage`, and
+IPC, and `app-preload.cjs` gives the app window three calls — status, sign
+in, sign out — none of which returns a token.
+
+The refresh token is encrypted with `safeStorage` before it is written to the
+`google_oauth_sessions` table. The packaged Next server runs in the main
+process and asks it for an access token before each Gemini call, refreshing
+when one has under a minute left. Under `npm run electron:dev` the server is a
+separate process, so it reads the stored access token and the main process
+renews it on a timer; for that to work, the main process now reads
+`.env.local` in development so both open the same database.
+
+The OAuth client (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, a
+"Desktop app" client) is baked into the bytecode by `compile-main.mjs`. Google
+treats a desktop client's secret as non-confidential, so a `GOCSPX-` string
+turning up in a build is expected — unlike an `AIzaSy` key.
+
 ## Before distributing a build
 
 `prepare-standalone.mjs` removes the build machine's absolute paths from

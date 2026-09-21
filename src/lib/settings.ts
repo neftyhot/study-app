@@ -15,6 +15,7 @@ import { eq } from "drizzle-orm";
 
 import { createClient, type Db } from "@/db/client";
 import { appSettings } from "@/db/schema";
+import { hasGoogleSession } from "@/lib/auth/google-session";
 import {
   DEFAULT_STRICTNESS,
   isStrictness,
@@ -208,5 +209,6 @@ export function markSetupComplete(db?: Db) {
 export function isAnswerable(db?: Db): boolean {
   const provider = readProvider(db);
   if (provider === "local") return readDownload(db)?.status === "ready";
+  if (provider === "gemini" && hasGoogleSession(db)) return true;
   return Boolean(readApiKey(provider, db));
 }

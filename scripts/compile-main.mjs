@@ -42,6 +42,31 @@ const EXTERNAL = [
   "bytenode",
 ];
 
+/**
+ * The Google OAuth client, baked into the bytecode.
+ *
+ * A student's machine has no .env.local, so the packaged main process could
+ * not otherwise know which OAuth client to sign in with. Google treats a
+ * Desktop client's secret as non-confidential — it ships in every installed
+ * app that uses one — so embedding it is the documented arrangement, not a
+ * leak. A build without them still works; sign-in says it is unconfigured.
+ */
+function oauthDefines() {
+  try {
+    process.loadEnvFile(join(ROOT, ".env.local"));
+  } catch {
+    // No .env.local: rely on the build environment.
+  }
+
+  const defines = {};
+  for (const name of ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET"]) {
+    const value = process.env[name]?.trim();
+    if (value) defines[`process.env.${name}`] = JSON.stringify(value);
+    else console.warn(`${name} is not set; this build cannot sign in with Google.`);
+  }
+  return defines;
+}
+
 function assertRunningUnderElectron() {
   if (!process.versions.electron) {
     console.error(
@@ -67,6 +92,7 @@ async function main() {
     format: "cjs",
     target: `node${process.versions.node.split(".")[0]}`,
     external: EXTERNAL,
+    define: oauthDefines(),
     logLevel: "warning",
   });
 
@@ -79,7 +105,7 @@ async function main() {
 
   // Same for the preload and the activation screen, which the bundled main
   // process loads by path.
-  for (const asset of ["preload.cjs", "activation.html"]) {
+  for (const asset of ["preload.cjs", "app-preload.cjs", "activation.html"]) {
     copyFileSync(join(ROOT, "electron", asset), join(OUT_DIR, asset));
   }
 

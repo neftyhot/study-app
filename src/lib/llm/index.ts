@@ -1,3 +1,4 @@
+import { googleAccessToken, hasGoogleSession } from "@/lib/auth/google-session";
 import {
   readApiKey,
   readDownload,
@@ -93,7 +94,7 @@ export function getProvider(
     case "gemini":
     default:
       return createGeminiProvider({
-        apiKey: readApiKey("gemini"),
+        ...geminiCredentials(),
         model:
           role === "bulk"
             ? (process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL)
@@ -105,3 +106,25 @@ export function getProvider(
       });
   }
 }
+
+/**
+ * How Gemini calls authenticate, first match wins:
+ *
+ *  1. GEMINI_API_KEY in the environment — a developer's .env.local overrides
+ *     everything, as it does for every provider. (The Gemini SDK would send
+ *     that key anyway; it reads the variable itself.)
+ *  2. A "Sign in with Google" session: the student's own account, no key.
+ *  3. A key saved in Settings, kept as the fallback.
+ */
+function geminiCredentials():
+  | { apiKey: string }
+  | { accessToken: () => Promise<string> }
+  | { apiKey: undefined } {
+  const fromEnv = process.env.GEMINI_API_KEY?.trim();
+  if (fromEnv) return { apiKey: fromEnv };
+  if (hasGoogleSession()) return { accessToken: sessionToken };
+  return { apiKey: readApiKey("gemini") };
+}
+
+/** One stable function, so the provider reuses one OAuth client. */
+const sessionToken = () => googleAccessToken();

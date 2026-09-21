@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Check, Cloud, HardDrive, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { GoogleSignIn } from "@/components/settings/google-sign-in";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -88,9 +89,9 @@ export function SetupWizard({
           />
           <Choice
             icon={<Cloud className="size-5" />}
-            title="Use an API key"
-            body="Connect Claude, Gemini, or OpenAI. Faster and stronger than anything that runs locally, especially for decomposing a broad topic exhaustively."
-            footnote="You pay the provider for what you use. Studying still works offline."
+            title="Use a cloud model"
+            body="Sign in with Google to use Gemini on your own account, or connect Claude, Gemini, or OpenAI with an API key. Faster and stronger than anything that runs locally, especially for decomposing a broad topic exhaustively."
+            footnote="Google sign-in uses your account's free quota; with a key, you pay the provider for what you use. Studying still works offline."
             onClick={() => setStep("api")}
           />
           <p className="text-muted-foreground text-center text-xs">
@@ -141,6 +142,7 @@ export function SetupWizard({
         <ApiStep
           snapshot={state}
           busy={busy}
+          onChange={setState}
           onBack={() => setStep("choose")}
           onSaved={(next) => {
             setState(next);
@@ -200,12 +202,14 @@ function ApiStep({
   snapshot,
   busy,
   setBusy,
+  onChange,
   onBack,
   onSaved,
 }: {
   snapshot: SetupSnapshot;
   busy: boolean;
   setBusy: (busy: boolean) => void;
+  onChange: (snapshot: SetupSnapshot) => void;
   onBack: () => void;
   onSaved: (snapshot: SetupSnapshot) => void;
 }) {
@@ -214,6 +218,7 @@ function ApiStep({
   const [key, setKey] = useState("");
 
   const existing = snapshot.keys.find((item) => item.provider === provider);
+  const signedIn = provider === "gemini" && snapshot.google !== null;
 
   return (
     <Card>
@@ -241,6 +246,24 @@ function ApiStep({
           ))}
         </div>
 
+        {provider === "gemini" ? (
+          <div className="space-y-3">
+            <GoogleSignIn
+              snapshot={snapshot}
+              onChange={onChange}
+              onSignedIn={async () => {
+                setBusy(true);
+                const next = await chooseProvider("gemini");
+                setBusy(false);
+                onSaved(next);
+              }}
+            />
+            <p className="text-muted-foreground text-xs">
+              Or use an API key instead:
+            </p>
+          </div>
+        ) : null}
+
         <div className="space-y-1.5">
           <Label htmlFor="setup-key">API key</Label>
           <Input
@@ -265,7 +288,10 @@ function ApiStep({
 
         <div className="flex flex-wrap gap-2">
           <Button
-            disabled={busy || (key.trim().length === 0 && !existing?.present)}
+            disabled={
+              busy ||
+              (key.trim().length === 0 && !existing?.present && !signedIn)
+            }
             onClick={async () => {
               setBusy(true);
               if (key.trim()) await saveApiKey(provider, key);

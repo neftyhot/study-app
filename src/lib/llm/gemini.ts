@@ -1,4 +1,9 @@
-import { GoogleGenAI, ThinkingLevel, type ThinkingConfig } from "@google/genai";
+import {
+  GoogleGenAI,
+  ThinkingLevel,
+  type GoogleGenAIOptions,
+  type ThinkingConfig,
+} from "@google/genai";
 
 import {
   LlmError,
@@ -33,6 +38,12 @@ export const DEFAULT_GEMINI_BULK_MODEL = "gemini-3.1-flash-lite";
 
 export function createGeminiProvider(options?: {
   apiKey?: string;
+  /**
+   * Signs requests as a Google account instead of with a key: each call
+   * carries `Authorization: Bearer <token>` and no key at all. Called per
+   * request, so a token that lapses during a long run is replaced.
+   */
+  accessToken?: () => Promise<string>;
   model?: string;
   /**
    * Used instead when `model` turns out not to exist for this key. Google
@@ -41,16 +52,19 @@ export function createGeminiProvider(options?: {
    */
   fallbackModel?: string;
 }): LlmProvider {
+  const accessToken = options?.accessToken;
   const apiKey = options?.apiKey ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
+  if (!accessToken && !apiKey) {
     throw new LlmError(
-      "No Gemini API key. Add one in Settings, or set GEMINI_API_KEY in .env.local.",
+      "No Gemini API key. Sign in with Google or add a key in Settings, or set GEMINI_API_KEY in .env.local.",
     );
   }
 
   let model =
     options?.model ?? process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
-  const client = new GoogleGenAI({ apiKey });
+  const client = accessToken
+    ? oauthClient(accessToken)
+    : new GoogleGenAI({ apiKey });
 
   /** Runs a request, moving to the fallback model once if this one is gone. */
   async function call<R>(request: (model: string) => Promise<R>): Promise<R> {
@@ -192,6 +206,39 @@ export function createGeminiProvider(options?: {
       };
     },
   };
+}
+
+const oauthClients = new WeakMap<() => Promise<string>, GoogleGenAI>();
+
+/**
+ * A client that authenticates with an OAuth access token.
+ *
+ * With no key, the SDK asks `googleAuthOptions.authClient` for request
+ * headers before every call; this one answers with a bearer token fetched
+ * at that moment. It is the SDK's own hook, so every endpoint it reaches —
+ * generateContent, uploads, model listing — is signed the same way.
+ *
+ * One client per token source, because constructing one without a key logs
+ * "API key should be set" each time, and providers are built per request.
+ */
+function oauthClient(accessToken: () => Promise<string>): GoogleGenAI {
+  let client = oauthClients.get(accessToken);
+  if (!client) {
+    const authClient = {
+      async getRequestHeaders() {
+        return new Headers({ Authorization: `Bearer ${await accessToken()}` });
+      },
+    };
+    client = new GoogleGenAI({
+      googleAuthOptions: {
+        // Only `getRequestHeaders` is ever called on it; the full AuthClient
+        // type would mean depending on google-auth-library to build one.
+        authClient,
+      } as unknown as GoogleGenAIOptions["googleAuthOptions"],
+    });
+    oauthClients.set(accessToken, client);
+  }
+  return client;
 }
 
 /**

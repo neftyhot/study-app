@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, Cloud, Download, HardDrive, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+import { GoogleSignIn } from "@/components/settings/google-sign-in";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,9 +99,13 @@ export function ProviderSettings({
                       ? state.download?.status === "ready"
                         ? "A model is installed. Works with no internet."
                         : "Download a model that runs here. Free, private, works offline."
-                      : key?.present
-                        ? `Key ending …${key.hint} saved.`
-                        : "Needs an API key."}
+                      : id === "gemini" && state.google
+                        ? `Signed in as ${state.google.email ?? "a Google account"}.`
+                        : key?.present
+                          ? `Key ending …${key.hint} saved.`
+                          : id === "gemini"
+                            ? "Sign in with Google, or add an API key."
+                            : "Needs an API key."}
                   </span>
                 </button>
               );
@@ -122,7 +127,23 @@ export function ProviderSettings({
           onChange={setState}
         />
       ) : (
-        <ApiKeySection snapshot={state} onChange={setState} />
+        <>
+          {state.provider === "gemini" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Google account</CardTitle>
+                <CardDescription>
+                  Sign in to run Gemini on your own account&apos;s free quota.
+                  Used ahead of a saved key while you are signed in.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <GoogleSignIn snapshot={state} onChange={setState} />
+              </CardContent>
+            </Card>
+          ) : null}
+          <ApiKeySection snapshot={state} onChange={setState} />
+        </>
       )}
     </div>
   );
@@ -203,6 +224,9 @@ function ApiKeySection({
         <CardTitle className="flex items-center gap-2 text-base">
           <KeyRound className="size-4" />
           {PROVIDER_LABELS[provider]} key
+          {provider === "gemini" ? (
+            <Badge variant="outline">optional</Badge>
+          ) : null}
         </CardTitle>
         <CardDescription>
           Get one from <span className="font-mono">{KEY_HELP[provider]}</span>.

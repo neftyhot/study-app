@@ -1,3 +1,12 @@
+// Development only: load .env.local before any other module, so nothing
+// required below can read process.env before it is populated. A packaged
+// build has no such file (its OAuth client is compiled in), so a miss is fine.
+try {
+  process.loadEnvFile(require("node:path").resolve(__dirname, "../.env.local"));
+} catch {
+  // No .env.local.
+}
+
 /**
  * Electron main process.
  *
@@ -17,12 +26,30 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const gate = require("./license/gate.cjs");
+const { registerGoogleAuth } = require("./google-auth.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
 
 /** Set before anything imports the database layer. */
 function configureDataDirectories() {
+  // In development the web app is a separate `next dev`; both processes
+  // must open the same database (.env.local was loaded at the top of file).
+  if (isDev) {
+    const repoRoot = path.join(__dirname, "..");
+
+    // The same file `next dev` and `npm run db:migrate` open when
+    // DATABASE_URL is unset (src/db/client.ts), resolved against the repo
+    // root as they resolve it — not the per-user data directory, which
+    // nothing migrates in development.
+    const url = (process.env.DATABASE_URL ?? "./data/study-app.db").replace(
+      /^file:/,
+      "",
+    );
+    process.env.DATABASE_URL = path.resolve(repoRoot, url);
+    fs.mkdirSync(path.dirname(process.env.DATABASE_URL), { recursive: true });
+  }
+
   const userData = app.getPath("userData");
   const dataDir = path.join(userData, "data");
   fs.mkdirSync(dataDir, { recursive: true });
@@ -146,7 +173,11 @@ function createActivationWindow() {
   return window;
 }
 
+/** Where the app window is loaded from, once it is. */
+let appUrl = null;
+
 function createWindow(url) {
+  appUrl = url;
   const window = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -156,6 +187,8 @@ function createWindow(url) {
     backgroundColor: "#0a0a0a",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
+      // Only "Sign in with Google" crosses; see app-preload.cjs.
+      preload: path.join(__dirname, "app-preload.cjs"),
       // The renderer is our own web app and needs no Node access.
       nodeIntegration: false,
       contextIsolation: true,
@@ -207,6 +240,11 @@ async function launchApp(license) {
 
 app.whenReady().then(async () => {
   const { userData } = configureDataDirectories();
+
+  registerGoogleAuth({
+    isDev,
+    appOrigin: () => (appUrl ? new URL(appUrl).origin : null),
+  });
 
   ipcMain.handle("get-machine-id", () => gate.machineId());
 

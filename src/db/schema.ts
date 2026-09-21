@@ -711,6 +711,33 @@ export const appSettings = sqliteTable("app_settings", {
     .default(sql`(current_timestamp)`),
 });
 
+/* ------------------------------------------------------ GoogleOAuthSession */
+
+/**
+ * A "Sign in with Google" session, used to call Gemini on the student's own
+ * account instead of a pasted API key.
+ *
+ * One row at most (id "default"). Written only by the Electron main process,
+ * which is the one place that can reach the OS keychain: the refresh token is
+ * encrypted with `safeStorage` before it lands here, and nothing else can
+ * decrypt it. The access token is stored as-is — it lasts an hour, and the
+ * web server has to be able to read it to make a call.
+ */
+export const googleOAuthSessions = sqliteTable("google_oauth_sessions", {
+  id: text("id").primaryKey(),
+  email: text("email"),
+  accessToken: text("access_token").notNull(),
+  /** Epoch milliseconds, compared against Date.now() on every call. */
+  accessTokenExpiresAt: integer("access_token_expires_at").notNull(),
+  /** Base64 of the `safeStorage.encryptString` ciphertext. */
+  refreshTokenEncrypted: text("refresh_token_encrypted").notNull(),
+  scope: text("scope"),
+  createdAt: createdAt(),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(current_timestamp)`),
+});
+
 /* ---------------------------------------------------- DiagramOcclusion */
 
 /**

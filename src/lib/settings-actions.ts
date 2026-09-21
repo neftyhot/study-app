@@ -6,6 +6,10 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import {
+  readGoogleSession,
+  type GoogleSessionSummary,
+} from "@/lib/auth/google-session";
+import {
   clearDownload,
   startModelDownload,
   unloadLocalModel,
@@ -29,6 +33,8 @@ import { isStrictness } from "@/lib/grade/strictness";
 export type SetupSnapshot = {
   provider: ProviderId;
   keys: ReturnType<typeof allKeyStatuses>;
+  /** Signed in with Google for Gemini, and as whom. Never a token. */
+  google: GoogleSessionSummary | null;
   download: ReturnType<typeof readDownload>;
   localModelId: string | null;
   answerable: boolean;
@@ -43,6 +49,7 @@ export async function getSetupSnapshot(): Promise<SetupSnapshot> {
   return {
     provider: readProvider(db),
     keys: allKeyStatuses(db),
+    google: readGoogleSession(db),
     download: readDownload(db),
     localModelId: readLocalModel(db).id,
     answerable: isAnswerable(db),

@@ -7,7 +7,7 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
 import { GENERATED_CARD_SCHEMA } from "@/lib/generate/schemas";
@@ -17,8 +17,10 @@ import {
   LOCAL_MODELS,
   recommendedModel,
 } from "./catalog";
+import { createGeminiProvider } from "./gemini";
 import { toGrammarSchema } from "./local";
 import { toStrictSchema } from "./openai";
+import { saveSession } from "@/main/auth/tokenStore";
 import {
   apiKeyStatus,
   isAnswerable,
@@ -252,5 +254,75 @@ describe("provider selection", () => {
     writeProvider("openai", db);
     writeApiKey("gemini", "AIza-whatever", db);
     expect(isAnswerable(db)).toBe(false);
+  });
+});
+
+describe("Gemini signed in with Google", () => {
+  const envKeys = ["GEMINI_API_KEY", "GOOGLE_API_KEY"] as const;
+  const saved: Partial<Record<(typeof envKeys)[number], string>> = {};
+
+  beforeEach(() => {
+    for (const name of envKeys) {
+      saved[name] = process.env[name];
+      delete process.env[name];
+    }
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    for (const name of envKeys) {
+      if (saved[name] === undefined) delete process.env[name];
+      else process.env[name] = saved[name];
+    }
+  });
+
+  it("sends a bearer token and no API key, fetching the token per call", async () => {
+    const requests: Request[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push(new Request(input, init));
+        return new Response(
+          JSON.stringify({
+            candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }],
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+    const tokens = ["token-1", "token-2"];
+    const accessToken = vi.fn(async () => tokens.shift()!);
+
+    const provider = createGeminiProvider({ accessToken });
+    const request = { system: "s", prompt: "p", schema: { type: "object" } };
+    await expect(provider.generateStructured(request)).resolves.toMatchObject({
+      data: { ok: true },
+    });
+    await provider.generateStructured(request);
+
+    expect(requests).toHaveLength(2);
+    for (const [index, sent] of requests.entries()) {
+      const url = new URL(sent.url);
+      expect(url.origin).toBe("https://generativelanguage.googleapis.com");
+      expect(url.searchParams.has("key")).toBe(false);
+      expect(sent.headers.get("x-goog-api-key")).toBeNull();
+      expect(sent.headers.get("authorization")).toBe(`Bearer token-${index + 1}`);
+    }
+  });
+
+  it("counts as ready to answer with no key saved", () => {
+    writeProvider("gemini", db);
+    expect(isAnswerable(db)).toBe(false);
+
+    saveSession(
+      db.$client,
+      {
+        isEncryptionAvailable: () => true,
+        encryptString: (text) => Buffer.from(text),
+        decryptString: (buffer) => buffer.toString(),
+      },
+      { email: "s@gmail.com", accessToken: "a", refreshToken: "r", expiresIn: 3600 },
+    );
+    expect(isAnswerable(db)).toBe(true);
   });
 });

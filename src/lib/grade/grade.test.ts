@@ -5,6 +5,10 @@
  * enforces — so most of these drive it directly with the shapes a model
  * actually returns, including self-contradictory ones.
  */
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
@@ -228,9 +232,23 @@ describe("semantic grader", () => {
 
 describe("grader selection", () => {
   const key = process.env.GEMINI_API_KEY;
+  const databaseUrl = process.env.DATABASE_URL;
+  let scratch: string;
+
+  // Provider selection reads saved keys and any Google sign-in from the
+  // default database — which, on a developer's machine, is their real one.
+  // An empty file of its own keeps the outcome about this test alone.
+  beforeEach(() => {
+    scratch = mkdtempSync(join(tmpdir(), "grader-selection-"));
+    process.env.DATABASE_URL = join(scratch, "empty.db");
+  });
+
   afterEach(() => {
     if (key === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = key;
+    if (databaseUrl === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = databaseUrl;
+    rmSync(scratch, { recursive: true, force: true });
   });
 
   it("falls back to the keyword stand-in when no provider is configured", async () => {
