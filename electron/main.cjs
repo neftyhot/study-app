@@ -12,9 +12,11 @@
  *  3. **Offline.** Nothing here reaches the network. Only card generation and
  *     typed grading call out, and only when the student asks for them.
  */
-const { app, BrowserWindow, dialog, shell } = require("electron");
+const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+
+const gate = require("./license/gate.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
@@ -116,6 +118,34 @@ async function waitForServer(url, attempts = 100) {
   throw new Error("The application server did not start in time.");
 }
 
+/**
+ * The activation screen.
+ *
+ * A local file loaded straight by the main process, not a page inside the web
+ * app: the gate has to sit in front of the server rather than inside the thing
+ * it is gating, or it is only a suggestion.
+ */
+function createActivationWindow() {
+  const window = new BrowserWindow({
+    width: 560,
+    height: 720,
+    resizable: false,
+    show: false,
+    backgroundColor: "#0a0a0a",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      devTools: isDev,
+    },
+  });
+
+  window.once("ready-to-show", () => window.show());
+  window.loadFile(path.join(__dirname, "activation.html"));
+  return window;
+}
+
 function createWindow(url) {
   const window = new BrowserWindow({
     width: 1280,
@@ -129,6 +159,9 @@ function createWindow(url) {
       // The renderer is our own web app and needs no Node access.
       nodeIntegration: false,
       contextIsolation: true,
+      // Closed in a shipped build: the app's own pages are not a debugging
+      // surface for whoever is holding it.
+      devTools: isDev,
     },
   });
 
@@ -144,22 +177,70 @@ function createWindow(url) {
   return window;
 }
 
-app.whenReady().then(async () => {
-  configureDataDirectories();
+/** Starts the real app: migrate, serve, open a window. */
+async function launchApp(license) {
+  let url = DEV_URL;
 
-  try {
-    let url = DEV_URL;
+  if (!isDev) {
+    await migrate();
 
-    if (!isDev) {
-      await migrate();
-      url = await startServer();
+    // The web app shows the tier and countdown in Settings; it is told, rather
+    // than given any way to read or change the license itself.
+    if (license?.payload) {
+      process.env.STUDY_APP_LICENSE = JSON.stringify({
+        type: license.payload.type,
+        name: license.payload.name ?? null,
+        expiresAt: license.payload.expiresAt ?? null,
+        daysRemaining: license.daysRemaining,
+      });
     }
 
-    createWindow(url);
+    url = await startServer();
+  }
 
-    app.on("activate", () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow(url);
-    });
+  createWindow(url);
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(url);
+  });
+}
+
+app.whenReady().then(async () => {
+  const { userData } = configureDataDirectories();
+
+  ipcMain.handle("get-machine-id", () => gate.machineId());
+
+  ipcMain.handle("validate-license", (_event, token) =>
+    gate.validate(userData, token),
+  );
+
+  ipcMain.handle("activate-license", async (_event, token) => {
+    const result = gate.activate(userData, token);
+    if (!result.valid) return result;
+
+    // Swap the activation window for the app itself, rather than asking the
+    // student to quit and reopen.
+    const license = gate.evaluate(userData);
+    await launchApp(license);
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (window.webContents.getURL().startsWith("file://")) window.close();
+    }
+
+    return result;
+  });
+
+  try {
+    const license = gate.evaluate(userData);
+
+    if (!license.valid) {
+      createActivationWindow();
+      return;
+    }
+
+    // Recorded only once the license has passed, and only ever forwards.
+    gate.store.recordLaunch(userData);
+
+    await launchApp(license);
   } catch (error) {
     const detail =
       error instanceof Error ? (error.stack ?? error.message) : String(error);

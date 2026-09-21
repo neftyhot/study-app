@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'" />
+    <title>Activate Study App</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa; --fg: #0a0a0a; --muted: #71717a;
+        --border: #e4e4e7; --card: #ffffff; --accent: #18181b;
+        --accent-fg: #fafafa; --bad: #b91c1c; --bad-bg: #fef2f2;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a; --fg: #fafafa; --muted: #a1a1aa;
+          --border: #27272a; --card: #111113; --accent: #fafafa;
+          --accent-fg: #18181b; --bad: #f87171; --bad-bg: #1f1315;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center;
+        justify-content: center; padding: 24px; background: var(--bg);
+        color: var(--fg);
+        font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      main { width: 100%; max-width: 460px; }
+      h1 { font-size: 20px; margin: 0 0 6px; letter-spacing: -0.01em; }
+      p.lede { color: var(--muted); margin: 0 0 20px; }
+      .card {
+        background: var(--card); border: 1px solid var(--border);
+        border-radius: 10px; padding: 16px; margin-bottom: 12px;
+      }
+      label { display: block; font-weight: 500; margin-bottom: 6px; font-size: 13px; }
+      .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+      .machine { display: flex; gap: 8px; align-items: center; }
+      code {
+        flex: 1; min-width: 0; overflow-wrap: anywhere;
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: var(--bg); border: 1px solid var(--border);
+        border-radius: 6px; padding: 8px;
+      }
+      textarea {
+        width: 100%; min-height: 96px; resize: vertical; padding: 10px;
+        border: 1px solid var(--border); border-radius: 6px;
+        background: var(--bg); color: var(--fg);
+        font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      button {
+        border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px;
+        background: var(--card); color: var(--fg); font: inherit; font-size: 13px;
+        cursor: pointer; white-space: nowrap;
+      }
+      button:hover:not(:disabled) { border-color: var(--muted); }
+      button.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+      .alert {
+        border: 1px solid var(--bad); background: var(--bad-bg); color: var(--bad);
+        border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; font-size: 13px;
+      }
+      .alert[hidden] { display: none; }
+      .ok { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Activate Study App</h1>
+      <p class="lede">Enter the license key you were given. This happens once, on this computer, and needs no internet connection.</p>
+
+      <div id="alert" class="alert" role="alert" hidden></div>
+
+      <div class="card">
+        <label for="machine">Your Machine ID</label>
+        <div class="machine">
+          <code id="machine">…</code>
+          <button id="copy" type="button">Copy</button>
+        </div>
+        <p class="hint">Send this to whoever issues your key — a student key is tied to this computer.</p>
+      </div>
+
+      <div class="card">
+        <label for="token">License key</label>
+        <textarea id="token" spellcheck="false" autocomplete="off" placeholder="Paste the key here"></textarea>
+        <div class="row">
+          <button id="activate" class="primary" type="button" disabled>Activate</button>
+          <span id="status" class="ok"></span>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const alertBox = $("alert");
+      const status = $("status");
+      const tokenField = $("token");
+      const activateButton = $("activate");
+
+      function fail(message) {
+        alertBox.textContent = message;
+        alertBox.hidden = false;
+        status.textContent = "";
+      }
+
+      function clearAlert() {
+        alertBox.hidden = true;
+      }
+
+      window.license.getMachineId().then((id) => {
+        $("machine").textContent = id;
+      });
+
+      $("copy").addEventListener("click", async () => {
+        await navigator.clipboard.writeText($("machine").textContent.trim());
+        $("copy").textContent = "Copied";
+        setTimeout(() => ($("copy").textContent = "Copy"), 1500);
+      });
+
+      tokenField.addEventListener("input", () => {
+        clearAlert();
+        activateButton.disabled = tokenField.value.trim().length === 0;
+      });
+
+      activateButton.addEventListener("click", async () => {
+        clearAlert();
+        activateButton.disabled = true;
+        status.textContent = "Checking…";
+
+        try {
+          const result = await window.license.activate(tokenField.value);
+
+          if (!result.valid) {
+            fail(result.message);
+            activateButton.disabled = false;
+            return;
+          }
+
+          status.textContent =
+            result.type === "admin"
+              ? "Activated. Starting…"
+              : `Activated — ${result.daysRemaining} day(s) remaining. Starting…`;
+        } catch (error) {
+          fail(String(error && error.message ? error.message : error));
+          activateButton.disabled = false;
+        }
+      });
+
+      // A pasted key is usually the only thing on the clipboard; let Enter run it.
+      tokenField.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          activateButton.click();
+        }
+      });
+    </script>
+  </body>
+</html>

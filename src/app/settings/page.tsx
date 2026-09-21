@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { ProviderSettings } from "@/components/settings/provider-settings";
 import { resolveDbPath } from "@/db/client";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardDescription,
@@ -11,10 +12,12 @@ import {
 import { uploadsRoot } from "@/lib/ingest/storage";
 import { LOCAL_MODELS } from "@/lib/llm/catalog";
 import { modelsRoot } from "@/lib/llm/download";
+import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/status";
 import { getSetupSnapshot } from "@/lib/settings-actions";
 
 export default async function SettingsPage() {
   const snapshot = await getSetupSnapshot();
+  const license = readLicenseStatus();
 
   return (
     <div className="space-y-6">
@@ -27,6 +30,24 @@ export default async function SettingsPage() {
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
       </div>
+
+      {license ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+              Licence
+              <Badge variant="secondary">{TIER_LABELS[license.type]}</Badge>
+              <Badge variant="outline">{expiryLabel(license)}</Badge>
+            </CardTitle>
+            <CardDescription>
+              {license.name ? `Issued to ${license.name}. ` : ""}
+              {license.expiresAt
+                ? `Valid until ${new Date(license.expiresAt).toLocaleDateString()}.`
+                : "This licence has no end date."}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ) : null}
 
       <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
 
