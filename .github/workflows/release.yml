@@ -35,11 +35,9 @@ jobs:
       - name: Build Standalone and Electron Main
         env:
           NEXT_TELEMETRY_DISABLED: 1
-          NEXT_PRIVATE_WORKERS: 1
-          UV_THREADPOOL_SIZE: 1
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          npx next build --no-lint --experimental-build-mode compile 2>/dev/null || npx next build
+          npx next build
           node scripts/prepare-standalone.mjs
           npm run electron:compile
 
