@@ -2,7 +2,34 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### Install on a Mac
+
+Paste this into Terminal:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/neftyhot/study-app/main/scripts/install.sh | bash
+```
+
+It downloads the latest release, installs it to `/Applications`, and opens
+it. Requires a Mac with Apple silicon (M1 or later).
+
+Study App is not yet signed with an Apple Developer ID, so a DMG downloaded
+in a browser is quarantined and macOS refuses to open it. Files fetched with
+`curl` are not quarantined, and the script also clears the flag on the
+installed app — see [`scripts/install.sh`](scripts/install.sh) before
+running it.
+
+**Installing from the DMG instead:** download it from
+[Releases](https://github.com/neftyhot/study-app/releases), drag Study App to
+Applications, then either right-click it and choose **Open**, or run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Study App.app"
+```
+
+### Development
+
+Run the development server:
 
 ```bash
 npm run dev

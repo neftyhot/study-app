@@ -90,7 +90,8 @@
               <label for="type">Tier</label>
               <select id="type">
                 <option value="student">Student — exam window</option>
-                <option value="admin">Admin — lifetime</option>
+                <option value="lifetime">Lifetime — one computer (what a purchase gets)</option>
+                <option value="admin">Admin — any computer, never expires</option>
               </select>
             </div>
             <div>
@@ -98,7 +99,7 @@
               <input id="days" type="number" min="1" max="3650" value="14" />
             </div>
             <div>
-              <label for="machine">Machine ID (optional)</label>
+              <label for="machine" id="machine-label">Machine ID (optional)</label>
               <input id="machine" placeholder="Locks the key to one computer" autocomplete="off" />
             </div>
           </div>
@@ -125,6 +126,18 @@
             </thead>
             <tbody id="rows"></tbody>
           </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Add an existing key</h2>
+        <div class="body">
+          <p class="paths" style="margin-top: 0">A key issued before the ledger existed, or one that dropped off it. Only keys made with this folder's signing key are accepted.</p>
+          <textarea id="import-token" rows="3" spellcheck="false" autocomplete="off" placeholder="Paste the key here" style="width: 100%; font: 12px/1.4 ui-monospace, Menlo, monospace;"></textarea>
+          <div class="row" style="margin-top: 10px">
+            <button id="import" type="button" disabled>Add to ledger</button>
+            <span id="import-status" class="paths"></span>
+          </div>
         </div>
       </section>
 
@@ -170,8 +183,14 @@
         $("path-ledger").textContent = state.paths.licenses;
         $("key-status").textContent = state.hasPrivateKey
           ? "Signing key found."
-          : "No signing key in this folder — minting is disabled.";
+          : "No signing key in this folder. Use “Change folder…” to pick the one holding .license-private-key.pem — it is remembered.";
         $("mint").disabled = !state.hasPrivateKey;
+        $("import").disabled = !state.hasPrivateKey;
+        if (!state.hasPrivateKey) {
+          fail("Minting is disabled: there is no signing key in " + state.paths.root + ". Click “Change folder…” below and choose the folder holding .license-private-key.pem.");
+        } else {
+          clearAlert();
+        }
 
         const rows = $("rows");
         rows.textContent = "";
@@ -231,11 +250,34 @@
         setTimeout(() => ($("mint-status").textContent = ""), 2000);
       }
 
-      $("type").addEventListener("change", () => {
-        const student = $("type").value === "student";
+      function syncTier() {
+        const type = $("type").value;
+        const student = type === "student";
         $("days").disabled = !student;
-        $("machine").disabled = !student;
+        $("machine").disabled = type === "admin";
+        $("machine-label").textContent =
+          type === "lifetime" ? "Machine ID (required)" : "Machine ID (optional)";
         if (student && !$("days").value) $("days").value = "14";
+      }
+      $("type").addEventListener("change", syncTier);
+      syncTier();
+
+      $("import-token").addEventListener("input", () => {
+        $("import-status").textContent = "";
+      });
+
+      $("import").addEventListener("click", async () => {
+        clearAlert();
+        const result = await window.authority.importKey($("import-token").value);
+        if (!result.ok) {
+          fail(result.error);
+          return;
+        }
+        $("import-token").value = "";
+        $("import-status").textContent = result.added
+          ? "Added to the ledger."
+          : "Already in the ledger.";
+        render(result.state);
       });
 
       $("mint").addEventListener("click", async () => {

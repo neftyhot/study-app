@@ -36,7 +36,7 @@ async function snapshot(isDev) {
 
 /**
  * @param {import("electron").IpcMain} ipcMain
- * @param {{isDev: boolean, root: string, electron: object}} context
+ * @param {{isDev: boolean, root: string, electron: object, onRootChange?: (root: string) => void}} context
  */
 async function registerHandlers(ipcMain, context) {
   const { isDev, electron } = context;
@@ -51,6 +51,15 @@ async function registerHandlers(ipcMain, context) {
     try {
       const record = api.mintLicense(options);
       return { ok: true, record, state: await snapshot(isDev) };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("import", async (_event, token) => {
+    try {
+      const { added } = api.importLicense(token);
+      return { ok: true, added, state: await snapshot(isDev) };
     } catch (error) {
       return { ok: false, error: error.message };
     }
@@ -89,6 +98,7 @@ async function registerHandlers(ipcMain, context) {
 
     root = result.filePaths[0];
     api.setRoot(root);
+    context.onRootChange?.(root);
     return snapshot(isDev);
   });
 }

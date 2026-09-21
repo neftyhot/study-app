@@ -10,21 +10,51 @@
  * in a browser. A window is reachable by the person sitting in front of it.
  */
 const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("electron");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const isDev = !app.isPackaged;
 
+// Its own data folder, by name. Built from the same package.json as the
+// student app, it would otherwise inherit that app's name — and its
+// user-data folder, which is where it went looking for the signing key.
+app.setName("License Manager");
+app.setPath("userData", path.join(app.getPath("appData"), "License Manager"));
+
 const { registerHandlers } = require("./handlers.js");
+
+/** Where the folder chosen in the window is remembered between launches. */
+function settingsFile() {
+  return path.join(app.getPath("userData"), "authority.json");
+}
+
+function savedRoot() {
+  try {
+    const { root } = JSON.parse(fs.readFileSync(settingsFile(), "utf8"));
+    return typeof root === "string" && fs.existsSync(root) ? root : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveRoot(root) {
+  fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
+  fs.writeFileSync(settingsFile(), `${JSON.stringify({ root }, null, 2)}\n`, {
+    mode: 0o600,
+  });
+}
 
 /**
  * Where the key and ledger live.
  *
- * In development that is the repository, so this and the command line act on
- * the same files. A packaged app has no meaningful working directory, so it
- * keeps its own folder — and says which one, in the window.
+ * The folder last chosen with "Change folder…", so the choice survives a
+ * restart — without that, a packaged app came back up pointing at its own
+ * empty folder every time, with minting disabled. Failing that: the
+ * repository in development, so this and the command line act on the same
+ * files, or the app's own folder when packaged.
  */
 function defaultRoot() {
-  return isDev ? process.cwd() : app.getPath("userData");
+  return savedRoot() ?? (isDev ? process.cwd() : app.getPath("userData"));
 }
 
 function createWindow() {
@@ -61,6 +91,7 @@ app.whenReady().then(async () => {
     isDev,
     root: defaultRoot(),
     electron: { clipboard, dialog, shell },
+    onRootChange: saveRoot,
   });
 
   createWindow();

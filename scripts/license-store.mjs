@@ -9,7 +9,13 @@
  * excluded from packaged builds. It is a record of who has what, which is
  * nobody's business but yours.
  */
-import { createPrivateKey, randomUUID, sign } from "node:crypto";
+import {
+  createPrivateKey,
+  createPublicKey,
+  randomUUID,
+  sign,
+  verify,
+} from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
@@ -180,6 +186,53 @@ export function mintLicense(options) {
   writeLicenses([...readLicenses(), record]);
 
   return record;
+}
+
+/**
+ * Adds a key that already exists to the ledger — one minted before the
+ * ledger was lost, say, or read back off the machine it was installed on.
+ *
+ * Only keys this signing key actually made are accepted, so the ledger stays
+ * a record of what was issued rather than of whatever was pasted in.
+ */
+export function importLicense(token) {
+  const text = typeof token === "string" ? token.trim() : "";
+  let outer;
+  let payload;
+  try {
+    outer = JSON.parse(Buffer.from(text, "base64").toString("utf8"));
+    payload = JSON.parse(Buffer.from(outer.payload, "base64").toString("utf8"));
+  } catch {
+    throw new Error("That is not a readable license key.");
+  }
+
+  const signed = verify(
+    null,
+    Buffer.from(outer.payload, "base64"),
+    createPublicKey(loadPrivateKey()),
+    Buffer.from(String(outer.signature ?? ""), "base64"),
+  );
+  if (!signed) {
+    throw new Error("That key was not signed by this signing key.");
+  }
+
+  const records = readLicenses();
+  const existing = records.find((record) => record.id === payload.id);
+  if (existing) return { record: existing, added: false };
+
+  const record = {
+    id: payload.id ?? randomUUID(),
+    name: typeof payload.name === "string" ? payload.name : null,
+    type: payload.type,
+    machineId: payload.machineId ?? null,
+    issuedAt: payload.issuedAt ?? null,
+    expiresAt: payload.expiresAt ?? null,
+    token: text,
+    status: "active",
+    importedAt: Date.now(),
+  };
+  writeLicenses([...records, record]);
+  return { record, added: true };
 }
 
 export function setStatus(id, status) {

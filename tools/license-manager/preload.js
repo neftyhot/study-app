@@ -9,6 +9,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("authority", {
   state: () => ipcRenderer.invoke("state"),
   mint: (options) => ipcRenderer.invoke("mint", options),
+  importKey: (token) => ipcRenderer.invoke("import", token),
   setStatus: (id, status) => ipcRenderer.invoke("set-status", id, status),
   remove: (id) => ipcRenderer.invoke("delete", id),
   copy: (text) => ipcRenderer.invoke("copy", text),
