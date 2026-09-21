@@ -208,6 +208,8 @@ export const cardTypes = [
   "integration",
   /** Higher-order questions (PRD §9): perturbations, shifts, scenarios. */
   "application",
+  /** Hand-written fill-in-the-blank, using {{...}} around what is hidden. */
+  "cloze",
 ] as const;
 
 export const flashcards = sqliteTable(
@@ -242,6 +244,9 @@ export const flashcards = sqliteTable(
       .default(false),
     starred: integer("starred", { mode: "boolean" }).notNull().default(false),
     excluded: integer("excluded", { mode: "boolean" }).notNull().default(false),
+    /** Images a student attached by hand, relative to the uploads root. */
+    frontImagePath: text("front_image_path"),
+    backImagePath: text("back_image_path"),
     createdAt: createdAt(),
     /**
      * When the card was last edited. Null means never — it is still exactly

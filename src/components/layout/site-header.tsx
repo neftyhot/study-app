@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { GraduationCap, Search, Settings } from "lucide-react";
 
+import { CardBuilder } from "@/components/cards/card-builder";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { DeckSwitcher } from "@/components/manage/deck-switcher";
@@ -23,6 +24,18 @@ export async function SiteHeader() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
+          {courses.some((course) => course.exams.length > 0) ? (
+            <CardBuilder
+              decks={courses.flatMap((course) =>
+                course.exams.map((exam) => ({
+                  id: exam.id,
+                  title: exam.title,
+                  courseId: course.id,
+                  courseTitle: course.title,
+                })),
+              )}
+            />
+          ) : null}
           <Button asChild variant="ghost" size="icon" aria-label="Search everything">
             <Link href="/search">
               <Search className="size-4" />

@@ -34,6 +34,8 @@ export default async function StudyPage(
     topic: card.topic,
     question: card.question,
     directAnswer: card.directAnswer,
+    frontImage: Boolean(card.frontImagePath),
+    backImage: Boolean(card.backImagePath),
     fullExplanation: card.fullExplanation,
     cardType: card.cardType,
     starred: card.starred,

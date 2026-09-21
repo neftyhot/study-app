@@ -43,6 +43,7 @@ import {
 import type { Grade } from "@/lib/study/grade";
 import type { StudyScope } from "@/lib/study/queue";
 import { CardEditor } from "@/components/cards/card-editor";
+import { CardImage, CardQuestion } from "@/components/cards/card-face";
 import {
   beginStudySession,
   finishStudySession,
@@ -58,6 +59,9 @@ export type StudyCardView = {
   topic: string | null;
   question: string;
   directAnswer: string;
+  /** Whether the card carries an attached picture on each side. */
+  frontImage?: boolean;
+  backImage?: boolean;
   fullExplanation: string | null;
   cardType: string;
   starred: boolean;
@@ -409,15 +413,21 @@ export function StudyDeck({
             />
           ) : (
             <>
-              <p className="text-lg leading-snug font-medium break-words">
-                {current.question}
-              </p>
+              <CardQuestion card={current} revealed={revealed} />
+
+              {current.frontImage ? (
+                <CardImage cardId={current.id} side="front" />
+              ) : null}
 
               {revealed ? (
                 <div className="space-y-3">
                   <p className="text-base break-words">
                     {current.directAnswer}
                   </p>
+
+                  {current.backImage ? (
+                    <CardImage cardId={current.id} side="back" />
+                  ) : null}
 
                   {current.fullExplanation || current.essentialPoints.length ? (
                     <div>

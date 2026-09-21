@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { CardBuilder } from "@/components/cards/card-builder";
 import { DeckCardList, type DeckCardView } from "@/components/search/deck-card-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getExam, listFlashcards } from "@/lib/queries";
+import { getExam, listCoursesWithExams, listFlashcards } from "@/lib/queries";
 
 export default async function CardsPage(
   props: PageProps<"/exams/[examId]/cards">,
@@ -13,7 +14,19 @@ export default async function CardsPage(
   const exam = await getExam(examId);
   if (!exam) notFound();
 
-  const cards = await listFlashcards(examId);
+  const [cards, courses] = await Promise.all([
+    listFlashcards(examId),
+    listCoursesWithExams(),
+  ]);
+
+  const decks = courses.flatMap((course) =>
+    course.exams.map((deck) => ({
+      id: deck.id,
+      title: deck.title,
+      courseId: course.id,
+      courseTitle: course.title,
+    })),
+  );
 
   const views: DeckCardView[] = cards.map((card) => {
     const label = card.sourceSlide
@@ -58,20 +71,28 @@ export default async function CardsPage(
               {cards.length}
             </Badge>
           </h1>
-          {cards.length > 0 ? (
-            <Button asChild size="sm">
-              <Link href={`/exams/${examId}/study`}>Study these</Link>
-            </Button>
-          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <CardBuilder decks={decks} defaultExamId={examId} />
+            {cards.length > 0 ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/exams/${examId}/study`}>Study these</Link>
+              </Button>
+            ) : null}
+          </div>
         </div>
       </div>
 
       {cards.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          No cards yet. Generate them from the exam overview.
+          No cards yet. Generate them from the exam overview, or write one
+          yourself.
         </p>
       ) : (
-        <DeckCardList examId={examId} cards={views} />
+        <DeckCardList
+          examId={examId}
+          cards={views}
+          decks={decks.filter((deck) => deck.id !== examId)}
+        />
       )}
     </div>
   );
