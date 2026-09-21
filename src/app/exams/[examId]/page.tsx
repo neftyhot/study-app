@@ -16,6 +16,7 @@ import { db } from "@/db";
 import { latestJob } from "@/lib/generate/jobs";
 import {
   countAnswerSlides,
+  listAnswerSources,
   countDueCards,
   getCoverageStats,
   getExam,
@@ -41,8 +42,16 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
 
   const job = latestJob(db, examId);
 
-  const [stats, slideCount, coverage, dueCount, mastery, diagnoses, planData] =
-    await Promise.all([
+  const [
+    stats,
+    slideCount,
+    coverage,
+    dueCount,
+    mastery,
+    diagnoses,
+    planData,
+    sources,
+  ] = await Promise.all([
       getExamStats(examId),
       countAnswerSlides(examId),
       getCoverageStats(examId),
@@ -50,7 +59,15 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       getMasteryBreakdown(examId),
       listDiagnosedCards(examId),
       loadPlanCards(examId),
+      listAnswerSources(examId),
     ]);
+
+  // What this deck has actually produced per slide so far, which is a better
+  // guide to what another run will produce than any preset ratio.
+  const observedRatio =
+    stats.flashcards > 0 && slideCount > 0
+      ? stats.flashcards / slideCount
+      : null;
 
   const plan = buildPlan({
     cards: planData.cards,
@@ -179,6 +196,10 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         slideCount={slideCount}
         existingCards={stats.flashcards}
         includeApplication={exam.includeApplication}
+        sources={sources}
+        density={exam.extractionDensity}
+        densityRatio={exam.extractionRatio}
+        observedRatio={observedRatio}
         initialJob={
           job
             ? {

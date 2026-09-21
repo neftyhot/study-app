@@ -20,9 +20,10 @@ import {
 } from "@/db/schema";
 import type { LlmProvider } from "@/lib/llm";
 
+import type { DensityMode } from "./density";
 import {
   fullCoveragePrompt,
-  GENERATION_SYSTEM,
+  generationSystem,
   objectiveFocusPrompt,
 } from "./prompts";
 import {
@@ -47,6 +48,9 @@ export type GenerationProgress = {
 
 export type GenerationSummary = {
   mode: "objectives" | "files";
+  density: DensityMode;
+  /** Units actually sent to the model, after any range filtering. */
+  unitsUsed: number;
   batchCount: number;
   cardsCreated: number;
   cardsRejected: number;
@@ -54,10 +58,22 @@ export type GenerationSummary = {
   uncoveredNotes: string[];
 };
 
+/** 1-based, inclusive — the numbers the student sees in the original file. */
+export type UnitRange = { from: number; to: number };
+
 export type GenerateOptions = {
   batchSize?: number;
   /** Restrict generation to these source files; defaults to all ready files. */
   sourceFileIds?: string[];
+  /**
+   * Which pages of each file to use, keyed by source file id. A file with no
+   * entry is used whole, so omitting this means "everything" as before.
+   */
+  ranges?: Record<string, UnitRange>;
+  /** Overrides the density stored on the exam for this run. */
+  density?: DensityMode;
+  /** Cards per unit, used when the density is "custom". */
+  densityRatio?: number | null;
   onProgress?: (progress: GenerationProgress) => void;
 };
 
@@ -70,12 +86,22 @@ export async function generateCardsForExam(
   const exam = db.select().from(exams).where(eq(exams.id, examId)).get();
   if (!exam) throw new Error(`Exam ${examId} not found`);
 
-  const slides = loadSlides(db, examId, options.sourceFileIds);
+  const slides = loadSlides(db, examId, options.sourceFileIds, options.ranges);
   if (slides.length === 0) {
     throw new Error(
-      "No extracted slides for this exam. Upload and ingest sources first.",
+      options.ranges && Object.keys(options.ranges).length > 0
+        ? "The slide range you chose contains no readable slides. Widen it, or check the page numbers against the file."
+        : "No extracted slides for this exam. Upload and ingest sources first.",
     );
   }
+
+  // The exam remembers its density, so a run started from anywhere behaves
+  // the way the deck was last set up to behave.
+  const density = options.density ?? exam.extractionDensity;
+  const system = generationSystem(
+    density,
+    options.densityRatio ?? exam.extractionRatio,
+  );
 
   const objectives =
     exam.scopeMode === "objectives" ? loadObjectives(db, examId) : [];
@@ -114,7 +140,7 @@ export async function generateCardsForExam(
         : fullCoveragePrompt(batch, promptOptions);
 
     const { data } = await llm.generateStructured<GenerationResponse>({
-      system: GENERATION_SYSTEM,
+      system,
       prompt,
       schema: GENERATED_CARD_SCHEMA,
       temperature: 0,
@@ -142,6 +168,8 @@ export async function generateCardsForExam(
 
   return {
     mode: exam.scopeMode,
+    density,
+    unitsUsed: slides.length,
     batchCount: batches.length,
     cardsCreated,
     cardsRejected: rejections.length,
@@ -217,6 +245,7 @@ function loadSlides(
   db: Db,
   examId: string,
   sourceFileIds?: string[],
+  ranges?: Record<string, UnitRange>,
 ): SourceSlide[] {
   const files = db
     .select({ id: sourceFiles.id })
@@ -244,7 +273,22 @@ function loadSlides(
     .all()
     // Slides with no usable text cannot support a card; skipping them keeps
     // them out of the prompt without hiding them from the legibility report.
-    .filter((slide) => slide.legibilityFlag !== "empty");
+    .filter((slide) => slide.legibilityFlag !== "empty")
+    // Filtered, never renumbered: `index` is the page number printed on the
+    // student's own file, and every citation resolves through it.
+    .filter((slide) => withinRange(slide, ranges));
+}
+
+function withinRange(
+  slide: SourceSlide,
+  ranges?: Record<string, UnitRange>,
+): boolean {
+  const range = ranges?.[slide.sourceFileId];
+  if (!range) return true;
+
+  const from = Math.min(range.from, range.to);
+  const to = Math.max(range.from, range.to);
+  return slide.index >= from && slide.index <= to;
 }
 
 function loadObjectives(db: Db, examId: string): StudyGuideObjective[] {

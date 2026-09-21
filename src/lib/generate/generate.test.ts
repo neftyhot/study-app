@@ -188,7 +188,11 @@ describe("generateCardsForExam", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].schema).toMatchObject({ type: "object" });
     expect(requests[0].temperature).toBe(0);
-    expect(requests[0].system).toContain("ATOMICITY");
+    // Atomization survives whatever density the deck is set to; only the
+    // heading above it changes.
+    expect(requests[0].system).toContain(
+      "One card tests exactly ONE fact",
+    );
   });
 
   it("batches slides and calls the model once per batch", async () => {
@@ -453,5 +457,134 @@ describe("clearGeneratedCards", () => {
 
   it("does nothing to a deck with no generated cards", () => {
     expect(clearGeneratedCards(db, examId)).toEqual({ deleted: 0, kept: 0 });
+  });
+});
+
+describe("slide range", () => {
+  it("uses only the pages in range, and keeps their real page numbers", async () => {
+    seedSlides(10);
+    const { provider, requests } = stubProvider([{ cards: [] }]);
+
+    await generateCardsForExam(db, provider, examId, {
+      ranges: { [fileId]: { from: 4, to: 6 } },
+      batchSize: 50,
+    });
+
+    // Citations are the numbers printed on the student's own file, so a
+    // filtered range must not renumber what it kept: pages 4-6 stay S4-S6.
+    expect(requests).toHaveLength(1);
+    const tokens = [...requests[0].prompt.matchAll(/\[S(\d+)\]/g)].map((m) =>
+      Number(m[1]),
+    );
+    expect(tokens).toEqual([4, 5, 6]);
+  });
+
+  it("reports how many units it actually used", async () => {
+    seedSlides(10);
+    const { provider } = stubProvider([{ cards: [] }]);
+
+    const summary = await generateCardsForExam(db, provider, examId, {
+      ranges: { [fileId]: { from: 2, to: 5 } },
+    });
+
+    expect(summary.unitsUsed).toBe(4);
+  });
+
+  it("leaves a file with no range entry whole", async () => {
+    seedSlides(4);
+    const otherId = db
+      .insert(sourceFiles)
+      .values({
+        examId,
+        filename: "notes.pdf",
+        fileType: "pdf",
+        role: "notes",
+        rawPath: "notes.pdf",
+        status: "ready",
+      })
+      .returning()
+      .get().id;
+    db.insert(sourceSlides)
+      .values([
+        { sourceFileId: otherId, index: 1, rawText: "Notes page one text" },
+        { sourceFileId: otherId, index: 2, rawText: "Notes page two text" },
+      ])
+      .run();
+
+    const { provider } = stubProvider([{ cards: [] }]);
+    const summary = await generateCardsForExam(db, provider, examId, {
+      ranges: { [fileId]: { from: 1, to: 1 } },
+    });
+
+    // One page of the deck, both pages of the untouched notes file.
+    expect(summary.unitsUsed).toBe(3);
+  });
+
+  it("explains an empty range rather than blaming the upload", async () => {
+    seedSlides(4);
+    const { provider } = stubProvider([{ cards: [] }]);
+
+    await expect(
+      generateCardsForExam(db, provider, examId, {
+        ranges: { [fileId]: { from: 90, to: 99 } },
+      }),
+    ).rejects.toThrow(/range you chose/i);
+  });
+});
+
+describe("extraction density", () => {
+  it("sends the density the exam remembers", async () => {
+    seedSlides(2);
+    db.update(exams)
+      .set({ extractionDensity: "high_yield" })
+      .where(eq(exams.id, examId))
+      .run();
+
+    const { provider, requests } = stubProvider([{ cards: [] }]);
+    const summary = await generateCardsForExam(db, provider, examId, {});
+
+    expect(summary.density).toBe("high_yield");
+    expect(requests[0].system).toContain("be selective");
+    expect(requests[0].system).not.toContain("There is no limit on card count");
+  });
+
+  it("lets a run override the stored density", async () => {
+    seedSlides(2);
+    const { provider, requests } = stubProvider([{ cards: [] }]);
+
+    await generateCardsForExam(db, provider, examId, { density: "exhaustive" });
+
+    expect(requests[0].system).toContain("There is no limit on card count");
+  });
+
+  it("gives the model a number only when the student set one", async () => {
+    seedSlides(2);
+    const preset = stubProvider([{ cards: [] }]);
+    await generateCardsForExam(db, preset.provider, examId, {
+      density: "standard",
+    });
+    expect(preset.requests[0].system).not.toContain("TARGET DENSITY");
+
+    const custom = stubProvider([{ cards: [] }]);
+    await generateCardsForExam(db, custom.provider, examId, {
+      density: "custom",
+      densityRatio: 1.8,
+    });
+    expect(custom.requests[0].system).toContain("roughly 1.8 cards per slide");
+  });
+
+  it("keeps provenance and rubric rules identical at every density", async () => {
+    seedSlides(2);
+
+    for (const density of ["high_yield", "standard", "exhaustive"] as const) {
+      const { provider, requests } = stubProvider([{ cards: [] }]);
+      await generateCardsForExam(db, provider, examId, { density });
+
+      // A sparser deck is a smaller selection of the same material, never a
+      // looser standard for it.
+      expect(requests[0].system).toContain("PROVENANCE (non-negotiable)");
+      expect(requests[0].system).toContain("copied VERBATIM");
+      expect(requests[0].system).toContain("essentialPoints are what a typed answer MUST say");
+    }
   });
 });

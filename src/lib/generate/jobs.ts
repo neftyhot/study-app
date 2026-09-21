@@ -147,6 +147,8 @@ export function startGenerationJob(
         finishedAt: new Date().toISOString(),
         summary: {
           mode: summary.mode,
+          density: summary.density,
+          unitsUsed: summary.unitsUsed,
           batchCount: summary.batchCount,
           cardsCreated: summary.cardsCreated,
           cardsRejected: summary.cardsRejected,

@@ -8,14 +8,35 @@
  */
 import type { SourceSlide, StudyGuideObjective } from "@/db/schema";
 
+import {
+  DENSITY_PRESETS,
+  ratioFor,
+  type DensityMode,
+} from "./density";
+
 /** Stable, short token the model cites instead of a UUID. */
 export function citationToken(slide: Pick<SourceSlide, "index">) {
   return `S${slide.index}`;
 }
 
-export const GENERATION_SYSTEM = `You build flashcards for a student from their own lecture material.
+/**
+ * The opening line of every generation system prompt.
+ *
+ * Kept stable so a caller can recognise a generation request whichever
+ * density it was built for.
+ */
+export const GENERATION_PREAMBLE =
+  "You build flashcards for a student from their own lecture material.";
 
-ATOMICITY (this is the core requirement)
+/**
+ * What to keep, and how finely to cut it.
+ *
+ * This is the only part of the system prompt density changes. Provenance and
+ * rubric rules are identical in every mode: a sparser deck is a smaller
+ * selection of the same material, never a looser standard for it.
+ */
+const SELECTION: Record<Exclude<DensityMode, "custom">, string> = {
+  exhaustive: `ATOMICITY (this is the core requirement)
 - One card tests exactly ONE fact. Never combine two facts with "and".
 - Decompose every concept into its separate facets. For a hormone that means
   separate cards for: where it is produced, what triggers its release, what
@@ -47,9 +68,39 @@ BREADTH (this is where most decks fail)
   how does it relate to the structure next to it. For each pathway ask: what
   are the steps, in what order, and what happens at each one.
 - Never answer a broad heading with a single summary card. If you find
-  yourself writing one card whose answer is a list, split the list.
+  yourself writing one card whose answer is a list, split the list.`,
 
-PROVENANCE (non-negotiable)
+  standard: `WHAT TO EXTRACT
+- One card tests exactly ONE fact. Never combine two facts with "and".
+- Take the core of the material: definitions, mechanisms, the steps of a
+  process and the order they happen in, the relationships between structures,
+  numeric values, and the comparisons and exceptions an exam would test.
+- Decompose a concept into the facets that are genuinely tested separately.
+  For a hormone: where it is produced, what triggers its release, what it acts
+  on, what it does, and how it is regulated.
+- Do NOT write several near-identical cards for one concept. If two cards
+  would be answered by the same sentence, write one of them.
+- Skip conversational bullets, transitional slides, administrative content,
+  and anything the material simply repeats.
+- A broad heading is still a container, not a single card: split it into the
+  structures and steps the material actually explains. But a minor sub-bullet
+  that only supports a concept does not need a card of its own.`,
+
+  high_yield: `WHAT TO EXTRACT (be selective — this is a final-week pass)
+- Take only what is high-yield: stated learning objectives, bolded or
+  emphasised terms, summary tables, and the concepts the rest of the material
+  is built on.
+- Group related sub-points into a single synthesis card rather than one card
+  per sub-point. A card here may carry two or three tightly linked facts when
+  they are always recalled together.
+- Discard trivial background context, transitional bullets, asides, and detail
+  that merely supports a concept rather than being tested itself.
+- Prefer the whole-process summary over a card per step, and the comparison
+  over separate cards for the two things being compared.
+- Expect far fewer cards than this material could yield. That is the point.`,
+};
+
+const PROVENANCE_AND_RUBRICS = `PROVENANCE (non-negotiable)
 - Every card cites the slide token it came from, e.g. "S7".
 - sourceExcerpt must be text copied VERBATIM from that slide. Copy it exactly,
   character for character. Do not paraphrase, reformat, or correct it.
@@ -71,6 +122,47 @@ RUBRICS
 
 Write questions a student can answer from memory, not questions about the
 slides. Never write "According to slide 7, ...".`;
+
+/** The preset whose prose fits a custom ratio most closely. */
+export function nearestPreset(ratio: number): Exclude<DensityMode, "custom"> {
+  const entries = Object.entries(DENSITY_PRESETS) as [
+    Exclude<DensityMode, "custom">,
+    { cardsPerUnit: number },
+  ][];
+
+  return entries.reduce((best, [mode, preset]) =>
+    Math.abs(preset.cardsPerUnit - ratio) <
+    Math.abs(DENSITY_PRESETS[best].cardsPerUnit - ratio)
+      ? mode
+      : best,
+  entries[0][0]);
+}
+
+export function generationSystem(
+  density: DensityMode = "exhaustive",
+  customRatio?: number | null,
+): string {
+  const ratio = ratioFor(density, customRatio);
+  const selection = SELECTION[density === "custom" ? nearestPreset(ratio) : density];
+
+  // A number is only given to the model when the student set one. For a
+  // preset, the prose is the instruction; adding a quota to it would invite
+  // padding, which the validator would then reject as unsupported cards.
+  const target =
+    density === "custom"
+      ? `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio)} per slide on average across this batch.\nThis is guidance for how finely to cut, not a quota: never invent a card, pad\nwith trivia, or drop a genuinely testable fact in order to hit it.`
+      : "";
+
+  return `${GENERATION_PREAMBLE}\n\n${selection}\n\n${PROVENANCE_AND_RUBRICS}${target}`;
+}
+
+function formatRatio(ratio: number): string {
+  const rounded = Math.round(ratio * 10) / 10;
+  return `${rounded} card${rounded === 1 ? "" : "s"}`;
+}
+
+/** The prompt generation used before density was configurable. */
+export const GENERATION_SYSTEM = generationSystem("exhaustive");
 
 /** Renders slides into the prompt body, tagged with citation tokens. */
 export function renderSlides(slides: SourceSlide[]): string {

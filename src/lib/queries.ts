@@ -92,6 +92,38 @@ export async function countAnswerSlides(examId: string) {
   return row?.n ?? 0;
 }
 
+/**
+ * The answer-source files a run can draw on, with the page numbers they span.
+ *
+ * The bounds are the real 1-based numbers from each file rather than a count,
+ * because that is what the student types into a range box and what a citation
+ * resolves through. Units with no readable text are excluded here for the same
+ * reason generation excludes them: they cannot support a card.
+ */
+export async function listAnswerSources(examId: string) {
+  return db
+    .select({
+      id: sourceFiles.id,
+      filename: sourceFiles.filename,
+      fileType: sourceFiles.fileType,
+      units: count(sourceSlides.id),
+      firstIndex: sql<number>`min(${sourceSlides.index})`,
+      lastIndex: sql<number>`max(${sourceSlides.index})`,
+    })
+    .from(sourceFiles)
+    .innerJoin(sourceSlides, eq(sourceSlides.sourceFileId, sourceFiles.id))
+    .where(
+      and(
+        eq(sourceFiles.examId, examId),
+        eq(sourceFiles.status, "ready"),
+        ne(sourceFiles.role, "study_guide"),
+        ne(sourceSlides.legibilityFlag, "empty"),
+      ),
+    )
+    .groupBy(sourceFiles.id)
+    .orderBy(sourceFiles.createdAt);
+}
+
 /** Cards with the slide each one cites, for the deck view. */
 export async function listFlashcards(examId: string) {
   return db.query.flashcards.findMany({

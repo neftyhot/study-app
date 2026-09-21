@@ -6,6 +6,10 @@ import { Copy, Layers, Loader2, RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 
 import { setIncludeApplication, setScopeMode } from "@/lib/actions";
+import {
+  IngestionOptions,
+  type OptionsState,
+} from "@/components/generate/ingestion-options";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -31,6 +35,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ratioFor, type DensityMode } from "@/lib/generate/density";
+import {
+  defaultChoices,
+  selectedUnits,
+  type SourceOption,
+} from "@/lib/generate/selection";
 
 type GenerateMode = "append" | "replace" | "separate";
 
@@ -50,6 +60,8 @@ export type GenerationJobView = {
 
 type Summary = {
   mode: string;
+  density?: string;
+  unitsUsed?: number;
   target?: GenerateMode;
   examId?: string;
   createdExam?: { id: string; title: string } | null;
@@ -68,10 +80,21 @@ export function GeneratePanel({
   existingCards,
   includeApplication,
   initialJob,
+  sources,
+  density,
+  densityRatio,
+  observedRatio,
 }: {
   examId: string;
   scopeMode: "files" | "objectives";
   slideCount: number;
+  /** Answer-source files this deck can generate from, with their page spans. */
+  sources: SourceOption[];
+  /** How finely this deck was last set to cut its material. */
+  density: DensityMode;
+  densityRatio: number | null;
+  /** Cards per unit this deck has actually produced, when it has any. */
+  observedRatio: number | null;
   /** A run already in flight, so the panel comes back mid-generation. */
   initialJob: GenerationJobView | null;
   /** PRD §9 higher-order questions, persisted on the exam. */
@@ -134,6 +157,11 @@ export function GeneratePanel({
     };
   }, [running, examId, router]);
   const [application, setApplication] = useState(includeApplication);
+  const [options, setOptions] = useState<OptionsState>(() => ({
+    density,
+    ratio: densityRatio ?? ratioFor(density, densityRatio),
+    choices: defaultChoices(sources),
+  }));
 
   async function generate(mode: GenerateMode) {
     setBusy(true);
@@ -144,7 +172,7 @@ export function GeneratePanel({
       const response = await fetch(`/api/exams/${examId}/generate`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode }),
+        body: JSON.stringify({ mode, ...selection() }),
       });
       const payload = await response.json();
 
@@ -184,6 +212,31 @@ export function GeneratePanel({
     }
   }
 
+  /**
+   * The options, in the shape the route takes.
+   *
+   * A file left whole sends no range at all, so "everything" stays the
+   * absence of a filter rather than a range that happens to cover it.
+   */
+  function selection() {
+    const ranges: Record<string, { from: number; to: number }> = {};
+    const sourceFileIds: string[] = [];
+
+    for (const source of sources) {
+      const choice = options.choices[source.id];
+      if (!choice?.included) continue;
+      sourceFileIds.push(source.id);
+      if (!choice.whole) ranges[source.id] = { from: choice.from, to: choice.to };
+    }
+
+    return {
+      density: options.density,
+      densityRatio: options.density === "custom" ? options.ratio : null,
+      sourceFileIds,
+      ranges,
+    };
+  }
+
   /** With an empty deck there is nothing to decide, so do not ask. */
   function start() {
     if (existingCards === 0) void generate("append");
@@ -191,6 +244,7 @@ export function GeneratePanel({
   }
 
   const disabled = busy || pending || running || slideCount === 0;
+  const chosenUnits = selectedUnits(sources, options.choices);
 
   return (
     <Card>
@@ -221,7 +275,7 @@ export function GeneratePanel({
             </SelectContent>
           </Select>
 
-          <Button onClick={start} disabled={disabled}>
+          <Button onClick={start} disabled={disabled || chosenUnits === 0}>
             {busy || running ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (
@@ -262,10 +316,20 @@ export function GeneratePanel({
             Upload and ingest slides first.
           </p>
         ) : (
-          <p className="text-muted-foreground text-xs">
-            {slideCount} slides available. Generation runs in batches and may
-            take a minute.
-          </p>
+          <>
+            <IngestionOptions
+              sources={sources}
+              state={options}
+              onChange={setOptions}
+              disabled={disabled}
+              observedRatio={observedRatio}
+            />
+            <p className="text-muted-foreground text-xs">
+              {chosenUnits === 0
+                ? "Nothing selected — choose at least one file or widen the range."
+                : "Generation runs in batches and may take a minute."}
+            </p>
+          </>
         )}
 
         {job?.status === "running" ? <JobProgress job={job} /> : null}

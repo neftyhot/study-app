@@ -68,6 +68,18 @@ export const exams = sqliteTable(
     includeApplication: integer("include_application", { mode: "boolean" })
       .notNull()
       .default(false),
+    /**
+     * How finely generation cuts the material into cards. "exhaustive" is
+     * what the deck did before this was configurable, so existing decks keep
+     * behaving the way they did; new decks start at "standard".
+     */
+    extractionDensity: text("extraction_density", {
+      enum: ["high_yield", "standard", "exhaustive", "custom"],
+    })
+      .notNull()
+      .default("standard"),
+    /** Cards per source unit when the density is "custom". */
+    extractionRatio: real("extraction_ratio"),
     createdAt: createdAt(),
   },
   (t) => [index("exams_course_idx").on(t.courseId)],

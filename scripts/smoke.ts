@@ -30,7 +30,7 @@ import {
   REVIEW_SYSTEM,
 } from "../src/lib/coverage/prompts";
 import { generateCardsForExam } from "../src/lib/generate";
-import { GENERATION_SYSTEM } from "../src/lib/generate/prompts";
+import { GENERATION_PREAMBLE } from "../src/lib/generate/prompts";
 import { ingestSourceFile } from "../src/lib/ingest";
 import { nextStep } from "../src/lib/learn/ladder";
 import { loadLearn, startLearnSession, submitOutcome } from "../src/lib/learn/session";
@@ -93,7 +93,9 @@ function stubProvider(): LlmProvider {
     name: "smoke",
     model: "smoke",
     async generateStructured<T>(request: StructuredRequest) {
-      if (request.system === GENERATION_SYSTEM) {
+      // Every density builds a different system prompt, but they all open with
+      // the same line, which is what identifies a generation request here.
+      if (request.system.startsWith(GENERATION_PREAMBLE)) {
         const cards = slidesFromPrompt(request.prompt).map((slide, i) => ({
           topic: `Topic ${i + 1}`,
           facet: "definition",
