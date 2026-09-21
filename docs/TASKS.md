@@ -866,6 +866,146 @@ marked on recognition.
 
 ---
 
+## Phase 16 — Export anywhere (PRD §15) ✅
+
+- [x] Anki `.apkg`, written directly as schema 11: a SQLite collection plus a
+      numbered media manifest, zipped
+- [x] Quizlet paste, with a copy button and a choice of separator
+- [x] RemNote markdown outline, `::` and `:::` with rubric and source as children
+- [x] RFC 4180 CSV: topic, question, answer, explanation, rubric, emphasis, source
+- [x] Tests: 11 — the apkg is opened as a database and queried, the CSV is parsed
+      back, and the delimited formats are checked against content that would
+      otherwise tear them apart
+
+Each target drops what its destination cannot hold, so the modal says what is
+lost **before** the export rather than after the import, when the deck has
+already been rebuilt somewhere else. Quizlet splits on a chosen separator, so a
+term containing one silently tears a card in half: the content is flattened
+first, and all 867 rows come out with exactly two fields.
+
+**Not verified:** no Anki on this machine, so the file is checked structurally
+(867 notes, 867 cards, no duplicate checksums, correct deck naming) rather than
+by importing it.
+
+---
+
+## Phase 17 — Slide range and extraction density ✅
+
+- [x] Per-file page ranges, filtered without renumbering
+- [x] Three density presets plus a custom cards-per-page ratio
+- [x] Live estimate, shown as a range, next to what the deck has actually averaged
+- [x] Density stored on the deck; existing decks migrated to `exhaustive`
+- [x] Tests: 14
+
+Density changes what the model is told to keep, never the provenance or rubric
+rules — a sparser deck is a smaller selection of the same material, not a looser
+standard for it, and a test asserts that at every density. A range filters and
+deliberately does not renumber: page 68 stays S68, because that is the number
+printed on the student's own file and the one every citation resolves through.
+
+Measured: high-yield produced 367 cards from the deck where standard produced
+948, so the setting genuinely bites.
+
+---
+
+## Phase 18 — Diagram occlusion (PRD §10) ✅
+
+- [x] `diagram_occlusions`: masks as percentages of the image, never pixels
+- [x] Visual editor — drag a box, type what is under it
+- [x] Study runner with reveal-all, keyboard navigation and per-label self-grading
+- [x] PDF pages rasterized on demand and cached; PowerPoint media extracted
+- [x] Tests: 19
+
+A drill is a flashcard, not a parallel kind of object: same provenance, same
+rubric, same schedule. One diagram is one card and gets one grade — all labels
+recalled is easy, most of them is difficult, and an unanswered box counts as
+missed, because uncovering a label is not remembering it.
+
+Pages had no pictures before this. A page is about 850 KB and two seconds to
+render, so rendering a 300-page deck up front would cost a quarter of a gigabyte
+to produce images almost none of which would be looked at.
+
+**Known limits:** PDF, PowerPoint and images only — a DOCX has no page to draw
+on. PowerPoint uses the largest image on the slide, which is the diagram in
+practically every deck but is a heuristic.
+
+---
+
+## Phase 19 — The AI tutor (PRD §10) ✅
+
+- [x] Drawer over any page or deck, with the current page sent on one button
+- [x] Provider boundary extended to chat with images: Gemini, Claude, OpenAI
+- [x] Markdown, GitHub tables and TeX maths in the transcript
+- [x] Paste or attach screenshots
+- [x] "Turn this into flashcards", with a confirmation step before anything saves
+- [x] Tests: 12
+
+The offline model reads text, so it says so and refuses rather than answering
+around a diagram it never saw. Cards extracted from a conversation cannot
+satisfy the provenance rule generation lives under — there is no sentence to
+quote — so they are stored as what they are: the student's own cards, linked to
+the page that was on screen, flagged when the answer came from the model rather
+than the material.
+
+Verified live: it read a real lecture page and answered from it, and shown a
+deliberately blurred diagram answered "I cannot make out any labels or
+structures", which is the rule that matters most.
+
+---
+
+## Phase 20 — Generation speed ✅
+
+- [x] Concurrent batches through `p-limit`, with backoff on 429s only
+- [x] 18 slides per batch rather than 8
+- [x] Lean bulk schema: question, answer, essential points, provenance — and stop
+- [x] Explanation and misconceptions filled in per card, on request
+- [x] Duration logged and shown; per-batch failures isolated
+- [x] Tests: 13
+
+Measured end to end on the real 314-page deck (`npm run generate:bench`):
+
+| setting | duration | cards |
+| --- | --- | --- |
+| 5 at a time, 18-slide batches | 198s | 973 |
+| 20 at a time, 18-slide batches | 75s | 948 |
+| 30 at a time, 10-slide batches | 72s | 1046 |
+| 20 at a time, high-yield | 62s | 367 |
+| one chapter, 96 pages | 62s | 321 |
+
+Down from 30+ minutes. Above one wave the curve flattens: wall-clock becomes one
+request's latency rather than the number of requests, which is why 30-at-a-time
+is no better than 20 and why one chapter takes the same minute as the whole
+library. **About 60 seconds is the floor** for gemini-2.5-flash at this output
+size; going below it means fewer cards (high-yield) or a faster model.
+
+Two things fell out: a failing batch no longer throws away the ones that worked,
+and progress is written as totals rather than read-then-added, because five
+batches finishing at once lost updates and the card count drifted below the
+truth.
+
+---
+
+## Phase 21 — Hand-written cards and bulk deck management ✅
+
+- [x] Card builder: deck (or a new one), topic, type, rubric, images, emphasis
+- [x] Cloze cards, deriving answer and rubric from the `{{deletions}}`
+- [x] Bulk move, copy, re-tag, star and delete over a selection
+- [x] Standalone decks with no uploaded material behind them
+- [x] Tests: 37
+
+Moving keeps review history because the history belongs to the card; copying
+does not, because the copy is a card the student has never seen in that deck.
+Without a rubric the answer becomes the standard — an empty rubric would mark
+every typed answer correct.
+
+**Found while testing:** `hasCloze` and `parseCloze` shared a `/g` regex, so
+testing a sentence advanced `lastIndex` and the parse that followed dropped the
+first deletion. Fixed, with a regression test.
+
+---
+
 ## Deferred (post-MVP, tracked in PRD but out of MVP scope)
 
-Note-image ingestion with OCR (§1) · diagram/pathway practice (§10) · practice exam mode (§11) · full progress analytics dashboard (§13) · full undo history (§15).
+Note-image ingestion with OCR (§1) · full progress analytics dashboard (§13) ·
+full undo history (§15) · an import to match the export · reversible
+term/definition cards · Windows and Linux builds (configured, untested).

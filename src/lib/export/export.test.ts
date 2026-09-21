@@ -178,6 +178,27 @@ describe("Anki", () => {
     sqlite.close();
   });
 
+  it("stores a picture once however many cards cite its slide", async () => {
+    const cards = [card({ question: "Q1" }), card({ question: "Q2" }), card({ question: "Q3" })];
+    const picture = { name: "slide-7.png", data: Buffer.from("PNGDATA") };
+
+    const buffer = await buildApkg(deck(cards), {
+      media: new Map(cards.map((c) => [c.id, picture])),
+    });
+
+    const zip = await JSZip.loadAsync(buffer);
+    const manifest = JSON.parse(await zip.file("media")!.async("string"));
+    expect(Object.values(manifest)).toEqual(["slide-7.png"]);
+
+    // Every card still points at it.
+    const sqlite = new Database(
+      Buffer.from(await zip.file("collection.anki2")!.async("nodebuffer")),
+    );
+    const notes = sqlite.prepare("SELECT flds FROM notes").all() as { flds: string }[];
+    expect(notes.every((note) => note.flds.includes('<img src="slide-7.png">'))).toBe(true);
+    sqlite.close();
+  });
+
   it("escapes HTML so a < in the material is not read as markup", () => {
     const back = backField(card({ directAnswer: "PO2 < 60 mmHg & falling" }), null);
     expect(back).toContain("PO2 &lt; 60 mmHg &amp; falling");

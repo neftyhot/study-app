@@ -230,6 +230,10 @@ export async function buildApkg(
   const path = join(tmpdir(), `study-app-anki-${randomUUID()}.anki2`);
   const media = options.media ?? new Map<string, ApkgMedia>();
   const manifest: Record<string, string> = {};
+  // Several cards cite the same slide, so the same picture is attached to
+  // each of them. It goes into the package once: storing a copy per card made
+  // a deck with three cards a page three times the size it needed to be.
+  const stored = new Set<string>();
   const zip = new JSZip();
 
   const sqlite = new Database(path);
@@ -278,10 +282,11 @@ export async function buildApkg(
         const cardId = now + i * 2 + 1;
 
         const attachment = media.get(card.id);
-        if (attachment) {
+        if (attachment && !stored.has(attachment.name)) {
           const slot = String(Object.keys(manifest).length);
           manifest[slot] = attachment.name;
           zip.file(slot, attachment.data);
+          stored.add(attachment.name);
         }
 
         const front = ankiField(card.question);

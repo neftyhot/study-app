@@ -69,30 +69,28 @@ export function exportFilename(
  */
 async function loadMedia(deck: DeckExport): Promise<Map<string, ApkgMedia>> {
   const media = new Map<string, ApkgMedia>();
-  const namesByPath = new Map<string, string>();
+  // Read each file once, however many cards cite it. `null` records a file
+  // that could not be read, so it is not retried for every card.
+  const byPath = new Map<string, ApkgMedia | null>();
 
   for (const card of deck.cards) {
     if (!card.imagePath) continue;
 
-    let name = namesByPath.get(card.imagePath);
-    let data: Buffer | undefined;
-
-    if (!name) {
+    if (!byPath.has(card.imagePath)) {
       try {
-        data = await readFile(absolutePathFor(card.imagePath));
+        const data = await readFile(absolutePathFor(card.imagePath));
+        const ext = extname(card.imagePath) || ".png";
+        byPath.set(card.imagePath, {
+          name: `study-app-${basename(card.imagePath, ext)}${ext}`,
+          data,
+        });
       } catch {
-        continue;
+        byPath.set(card.imagePath, null);
       }
-      const ext = extname(card.imagePath) || ".png";
-      name = `study-app-${basename(card.imagePath, ext)}${ext}`;
-      namesByPath.set(card.imagePath, name);
     }
 
-    const existing = [...media.values()].find((item) => item.name === name);
-    const payload = data ?? existing?.data;
-    if (!payload) continue;
-
-    media.set(card.id, { name, data: payload });
+    const attachment = byPath.get(card.imagePath);
+    if (attachment) media.set(card.id, attachment);
   }
 
   return media;
