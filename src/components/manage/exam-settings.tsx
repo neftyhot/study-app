@@ -2,10 +2,11 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Download, RotateCcw, Trash2 } from "lucide-react";
+import { RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/manage/confirm-dialog";
+import { ExportDialog } from "@/components/manage/export-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -23,9 +24,11 @@ import {
 export function ExamSettings({
   examId,
   examTitle,
+  cardCount,
 }: {
   examId: string;
   examTitle: string;
+  cardCount: number;
 }) {
   const router = useRouter();
   const [confirm, setConfirm] = useState<"delete" | "reset" | null>(null);
@@ -52,19 +55,14 @@ export function ExamSettings({
         <CardHeader>
           <CardTitle className="text-base">Deck settings</CardTitle>
           <CardDescription>
-            Export a full JSON backup — sources, cards, coverage, and review
-            history. Starting the material over and getting rid of it are
-            different things, so they are different buttons.
+            Take this deck elsewhere — Anki, Quizlet, RemNote, a spreadsheet,
+            or a full backup that can rebuild it. Starting the material over
+            and getting rid of it are different things, so they are different
+            buttons.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            {/* A plain link: the browser downloads it, no blob juggling. */}
-            <a href={`/api/exams/${examId}/export`} download>
-              <Download className="size-4" />
-              Export backup
-            </a>
-          </Button>
+          <ExportDialog examId={examId} cardCount={cardCount} />
           <Button variant="outline" onClick={() => setConfirm("reset")}>
             <RotateCcw className="size-4" />
             Reset study progress

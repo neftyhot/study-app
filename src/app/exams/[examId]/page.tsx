@@ -248,7 +248,11 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         </Card>
       ) : null}
 
-      <ExamSettings examId={examId} examTitle={exam.title} />
+      <ExamSettings
+        examId={examId}
+        examTitle={exam.title}
+        cardCount={stats.flashcards}
+      />
     </div>
   );
 }
