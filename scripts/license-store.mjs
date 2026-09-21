@@ -129,12 +129,12 @@ export function signPayload(payload, key = loadPrivateKey()) {
 /**
  * Mints a key and records it.
  *
- * @param {{name?: string, type: "admin"|"student", days?: number, machineId?: string|null}} options
+ * @param {{name?: string, type: "admin"|"student"|"lifetime", days?: number, machineId?: string|null}} options
  */
 export function mintLicense(options) {
   const { type } = options;
-  if (type !== "admin" && type !== "student") {
-    throw new Error("type must be 'admin' or 'student'.");
+  if (type !== "admin" && type !== "student" && type !== "lifetime") {
+    throw new Error("type must be 'admin', 'student' or 'lifetime'.");
   }
 
   const issuedAt = Date.now();
@@ -153,6 +153,15 @@ export function mintLicense(options) {
     const machineId =
       typeof options.machineId === "string" ? options.machineId.trim() : "";
     if (machineId) payload.machineId = machineId;
+  }
+
+  if (type === "lifetime") {
+    // What a purchase mints; issued by hand for a buyer whose checkout did
+    // not carry a machine id. Always bound: unbound it would open anywhere.
+    const machineId =
+      typeof options.machineId === "string" ? options.machineId.trim() : "";
+    if (!machineId) throw new Error("a lifetime key needs --machine.");
+    payload.machineId = machineId;
   }
 
   const token = signPayload(payload);

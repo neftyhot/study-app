@@ -23,9 +23,15 @@ const REASON = {
   wrongMachine: "wrong_machine",
   clockRollback: "clock_rollback",
   unknownType: "unknown_type",
+  trialEnded: "trial_ended",
 };
 
-const TYPES = { admin: "admin", student: "student" };
+/**
+ * `admin`: never expires, any machine. `student`: expires, optionally tied to
+ * a machine. `lifetime`: what a purchase mints — never expires, and always
+ * tied to the machine it was bought for.
+ */
+const TYPES = { admin: "admin", student: "student", lifetime: "lifetime" };
 
 let cachedKey = null;
 
@@ -132,6 +138,18 @@ function verifyLicense(token, context = {}) {
     return { valid: true, payload };
   }
 
+  if (payload.type === TYPES.lifetime) {
+    // A purchased key with no machine in it would open on any computer, so
+    // one is required rather than optional.
+    if (typeof payload.machineId !== "string" || payload.machineId === "") {
+      return { valid: false, reason: REASON.malformed, payload };
+    }
+    if (payload.machineId !== context.machineId) {
+      return { valid: false, reason: REASON.wrongMachine, payload };
+    }
+    return { valid: true, payload };
+  }
+
   if (payload.type !== TYPES.student) {
     return { valid: false, reason: REASON.unknownType, payload };
   }
@@ -149,7 +167,9 @@ function verifyLicense(token, context = {}) {
 
 /** Days remaining, for the settings row. Null for a key that never expires. */
 function daysRemaining(payload, now = Date.now()) {
-  if (!payload || payload.type === TYPES.admin) return null;
+  if (!payload || payload.type === TYPES.admin || payload.type === TYPES.lifetime) {
+    return null;
+  }
   if (typeof payload.expiresAt !== "number") return null;
   return Math.max(0, Math.ceil((payload.expiresAt - now) / 86_400_000));
 }
@@ -165,6 +185,8 @@ const MESSAGES = {
   [REASON.clockRollback]:
     "This computer's clock has moved backwards. Set the date and time correctly, then reopen the app.",
   [REASON.unknownType]: "That key is of a kind this version does not support.",
+  [REASON.trialEnded]:
+    "Your 7-day free trial has ended. Purchase a license to keep using Study App — everything you made is still here.",
 };
 
 function messageFor(reason) {

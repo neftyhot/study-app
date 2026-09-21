@@ -83,7 +83,29 @@ function clearClockTamper(userDataDir) {
   write(userDataDir, state);
 }
 
+/**
+ * When the free trial began: the first launch with no license.
+ *
+ * Written once and never moved, so reopening the app does not restart the
+ * clock. It lives in the same file as the license, which means deleting that
+ * file starts a new trial — the same honest limit as the rest of this gate:
+ * it keeps casual use honest, it does not stop someone determined.
+ */
+function readTrialStart(userDataDir) {
+  const value = read(userDataDir).trialStartedAt;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function startTrial(userDataDir, now = Date.now()) {
+  const existing = readTrialStart(userDataDir);
+  if (existing !== null) return existing;
+  write(userDataDir, { ...read(userDataDir), trialStartedAt: now });
+  return now;
+}
+
 module.exports = {
+  readTrialStart,
+  startTrial,
   filePath,
   readToken,
   saveToken,

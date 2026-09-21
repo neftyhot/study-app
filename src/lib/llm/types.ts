@@ -18,7 +18,24 @@ export type JsonSchema = Record<string, unknown>;
  */
 export type ThinkingEffort = "minimal" | "low" | "medium" | "high" | "default";
 
+/**
+ * Which part of the app a call is for, so the usage log can say where the
+ * tokens went. Carried on the request and ignored by every provider.
+ */
+export type UsageFeature =
+  | "generate"
+  | "explain"
+  | "coverage"
+  | "grade"
+  | "hint"
+  | "diagnose"
+  | "search"
+  | "exam_rewrite"
+  | "tutor"
+  | "tutor_extract";
+
 export type StructuredRequest = {
+  feature?: UsageFeature;
   /** Persistent role/rules instruction. */
   system: string;
   /** The task and its source material. */
@@ -71,6 +88,7 @@ export type ChatTurn = {
  * here rather than halfway down a rendering pipeline.
  */
 export type ChatRequest = {
+  feature?: UsageFeature;
   system: string;
   turns: ChatTurn[];
   schema: JsonSchema;

@@ -62,38 +62,64 @@
       }
       .alert[hidden] { display: none; }
       .ok { color: var(--muted); }
+      [hidden] { display: none !important; }
+      .toggle-row { margin: 4px 0 12px; text-align: center; }
+      button.link {
+        border: none; background: none; padding: 4px; color: var(--muted);
+        text-decoration: underline; text-underline-offset: 2px;
+      }
+      button.link:hover { color: var(--fg); }
     </style>
   </head>
   <body>
     <main>
       <h1>Activate Study App</h1>
-      <p class="lede">Enter the license key you were given. This happens once, on this computer, and needs no internet connection.</p>
+      <p class="lede" id="lede">One payment unlocks Study App on this computer for good. Everything you have already made stays exactly where it is.</p>
 
       <div id="alert" class="alert" role="alert" hidden></div>
 
       <div class="card">
-        <label for="machine">Your Machine ID</label>
-        <div class="machine">
-          <code id="machine">…</code>
-          <button id="copy" type="button">Copy</button>
+        <label>Lifetime license — $24.95</label>
+        <p class="hint" style="margin: 0 0 12px">One-time payment, no subscription. Checkout opens in your browser, and this window unlocks by itself once the payment goes through.</p>
+        <div class="row" style="margin-top: 0">
+          <button id="purchase" class="primary" type="button">Purchase License</button>
+          <button id="recheck" type="button" hidden>Check again</button>
+          <span id="purchase-status" class="ok"></span>
         </div>
-        <p class="hint">Send this to whoever issues your key — a student key is tied to this computer.</p>
+        <p class="hint" id="manual-hint" hidden>After paying, copy the key shown on the confirmation page and paste it under “Already have a license?” below.</p>
       </div>
 
-      <div class="card">
-        <label for="token">License key</label>
-        <textarea id="token" spellcheck="false" autocomplete="off" placeholder="Paste the key here"></textarea>
-        <div class="row">
-          <button id="activate" class="primary" type="button" disabled>Activate</button>
-          <span id="status" class="ok"></span>
+      <p class="toggle-row">
+        <button id="have-license" class="link" type="button" aria-expanded="false" aria-controls="existing">Already have a license?</button>
+      </p>
+
+      <section id="existing" hidden>
+        <div class="card">
+          <label for="machine">Your Machine ID</label>
+          <div class="machine">
+            <code id="machine">…</code>
+            <button id="copy" type="button">Copy</button>
+          </div>
+          <p class="hint">A key is tied to one computer. If someone is issuing yours by hand, send them this.</p>
         </div>
-      </div>
+
+        <div class="card">
+          <label for="token">License key</label>
+          <textarea id="token" spellcheck="false" autocomplete="off" placeholder="Paste the key here"></textarea>
+          <div class="row">
+            <button id="activate" class="primary" type="button" disabled>Activate</button>
+            <span id="status" class="ok"></span>
+          </div>
+          <p class="hint">Checked on this computer. No internet connection needed.</p>
+        </div>
+      </section>
     </main>
 
     <script>
       const $ = (id) => document.getElementById(id);
       const alertBox = $("alert");
       const status = $("status");
+      const purchaseStatus = $("purchase-status");
       const tokenField = $("token");
       const activateButton = $("activate");
 
@@ -109,6 +135,83 @@
 
       window.license.getMachineId().then((id) => {
         $("machine").textContent = id;
+      });
+
+      // Why this screen is showing. "No key yet" needs no alert of its own.
+      window.license.status().then((gate) => {
+        if (gate.reason === "trial_ended") {
+          $("lede").textContent = gate.message;
+        } else if (gate.message && gate.reason !== "missing") {
+          fail(gate.message);
+        }
+        $("manual-hint").hidden = gate.autoDelivery;
+      });
+
+      /* ------------------------------------------------------ Purchase */
+
+      let polling = null;
+
+      function describeActivated(result) {
+        return result.type === "student"
+          ? `Activated — ${result.daysRemaining} day(s) remaining. Starting…`
+          : "Activated. Starting…";
+      }
+
+      async function checkPurchase() {
+        const result = await window.license.checkPurchase();
+        if (!result.found) return false;
+
+        stopPolling();
+        if (result.valid) {
+          purchaseStatus.textContent = `Purchase received. ${describeActivated(result)}`;
+        } else {
+          fail(result.message);
+          purchaseStatus.textContent = "";
+        }
+        return true;
+      }
+
+      function stopPolling() {
+        if (polling) clearInterval(polling);
+        polling = null;
+      }
+
+      $("purchase").addEventListener("click", async () => {
+        clearAlert();
+        await window.license.purchase();
+        purchaseStatus.textContent = "Waiting for your payment…";
+        $("recheck").hidden = false;
+
+        // Every five seconds for half an hour: long enough for a card that
+        // needs a bank's confirmation, short enough not to poll forever.
+        stopPolling();
+        const until = Date.now() + 30 * 60 * 1000;
+        polling = setInterval(() => {
+          if (Date.now() > until) {
+            stopPolling();
+            purchaseStatus.textContent = "Still nothing — use “Check again” once you have paid.";
+            return;
+          }
+          void checkPurchase();
+        }, 5000);
+      });
+
+      $("recheck").addEventListener("click", async () => {
+        clearAlert();
+        purchaseStatus.textContent = "Checking…";
+        if (!(await checkPurchase())) {
+          purchaseStatus.textContent =
+            "No purchase for this computer yet. It can take a minute after paying.";
+        }
+      });
+
+      /* ------------------------------------------------- Existing key */
+
+      $("have-license").addEventListener("click", () => {
+        const section = $("existing");
+        section.hidden = !section.hidden;
+        $("have-license").setAttribute("aria-expanded", String(!section.hidden));
+        if (!section.hidden) tokenField.focus();
       });
 
       $("copy").addEventListener("click", async () => {
@@ -136,10 +239,8 @@
             return;
           }
 
-          status.textContent =
-            result.type === "admin"
-              ? "Activated. Starting…"
-              : `Activated — ${result.daysRemaining} day(s) remaining. Starting…`;
+          stopPolling();
+          status.textContent = describeActivated(result);
         } catch (error) {
           fail(String(error && error.message ? error.message : error));
           activateButton.disabled = false;

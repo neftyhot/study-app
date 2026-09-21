@@ -26,6 +26,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 
 const gate = require("./license/gate.cjs");
+const purchase = require("./license/purchase.cjs");
 const { registerGoogleAuth } = require("./google-auth.cjs");
 
 const isDev = !app.isPackaged;
@@ -210,6 +211,22 @@ function createWindow(url) {
   return window;
 }
 
+/**
+ * Tells the web app the tier and countdown, for Settings. It is told, rather
+ * than given any way to read or change the license itself. The packaged
+ * server runs in this process and reads this per request, so an activation
+ * mid-trial shows up without a restart.
+ */
+function publishLicense(license) {
+  if (!license?.payload) return;
+  process.env.STUDY_APP_LICENSE = JSON.stringify({
+    type: license.payload.type,
+    name: license.payload.name ?? null,
+    expiresAt: license.payload.expiresAt ?? null,
+    daysRemaining: license.daysRemaining,
+  });
+}
+
 /** Starts the real app: migrate, serve, open a window. */
 async function launchApp(license) {
   let url = DEV_URL;
@@ -217,17 +234,7 @@ async function launchApp(license) {
   if (!isDev) {
     await migrate();
 
-    // The web app shows the tier and countdown in Settings; it is told, rather
-    // than given any way to read or change the license itself.
-    if (license?.payload) {
-      process.env.STUDY_APP_LICENSE = JSON.stringify({
-        type: license.payload.type,
-        name: license.payload.name ?? null,
-        expiresAt: license.payload.expiresAt ?? null,
-        daysRemaining: license.daysRemaining,
-      });
-    }
-
+    publishLicense(license);
     url = await startServer();
   }
 
@@ -252,19 +259,74 @@ app.whenReady().then(async () => {
     gate.validate(userData, token),
   );
 
-  ipcMain.handle("activate-license", async (_event, token) => {
+  let appLaunched = false;
+
+  /**
+   * Stores a verified key and, from the activation screen, swaps that window
+   * for the app itself rather than asking the student to quit and reopen.
+   */
+  async function activateAndLaunch(token) {
     const result = gate.activate(userData, token);
     if (!result.valid) return result;
 
-    // Swap the activation window for the app itself, rather than asking the
-    // student to quit and reopen.
     const license = gate.evaluate(userData);
-    await launchApp(license);
+    if (appLaunched) {
+      publishLicense(license);
+    } else {
+      appLaunched = true;
+      await launchApp(license);
+    }
     for (const window of BrowserWindow.getAllWindows()) {
       if (window.webContents.getURL().startsWith("file://")) window.close();
     }
-
     return result;
+  }
+
+  /** Asks the licensing Worker for a key bought for this machine. */
+  async function checkPurchase() {
+    const { configured, token } = await purchase.fetchPurchasedLicense(
+      gate.machineId(),
+    );
+    if (!token) return { configured, found: false };
+
+    const result = await activateAndLaunch(token);
+    return { configured, found: true, ...result };
+  }
+
+  ipcMain.handle("activate-license", (_event, token) => activateAndLaunch(token));
+
+  // Why the activation screen is showing: trial over, a bad key, a clock.
+  ipcMain.handle("get-gate-status", () => {
+    const status = gate.evaluate(userData);
+    return {
+      reason: status.valid ? null : status.reason,
+      message: status.valid ? null : status.message,
+      trialDays: gate.TRIAL_DAYS,
+      autoDelivery: purchase.licenseServerUrl() !== null,
+    };
+  });
+
+  // The renderer never builds the checkout URL; it can only ask for it opened.
+  ipcMain.handle("open-purchase", async () => {
+    await shell.openExternal(purchase.purchaseUrl(gate.machineId()));
+  });
+
+  ipcMain.handle("check-purchase", () => checkPurchase());
+
+  // The same two, for the app window during the trial (see app-preload.cjs).
+  const fromApp = (event) => {
+    const url = event.senderFrame?.url;
+    return Boolean(appUrl && url && new URL(url).origin === new URL(appUrl).origin);
+  };
+
+  ipcMain.handle("license:purchase", async (event) => {
+    if (!fromApp(event)) return;
+    await shell.openExternal(purchase.purchaseUrl(gate.machineId()));
+  });
+
+  ipcMain.handle("license:check-purchase", async (event) => {
+    if (!fromApp(event)) return { configured: false, found: false };
+    return checkPurchase();
   });
 
   try {
@@ -278,7 +340,12 @@ app.whenReady().then(async () => {
     // Recorded only once the license has passed, and only ever forwards.
     gate.store.recordLaunch(userData);
 
+    appLaunched = true;
     await launchApp(license);
+
+    // Bought during the trial but not activated yet (the confirmation tab was
+    // closed, say): pick the key up quietly. Only ever while on the trial.
+    if (license.trial) void checkPurchase().catch(() => {});
   } catch (error) {
     const detail =
       error instanceof Error ? (error.stack ?? error.message) : String(error);

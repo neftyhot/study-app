@@ -51,9 +51,27 @@ export type GoogleAuthBridge = {
   getAccessToken(): Promise<string | null>;
 };
 
+/** What `license:check-purchase` answers. */
+export type PurchaseCheck =
+  | { configured: boolean; found: false }
+  | {
+      configured: boolean;
+      found: true;
+      valid: boolean;
+      message: string | null;
+    };
+
+/** What the preload puts on `window.studyApp.license`. */
+export type LicenseApi = {
+  /** Opens the Stripe checkout for this machine in the default browser. */
+  purchase(): Promise<void>;
+  /** Asks the licensing server for a key bought for this machine. */
+  checkPurchase(): Promise<PurchaseCheck>;
+};
+
 declare global {
   interface Window {
     /** Present only inside the desktop app. */
-    studyApp?: { googleAuth: GoogleAuthApi };
+    studyApp?: { googleAuth: GoogleAuthApi; license: LicenseApi };
   }
 }

@@ -2,10 +2,13 @@ import Link from "next/link";
 
 import { GradingSettings } from "@/components/settings/grading-settings";
 import { ProviderSettings } from "@/components/settings/provider-settings";
+import { PurchaseLicense } from "@/components/settings/purchase-license";
+import { UsageLoggingToggle } from "@/components/settings/usage-logging";
 import { resolveDbPath } from "@/db/client";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
+  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
@@ -42,11 +45,19 @@ export default async function SettingsPage() {
               <Badge variant="outline">{expiryLabel(license)}</Badge>
             </CardTitle>
             <CardDescription>
-              {license.name ? `Issued to ${license.name}. ` : ""}
-              {license.expiresAt
-                ? `Valid until ${new Date(license.expiresAt).toLocaleDateString()}.`
-                : "This licence has no end date."}
+              {license.type === "trial" && license.expiresAt
+                ? `Everything works until ${new Date(license.expiresAt).toLocaleDateString()}. After that, a one-time purchase keeps it going — nothing you made is lost either way.`
+                : null}
+              {license.type !== "trial" && license.name
+                ? `Issued to ${license.name}. `
+                : ""}
+              {license.type === "trial"
+                ? null
+                : license.expiresAt
+                  ? `Valid until ${new Date(license.expiresAt).toLocaleDateString()}.`
+                  : "This licence has no end date."}
             </CardDescription>
+            {license.type === "trial" ? <PurchaseLicense /> : null}
           </CardHeader>
         </Card>
       ) : null}
@@ -54,6 +65,15 @@ export default async function SettingsPage() {
       <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
 
       <GradingSettings initial={readGradingStrictness()} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Usage statistics</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <UsageLoggingToggle initial={snapshot.usageLogging} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

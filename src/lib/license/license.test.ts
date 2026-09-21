@@ -13,7 +13,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /*
  * Required rather than imported on purpose: this is the exact CommonJS the
@@ -24,6 +24,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 const verifier = require("../../../electron/license/verify.cjs");
 const store = require("../../../electron/license/store.cjs");
 const gate = require("../../../electron/license/gate.cjs");
+const purchase = require("../../../electron/license/purchase.cjs");
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const { REASON, verifyLicense, daysRemaining, messageFor } = verifier;
@@ -155,6 +156,44 @@ describe("expiry", () => {
     expect(daysRemaining(payload, now)).toBe(4);
     expect(daysRemaining({ type: "student", expiresAt: now - DAY }, now)).toBe(0);
     expect(daysRemaining({ type: "admin" }, now)).toBeNull();
+  });
+});
+
+describe("lifetime keys (what a purchase mints)", () => {
+  function lifetime(overrides: Payload = {}): string {
+    return mint({
+      id: randomUUID(),
+      type: "lifetime",
+      issuedAt: Date.now(),
+      machineId: MACHINE,
+      ...overrides,
+    });
+  }
+
+  it("opens on the machine it was bought for, for good", () => {
+    const inFiftyYears = Date.now() + 50 * 365 * DAY;
+    expect(check(lifetime()).valid).toBe(true);
+    expect(check(lifetime(), { now: inFiftyYears }).valid).toBe(true);
+    expect(daysRemaining({ type: "lifetime" })).toBeNull();
+  });
+
+  it("refuses any other machine", () => {
+    expect(check(lifetime({ machineId: "someone-elses-laptop" })).reason).toBe(
+      REASON.wrongMachine,
+    );
+  });
+
+  it("refuses a lifetime key with no machine in it", () => {
+    // It would otherwise open on every computer, forever.
+    expect(check(lifetime({ machineId: undefined })).reason).toBe(REASON.malformed);
+    expect(check(lifetime({ machineId: "" })).reason).toBe(REASON.malformed);
+  });
+
+  it("still loses to a clock that has moved backwards", () => {
+    const now = Date.now();
+    expect(check(lifetime(), { now, lastLaunch: now + DAY }).reason).toBe(
+      REASON.clockRollback,
+    );
   });
 });
 
@@ -328,12 +367,53 @@ describe("the gate", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("refuses to open with no license at all", () => {
-    const result = gate.evaluate(dir);
+  it("opens on a 7-day free trial with no license at all", () => {
+    const now = Date.now();
+    const result = gate.evaluate(dir, now);
 
-    expect(result.valid).toBe(false);
-    expect(result.reason).toBe(REASON.missing);
+    expect(gate.TRIAL_DAYS).toBe(7);
+    expect(result).toMatchObject({ valid: true, trial: true, daysRemaining: 7 });
+    expect(result.payload).toEqual({ type: "trial", expiresAt: now + 7 * DAY });
     expect(result.machineId).toBeTruthy();
+  });
+
+  it("counts the trial from the first launch, not the latest", () => {
+    const first = Date.now();
+    gate.evaluate(dir, first);
+
+    const later = gate.evaluate(dir, first + 5.5 * DAY);
+    expect(later).toMatchObject({ valid: true, trial: true, daysRemaining: 2 });
+    expect(store.readTrialStart(dir)).toBe(first);
+  });
+
+  it("locks when the trial runs out, and says so", () => {
+    const first = Date.now();
+    gate.evaluate(dir, first);
+
+    const lastMinute = gate.evaluate(dir, first + 7 * DAY - 60_000);
+    expect(lastMinute).toMatchObject({ valid: true, daysRemaining: 1 });
+
+    const over = gate.evaluate(dir, first + 7 * DAY);
+    expect(over).toMatchObject({ valid: false, trial: false, reason: REASON.trialEnded });
+    expect(over.message).toMatch(/trial has ended/);
+  });
+
+  it("gives a present-but-bad key its own reason once the trial is over", () => {
+    const first = Date.now();
+    gate.evaluate(dir, first);
+    store.saveToken(dir, "obvious-nonsense");
+
+    expect(gate.evaluate(dir, first + DAY).valid).toBe(true);
+    expect(gate.evaluate(dir, first + 8 * DAY).reason).toBe(REASON.malformed);
+  });
+
+  it("never stretches the trial with a moved-back clock", () => {
+    const first = Date.now();
+    gate.evaluate(dir, first);
+    store.recordLaunch(dir, first + 6 * DAY);
+
+    const rolledBack = gate.evaluate(dir, first + DAY);
+    expect(rolledBack).toMatchObject({ valid: false, reason: REASON.clockRollback });
   });
 
   it("stores a key only once it verifies", () => {
@@ -359,5 +439,59 @@ describe("the gate", () => {
   it("reports the machine id the activation screen shows", () => {
     expect(gate.machineId()).toBe(gate.evaluate(dir).machineId);
     expect(gate.machineId().length).toBeGreaterThan(8);
+  });
+});
+
+describe("buying a license", () => {
+  const saved = process.env.LICENSE_SERVER_URL;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.LICENSE_SERVER_URL;
+    else process.env.LICENSE_SERVER_URL = saved;
+  });
+
+  it("opens the Payment Link with this machine as the reference", () => {
+    expect(purchase.purchaseUrl("8C1A2B3D-4E5F-6071-8293-A4B5C6D7E8F9")).toBe(
+      "https://buy.stripe.com/test_eVqbIU35hbtp0Kk0CB14400?client_reference_id=8C1A2B3D-4E5F-6071-8293-A4B5C6D7E8F9",
+    );
+  });
+
+  it("asks nobody when no licensing server is configured", async () => {
+    delete process.env.LICENSE_SERVER_URL;
+    const fetchImpl = vi.fn();
+
+    expect(await purchase.fetchPurchasedLicense("m", fetchImpl)).toEqual({
+      configured: false,
+      token: null,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("collects the key minted for this machine", async () => {
+    process.env.LICENSE_SERVER_URL = "https://licensing.example/";
+    const fetchImpl = vi.fn<(url: string) => Promise<Response>>(async () =>
+      Response.json({ token: "the-token" }),
+    );
+
+    expect(await purchase.fetchPurchasedLicense("M 1", fetchImpl)).toEqual({
+      configured: true,
+      token: "the-token",
+    });
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://licensing.example/license/M%201");
+  });
+
+  it("treats not-yet, a server error, and being offline as nothing yet", async () => {
+    process.env.LICENSE_SERVER_URL = "https://licensing.example";
+    for (const fetchImpl of [
+      async () => Response.json({ token: null }, { status: 404 }),
+      async () => new Response("oops", { status: 500 }),
+      async () => {
+        throw new TypeError("fetch failed");
+      },
+    ]) {
+      expect(await purchase.fetchPurchasedLicense("m", fetchImpl)).toEqual({
+        configured: true,
+        token: null,
+      });
+    }
   });
 });

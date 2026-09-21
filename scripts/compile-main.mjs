@@ -64,6 +64,12 @@ function oauthDefines() {
     if (value) defines[`process.env.${name}`] = JSON.stringify(value);
     else console.warn(`${name} is not set; this build cannot sign in with Google.`);
   }
+
+  // Where purchased keys are collected from (workers/licensing). A public
+  // URL, not a secret.
+  const server = process.env.LICENSE_SERVER_URL?.trim();
+  if (server) defines["process.env.LICENSE_SERVER_URL"] = JSON.stringify(server);
+  else console.warn("LICENSE_SERVER_URL is not set; purchased keys must be pasted in by hand.");
   return defines;
 }
 

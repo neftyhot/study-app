@@ -1,0 +1,4 @@
+# Copy to .dev.vars (gitignored) for `npm run dev`. Never commit real values.
+STRIPE_WEBHOOK_SECRET=whsec_...
+# The whole PEM on one line, with \n for the line breaks.
+LICENSE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"

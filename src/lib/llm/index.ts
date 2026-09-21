@@ -15,6 +15,8 @@ import {
 } from "./gemini";
 import { createLocalProvider } from "./local";
 import { createOpenAiProvider } from "./openai";
+import { meterProvider, type AuthMode } from "@/lib/usage";
+
 import { LlmError, type LlmProvider } from "./types";
 
 export * from "./types";
@@ -67,6 +69,16 @@ export function getProvider(
   override?: ProviderId,
   role: ProviderRole = "interactive",
 ): LlmProvider {
+  const { provider, authMode } = resolveProvider(override, role);
+  // Every call is offered to the usage log, which records it only if the
+  // student has opted in.
+  return meterProvider(provider, authMode);
+}
+
+function resolveProvider(
+  override: ProviderId | undefined,
+  role: ProviderRole,
+): { provider: LlmProvider; authMode: AuthMode } {
   const provider = override ?? readProvider();
 
   switch (provider) {
@@ -82,19 +94,29 @@ export function getProvider(
         );
       }
 
-      return createLocalProvider({ modelPath: path, modelName: id ?? "local" });
+      return {
+        provider: createLocalProvider({ modelPath: path, modelName: id ?? "local" }),
+        authMode: "local",
+      };
     }
 
     case "anthropic":
-      return createAnthropicProvider({ apiKey: readApiKey("anthropic") });
+      return {
+        provider: createAnthropicProvider({ apiKey: readApiKey("anthropic") }),
+        authMode: keySource("ANTHROPIC_API_KEY"),
+      };
 
     case "openai":
-      return createOpenAiProvider({ apiKey: readApiKey("openai") });
+      return {
+        provider: createOpenAiProvider({ apiKey: readApiKey("openai") }),
+        authMode: keySource("OPENAI_API_KEY"),
+      };
 
     case "gemini":
-    default:
-      return createGeminiProvider({
-        ...geminiCredentials(),
+    default: {
+      const credentials = geminiCredentials();
+      const gemini = createGeminiProvider({
+        ...credentials,
         model:
           role === "bulk"
             ? (process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL)
@@ -104,7 +126,19 @@ export function getProvider(
             ? (process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL)
             : undefined,
       });
+      return {
+        provider: gemini,
+        authMode:
+          "accessToken" in credentials
+            ? "google_oauth"
+            : keySource("GEMINI_API_KEY"),
+      };
+    }
   }
+}
+
+function keySource(variable: string): AuthMode {
+  return process.env[variable]?.trim() ? "env_key" : "api_key";
 }
 
 /**

@@ -149,6 +149,7 @@ export function createSemanticGrader(
       }
 
       const { data } = await llm.generateStructured<GradeResponse>({
+        feature: "grade",
         system: GRADING_SYSTEM + strictnessRules(strictness),
         prompt: gradingPrompt(request, points),
         schema: GRADE_SCHEMA,

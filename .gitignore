@@ -66,3 +66,8 @@ revocations.json
 # License Authority build output (admin tooling, never distributed)
 dist-admin/
 !electron/license/license-public-key.pem
+
+# Licensing Worker: local secrets and wrangler state
+workers/licensing/.dev.vars
+workers/licensing/.wrangler/
+workers/licensing/node_modules/

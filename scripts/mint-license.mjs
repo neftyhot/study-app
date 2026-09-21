@@ -3,6 +3,7 @@
  *
  *   node scripts/mint-license.mjs --type admin
  *   node scripts/mint-license.mjs --type student --days 14 --machine <machine_id>
+ *   node scripts/mint-license.mjs --type lifetime --machine <machine_id>
  *
  * Developer-only. It reads `.license-private-key.pem`, which is gitignored and
  * never packaged — the shipped app carries only the public half, which is the
@@ -35,7 +36,8 @@ function usage(message) {
   console.error(
     `${message}\n\n` +
       "  node scripts/mint-license.mjs --type admin [--name <who>]\n" +
-      "  node scripts/mint-license.mjs --type student --days 14 [--machine <id>] [--name <who>]\n\n" +
+      "  node scripts/mint-license.mjs --type student --days 14 [--machine <id>] [--name <who>]\n" +
+      "  node scripts/mint-license.mjs --type lifetime --machine <id> [--name <who>]\n\n" +
       "  npm run license:manager   for the GUI\n",
   );
   process.exit(1);
@@ -44,8 +46,8 @@ function usage(message) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  if (args.type !== "admin" && args.type !== "student") {
-    usage("--type must be 'admin' or 'student'.");
+  if (args.type !== "admin" && args.type !== "student" && args.type !== "lifetime") {
+    usage("--type must be 'admin', 'student' or 'lifetime'.");
   }
 
   if (args.type === "student" && typeof args.machine !== "string") {

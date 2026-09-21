@@ -259,6 +259,7 @@ export async function generateCardsForExam(
           const batchStarted = Date.now();
           const { data, usage } = await withRetry(() =>
             llm.generateStructured<GenerationResponse>({
+              feature: "generate",
               system,
               prompt,
               schema,

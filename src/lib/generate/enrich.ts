@@ -125,6 +125,7 @@ export async function explainCard(
 
   const provider = llm();
   const { data, usage } = await provider.generateStructured<EnrichResponse>({
+    feature: "explain",
     system: ENRICH_SYSTEM,
     prompt: explainPrompt({
       question: card.question,

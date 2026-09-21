@@ -11,6 +11,10 @@ const { machineIdSync } = require("node-machine-id");
 const store = require("./store.cjs");
 const { verifyLicense, daysRemaining, messageFor, REASON } = require("./verify.cjs");
 
+/** How long the app runs with no license before the gate locks. */
+const TRIAL_DAYS = 7;
+const DAY_MS = 86_400_000;
+
 let cachedMachineId = null;
 
 /**
@@ -63,7 +67,41 @@ function evaluate(userDataDir, now = Date.now()) {
     store.flagClockTamper(userDataDir, now);
   }
 
+  // No working license: the free trial, if it has time left. A moved-back
+  // clock never gets here — it would otherwise stretch the trial forever.
+  if (!result.valid && result.reason !== REASON.clockRollback) {
+    const startedAt = store.startTrial(userDataDir, now);
+    const expiresAt = startedAt + TRIAL_DAYS * DAY_MS;
+
+    if (now < expiresAt) {
+      return {
+        valid: true,
+        trial: true,
+        reason: null,
+        message: null,
+        payload: { type: "trial", expiresAt },
+        daysRemaining: Math.max(1, Math.ceil((expiresAt - now) / DAY_MS)),
+        machineId: machineId(),
+      };
+    }
+
+    // A key that is present but wrong says why; no key at all means the
+    // trial is what ran out.
+    const reason =
+      result.reason === REASON.missing ? REASON.trialEnded : result.reason;
+    return {
+      valid: false,
+      trial: false,
+      reason,
+      message: messageFor(reason),
+      payload: result.payload ?? null,
+      daysRemaining: null,
+      machineId: machineId(),
+    };
+  }
+
   return {
+    trial: false,
     valid: result.valid,
     reason: result.reason,
     message: result.valid ? null : messageFor(result.reason),
@@ -100,4 +138,11 @@ function activate(userDataDir, token, now = Date.now()) {
   return result;
 }
 
-module.exports = { machineId, evaluate, validate, activate, store };
+module.exports = {
+  TRIAL_DAYS,
+  machineId,
+  evaluate,
+  validate,
+  activate,
+  store,
+};

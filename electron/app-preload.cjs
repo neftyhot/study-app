@@ -2,8 +2,9 @@
  * The bridge between the app window and the main process.
  *
  * Context isolation stays on and Node stays out of the renderer. Three
- * functions cross, for "Sign in with Google", and none of them returns a
- * token: the window learns only whether someone is signed in, and as whom.
+ * functions cross for "Sign in with Google", none of which returns a token,
+ * and two for buying a license during the trial, which can only open the
+ * checkout page and ask whether the purchase has arrived.
  *
  * Channel names and shapes are defined in src/main/auth/ipc.ts; a sandboxed
  * preload cannot load TypeScript, so the names are repeated here.
@@ -15,5 +16,9 @@ contextBridge.exposeInMainWorld("studyApp", {
     status: () => ipcRenderer.invoke("google-auth:status"),
     signIn: () => ipcRenderer.invoke("google-auth:sign-in"),
     signOut: () => ipcRenderer.invoke("google-auth:sign-out"),
+  },
+  license: {
+    purchase: () => ipcRenderer.invoke("license:purchase"),
+    checkPurchase: () => ipcRenderer.invoke("license:check-purchase"),
   },
 });

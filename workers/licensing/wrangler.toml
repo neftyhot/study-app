@@ -1,0 +1,15 @@
+# Study App licensing Worker. Secrets are NOT set here — see README.md:
+#   wrangler secret put STRIPE_WEBHOOK_SECRET
+#   wrangler secret put LICENSE_PRIVATE_KEY < ../../.license-private-key.pem
+name = "study-app-licensing"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "LICENSES"
+# Replace with the id printed by: npx wrangler kv namespace create LICENSES
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+# Optional: only checkouts from this Payment Link mint a key (plink_…).
+PAYMENT_LINK_ID = ""

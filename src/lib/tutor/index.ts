@@ -55,6 +55,7 @@ export async function askTutor(
   const chat = requireChat(provider);
 
   const { data } = await chat<TutorResponse>({
+    feature: "tutor",
     system: TUTOR_SYSTEM,
     turns: turns.slice(-MAX_TURNS),
     schema: TUTOR_SCHEMA,
@@ -98,6 +99,7 @@ export async function extractCards(
     "Turn the facts in this conversation into flashcards.";
 
   const { data } = await chat<CardExtraction>({
+    feature: "tutor_extract",
     system: CARD_EXTRACTION_SYSTEM,
     turns: [
       ...request.turns.slice(-MAX_TURNS),

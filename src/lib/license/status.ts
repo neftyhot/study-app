@@ -10,8 +10,10 @@
  * Outside the desktop app (a development server, say) this returns null and
  * the settings row simply does not appear.
  */
+const TYPES = ["admin", "student", "lifetime", "trial"] as const;
+
 export type LicenseStatus = {
-  type: "admin" | "student";
+  type: (typeof TYPES)[number];
   name: string | null;
   expiresAt: number | null;
   daysRemaining: number | null;
@@ -23,10 +25,10 @@ export function readLicenseStatus(): LicenseStatus | null {
 
   try {
     const parsed = JSON.parse(raw) as Partial<LicenseStatus>;
-    if (parsed.type !== "admin" && parsed.type !== "student") return null;
+    if (!TYPES.includes(parsed.type as LicenseStatus["type"])) return null;
 
     return {
-      type: parsed.type,
+      type: parsed.type as LicenseStatus["type"],
       name: typeof parsed.name === "string" ? parsed.name : null,
       expiresAt:
         typeof parsed.expiresAt === "number" ? parsed.expiresAt : null,
@@ -41,11 +43,15 @@ export function readLicenseStatus(): LicenseStatus | null {
 export const TIER_LABELS: Record<LicenseStatus["type"], string> = {
   admin: "Full licence",
   student: "Student licence",
+  lifetime: "Lifetime licence",
+  trial: "Free trial",
 };
 
 /** How the countdown should read to someone with a deadline. */
 export function expiryLabel(status: LicenseStatus): string {
-  if (status.type === "admin") return "Does not expire";
+  if (status.type === "admin" || status.type === "lifetime") {
+    return "Does not expire";
+  }
   if (status.daysRemaining === null) return "No expiry recorded";
   if (status.daysRemaining === 0) return "Expires today";
   if (status.daysRemaining === 1) return "1 day remaining";

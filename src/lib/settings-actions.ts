@@ -29,12 +29,15 @@ import {
   type ProviderId,
 } from "@/lib/settings";
 import { isStrictness } from "@/lib/grade/strictness";
+import { isUsageLoggingEnabled, setUsageLogging } from "@/lib/usage";
 
 export type SetupSnapshot = {
   provider: ProviderId;
   keys: ReturnType<typeof allKeyStatuses>;
   /** Signed in with Google for Gemini, and as whom. Never a token. */
   google: GoogleSessionSummary | null;
+  /** Whether the student opted in to usage statistics. */
+  usageLogging: boolean;
   download: ReturnType<typeof readDownload>;
   localModelId: string | null;
   answerable: boolean;
@@ -50,6 +53,7 @@ export async function getSetupSnapshot(): Promise<SetupSnapshot> {
     provider: readProvider(db),
     keys: allKeyStatuses(db),
     google: readGoogleSession(db),
+    usageLogging: isUsageLoggingEnabled(db),
     download: readDownload(db),
     localModelId: readLocalModel(db).id,
     answerable: isAnswerable(db),
@@ -115,6 +119,13 @@ export async function finishSetup() {
 export async function setGradingStrictness(value: string) {
   if (!isStrictness(value)) return { ok: false as const, error: "Unknown setting." };
   writeGradingStrictness(value, db);
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+/** The usage-statistics opt-in; applies from the next model call. */
+export async function setUsageLoggingAction(enabled: boolean) {
+  setUsageLogging(enabled, db);
   revalidatePath("/settings");
   return { ok: true as const };
 }

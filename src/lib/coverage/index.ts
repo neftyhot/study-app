@@ -85,7 +85,11 @@ export class UsageMeter {
   /** A structured call, retried on rate limits, with its tokens counted. */
   async call<T>(request: StructuredRequest): Promise<T> {
     const { data, usage } = await withRetry(() =>
-      this.llm.generateStructured<T>({ thinking: this.thinking, ...request }),
+      this.llm.generateStructured<T>({
+        feature: "coverage",
+        thinking: this.thinking,
+        ...request,
+      }),
     );
     this.calls += 1;
     this.inputTokens += usage?.inputTokens ?? 0;

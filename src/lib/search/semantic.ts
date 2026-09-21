@@ -106,6 +106,7 @@ export async function semanticSearch(
   const byToken = new Map(tokenized.map(({ token, item }) => [token.toLowerCase(), item]));
 
   const { data } = await llm.generateStructured<SemanticResponse>({
+    feature: "search",
     system: SEMANTIC_SYSTEM,
     prompt: buildPrompt(query, tokenized),
     schema: SEMANTIC_SCHEMA,

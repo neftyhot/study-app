@@ -738,6 +738,42 @@ export const googleOAuthSessions = sqliteTable("google_oauth_sessions", {
     .default(sql`(current_timestamp)`),
 });
 
+/* ------------------------------------------------------------ UsageEvent */
+
+/**
+ * One model call: which feature, which model, how many tokens, what it
+ * would cost at list price. Written only when the student has opted in
+ * (setting `usage_logging`), and never holding a prompt, an answer, or any
+ * of their material — numbers only.
+ *
+ * Local for now. `uploadedAt` is left empty for the opt-in upload to the
+ * developer's cost log, which marks rows as it sends them.
+ */
+export const usageEvents = sqliteTable(
+  "usage_events",
+  {
+    id: id(),
+    createdAt: createdAt(),
+    /** `UsageFeature`, or "unknown" for an untagged call. */
+    feature: text("feature").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    /** How the call paid: "google_oauth", "api_key", "env_key", or "local". */
+    authMode: text("auth_mode").notNull(),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    /**
+     * List price in USD, null when the model has no known price. On Google
+     * sign-in the student's free quota usually means they paid nothing.
+     */
+    estimatedCostUsd: real("estimated_cost_usd"),
+    durationMs: integer("duration_ms").notNull(),
+    success: integer("success", { mode: "boolean" }).notNull(),
+    uploadedAt: text("uploaded_at"),
+  },
+  (t) => [index("usage_events_created_idx").on(t.createdAt)],
+);
+
 /* ---------------------------------------------------- DiagramOcclusion */
 
 /**

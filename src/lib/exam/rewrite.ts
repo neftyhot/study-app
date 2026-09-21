@@ -114,6 +114,7 @@ export async function rewriteQuestions(
     .join("\n")}`;
 
   const { data } = await llm.generateStructured<RewriteResponse>({
+    feature: "exam_rewrite",
     system: REWRITE_SYSTEM,
     prompt,
     schema: REWRITE_SCHEMA,

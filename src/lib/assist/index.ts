@@ -176,6 +176,7 @@ export async function requestAssist(
   }
 
   const { data } = await llm.generateStructured<AssistResponse>({
+    feature: "hint",
     system: ASSIST_SYSTEM,
     prompt: assistPrompt(request.kind, context),
     schema: ASSIST_SCHEMA,
@@ -295,6 +296,7 @@ export async function diagnoseCard(
   if (!loaded) return undefined;
 
   const { data } = await llm.generateStructured<DiagnosisResponse>({
+    feature: "diagnose",
     system: DIAGNOSIS_SYSTEM,
     prompt: diagnosisPrompt({ ...loaded.context, answers }),
     schema: DIAGNOSIS_SCHEMA,
