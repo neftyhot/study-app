@@ -61,7 +61,10 @@ export type GenerationJobView = {
 type Summary = {
   mode: string;
   density?: string;
+  detail?: string;
   unitsUsed?: number;
+  durationMs?: number;
+  failedBatches?: { batch: number; error: string }[];
   target?: GenerateMode;
   examId?: string;
   createdExam?: { id: string; title: string } | null;
@@ -356,8 +359,17 @@ export function GeneratePanel({
               {summary.cardsRejected > 0
                 ? `, ${summary.cardsRejected} rejected`
                 : ""}
+              {summary.durationMs ? ` in ${formatDuration(summary.durationMs)}` : ""}
               .
             </p>
+
+            {summary.failedBatches?.length ? (
+              <p className="text-destructive text-xs">
+                {summary.failedBatches.length} batch(es) failed and were
+                skipped; everything else was kept.{" "}
+                {summary.failedBatches[0].error}
+              </p>
+            ) : null}
 
             {summary.uncoveredNotes.length > 0 ? (
               <div>
@@ -426,6 +438,13 @@ export function GeneratePanel({
       </Dialog>
     </Card>
   );
+}
+
+/** Milliseconds are what the log wants; a student wants "1m 12s". */
+function formatDuration(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
 /**

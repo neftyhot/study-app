@@ -43,6 +43,54 @@ export const CARD_FACETS = [
 
 export type CardFacet = (typeof CARD_FACETS)[number];
 
+/**
+ * Two shapes for the same card.
+ *
+ * "lean" is what a bulk run asks for: the question, the answer, the points a
+ * typed answer must hit, and the provenance that makes the card trustworthy.
+ * "full" adds the expanded explanation and the misconception list.
+ *
+ * The difference is almost entirely output tokens, and output tokens are
+ * almost entirely the wall-clock cost of a run: an explanation paragraph and
+ * three misconceptions are several times the length of the card they belong
+ * to. Lean is the default, and the missing parts are filled in per card, on
+ * request, rather than for eight hundred cards nobody asked about.
+ *
+ * What lean does NOT drop is provenance. The excerpt and the citation are what
+ * make a card checkable, and a faster way to produce unverifiable cards is not
+ * an optimisation.
+ */
+export type GenerationDetail = "lean" | "full";
+
+export function generatedCardSchema(
+  detail: GenerationDetail = "lean",
+): JsonSchema {
+  const schema = structuredClone(GENERATED_CARD_SCHEMA) as {
+    properties: {
+      cards: {
+        items: {
+          properties: Record<string, unknown>;
+          required: string[];
+        };
+      };
+    };
+  };
+
+  if (detail === "lean") {
+    const item = schema.properties.cards.items;
+    delete item.properties.fullExplanation;
+    delete item.properties.hasAiSupplement;
+    delete item.properties.optionalPoints;
+    delete item.properties.commonMisconceptions;
+    item.required = item.required.filter((key) => key !== "hasAiSupplement");
+
+    (item.properties.essentialPoints as { description: string }).description =
+      "Between one and three short points a typed answer MUST contain.";
+  }
+
+  return schema as JsonSchema;
+}
+
 export const GENERATED_CARD_SCHEMA: JsonSchema = {
   type: "object",
   properties: {

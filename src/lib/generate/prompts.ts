@@ -13,6 +13,7 @@ import {
   ratioFor,
   type DensityMode,
 } from "./density";
+import type { GenerationDetail } from "./schemas";
 
 /** Stable, short token the model cites instead of a UUID. */
 export function citationToken(slide: Pick<SourceSlide, "index">) {
@@ -100,14 +101,7 @@ BREADTH (this is where most decks fail)
 - Expect far fewer cards than this material could yield. That is the point.`,
 };
 
-const PROVENANCE_AND_RUBRICS = `PROVENANCE (non-negotiable)
-- Every card cites the slide token it came from, e.g. "S7".
-- sourceExcerpt must be text copied VERBATIM from that slide. Copy it exactly,
-  character for character. Do not paraphrase, reformat, or correct it.
-- You may shorten a long quote with "..." between the parts you keep, but every
-  part you keep must still be copied exactly.
-- If the material does not state something, DO NOT generate a card for it and
-  do not fill the gap from your own knowledge. List it in uncoveredNotes.
+const RUBRICS_FULL = `EXPLANATION
 - fullExplanation may add clarifying context beyond the source. When it does,
   set hasAiSupplement to true. When it contains only source material, set it
   to false.
@@ -118,7 +112,33 @@ RUBRICS
 - optionalPoints are worth credit but not required.
 - commonMisconceptions are plausible wrong answers. Prioritise reversed
   directionality (increase vs. decrease) and mechanism mix-ups (synthesis vs.
-  secretion), which are what students actually get wrong.
+  secretion), which are what students actually get wrong.`;
+
+/**
+ * The lean run's rubric section.
+ *
+ * It says what NOT to write as well as what to write, because a model told
+ * only about the schema will still pad the answer with the explanation it was
+ * not asked for — and that padding is most of what a bulk run spends its time
+ * producing.
+ */
+const RUBRICS_LEAN = `RUBRICS
+- essentialPoints are what a typed answer MUST say to count as correct. Give
+  between one and three, each short and independently checkable.
+
+BE BRIEF
+- directAnswer is one or two sentences. Do not add an explanation paragraph,
+  and do not restate the question inside the answer.
+- Do not write commentary, headings or preamble around the cards.`;
+
+const PROVENANCE_AND_RUBRICS = `PROVENANCE (non-negotiable)
+- Every card cites the slide token it came from, e.g. "S7".
+- sourceExcerpt must be text copied VERBATIM from that slide. Copy it exactly,
+  character for character. Do not paraphrase, reformat, or correct it.
+- You may shorten a long quote with "..." between the parts you keep, but every
+  part you keep must still be copied exactly.
+- If the material does not state something, DO NOT generate a card for it and
+  do not fill the gap from your own knowledge. List it in uncoveredNotes.
 
 Write questions a student can answer from memory, not questions about the
 slides. Never write "According to slide 7, ...".`;
@@ -141,6 +161,7 @@ export function nearestPreset(ratio: number): Exclude<DensityMode, "custom"> {
 export function generationSystem(
   density: DensityMode = "exhaustive",
   customRatio?: number | null,
+  detail: GenerationDetail = "full",
 ): string {
   const ratio = ratioFor(density, customRatio);
   const selection = SELECTION[density === "custom" ? nearestPreset(ratio) : density];
@@ -153,7 +174,9 @@ export function generationSystem(
       ? `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio)} per slide on average across this batch.\nThis is guidance for how finely to cut, not a quota: never invent a card, pad\nwith trivia, or drop a genuinely testable fact in order to hit it.`
       : "";
 
-  return `${GENERATION_PREAMBLE}\n\n${selection}\n\n${PROVENANCE_AND_RUBRICS}${target}`;
+  const rubrics = detail === "lean" ? RUBRICS_LEAN : RUBRICS_FULL;
+
+  return `${GENERATION_PREAMBLE}\n\n${selection}\n\n${PROVENANCE_AND_RUBRICS}\n\n${rubrics}${target}`;
 }
 
 function formatRatio(ratio: number): string {

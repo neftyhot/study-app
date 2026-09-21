@@ -588,3 +588,137 @@ describe("extraction density", () => {
     }
   });
 });
+
+describe("throughput", () => {
+  it("runs batches concurrently rather than one at a time", async () => {
+    seedSlides(20);
+
+    let inFlight = 0;
+    let peak = 0;
+
+    const provider: LlmProvider = {
+      name: "slow",
+      model: "slow",
+      generateStructured: vi.fn(async () => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        inFlight -= 1;
+        return { data: { cards: [] } as never };
+      }),
+    };
+
+    await generateCardsForExam(db, provider, examId, {
+      batchSize: 2,
+      concurrency: 5,
+    });
+
+    expect(provider.generateStructured).toHaveBeenCalledTimes(10);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(5);
+  });
+
+  it("reports progress as a count of finished batches, never going backwards", async () => {
+    seedSlides(12);
+
+    const provider: LlmProvider = {
+      name: "jumbled",
+      model: "jumbled",
+      generateStructured: vi.fn(async () => {
+        // Deliberately uneven, so batches finish out of order.
+        await new Promise((resolve) => setTimeout(resolve, Math.random() * 20));
+        return { data: { cards: [] } as never };
+      }),
+    };
+
+    const seen: number[] = [];
+    await generateCardsForExam(db, provider, examId, {
+      batchSize: 2,
+      concurrency: 4,
+      onProgress: (progress) => seen.push(progress.batchIndex),
+    });
+
+    expect(seen).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("keeps the cards from the batches that worked when one fails", async () => {
+    seedSlides(4);
+
+    let call = 0;
+    const provider: LlmProvider = {
+      name: "flaky",
+      model: "flaky",
+      generateStructured: vi.fn(async (request: StructuredRequest) => {
+        call += 1;
+        if (call === 1) throw new Error("401 Invalid API key");
+        const slide = /\[S(\d+)\]/.exec(request.prompt)?.[1] ?? "1";
+        return {
+          data: {
+            cards: [
+              card({
+                question: `Question about slide ${slide}`,
+                slideCitation: `S${slide}`,
+                sourceExcerpt: `Body line one for slide ${slide}`,
+              }),
+            ],
+          } as never,
+        };
+      }),
+    };
+
+    const summary = await generateCardsForExam(db, provider, examId, {
+      batchSize: 1,
+      concurrency: 1,
+    });
+
+    expect(summary.failedBatches).toHaveLength(1);
+    expect(summary.cardsCreated).toBe(3);
+    expect(db.select().from(flashcards).all()).toHaveLength(3);
+  });
+
+  it("fails loudly when every batch fails, rather than reporting zero cards", async () => {
+    seedSlides(2);
+
+    const provider: LlmProvider = {
+      name: "broken",
+      model: "broken",
+      generateStructured: vi.fn(async () => {
+        throw new Error("401 Invalid API key");
+      }),
+    };
+
+    await expect(
+      generateCardsForExam(db, provider, examId, { batchSize: 1 }),
+    ).rejects.toThrow(/Invalid API key/);
+  });
+
+  it("asks for the lean card by default and the full one when told", async () => {
+    seedSlides(2);
+
+    const lean = stubProvider([{ cards: [] }]);
+    await generateCardsForExam(db, lean.provider, examId, {});
+    const leanItem = (lean.requests[0].schema as never as {
+      properties: { cards: { items: { properties: Record<string, unknown> } } };
+    }).properties.cards.items.properties;
+    expect(leanItem).not.toHaveProperty("fullExplanation");
+    expect(leanItem).not.toHaveProperty("commonMisconceptions");
+    expect(leanItem).toHaveProperty("sourceExcerpt");
+
+    const full = stubProvider([{ cards: [] }]);
+    await generateCardsForExam(db, full.provider, examId, { detail: "full" });
+    const fullItem = (full.requests[0].schema as never as {
+      properties: { cards: { items: { properties: Record<string, unknown> } } };
+    }).properties.cards.items.properties;
+    expect(fullItem).toHaveProperty("fullExplanation");
+    expect(fullItem).toHaveProperty("commonMisconceptions");
+  });
+
+  it("times the run", async () => {
+    seedSlides(2);
+    const { provider } = stubProvider([{ cards: [] }]);
+
+    const summary = await generateCardsForExam(db, provider, examId, {});
+    expect(summary.durationMs).toBeGreaterThanOrEqual(0);
+    expect(summary.detail).toBe("lean");
+  });
+});

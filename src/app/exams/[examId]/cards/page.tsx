@@ -71,7 +71,7 @@ export default async function CardsPage(
           No cards yet. Generate them from the exam overview.
         </p>
       ) : (
-        <DeckCardList cards={views} />
+        <DeckCardList examId={examId} cards={views} />
       )}
     </div>
   );

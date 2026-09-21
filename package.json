@@ -26,7 +26,8 @@
     "license-manager:build": "electron-builder --config tools/license-manager/electron-builder.yml --mac --arm64",
     "license:manager": "npm run license-manager:dev",
     "license-manager:selftest": "electron tools/license-manager/selftest.js",
-    "tutor:check": "tsx --env-file=.env.local scripts/tutor-check.ts"
+    "tutor:check": "tsx --env-file=.env.local scripts/tutor-check.ts",
+    "generate:bench": "tsx --env-file=.env.local scripts/generate-bench.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
@@ -47,6 +48,7 @@
     "node-llama-cpp": "^3.21.1",
     "node-machine-id": "^1.1.12",
     "openai": "^7.20.0",
+    "p-limit": "^7.3.3",
     "radix-ui": "^1.6.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",

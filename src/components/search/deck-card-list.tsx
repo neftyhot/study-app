@@ -1,17 +1,20 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 
 import { DeckSearch } from "@/components/search/deck-search";
 import { Highlighted } from "@/components/search/highlighted";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { enrichCardAction } from "@/lib/generate/actions";
 
 export type DeckCardView = {
   id: string;
@@ -35,7 +38,13 @@ export type DeckCardView = {
  * the grouping survives filtering: a search narrows what is shown without
  * flattening the structure that explains why there are so many cards.
  */
-export function DeckCardList({ cards }: { cards: DeckCardView[] }) {
+export function DeckCardList({
+  examId,
+  cards,
+}: {
+  examId: string;
+  cards: DeckCardView[];
+}) {
   const [matches, setMatches] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
 
@@ -104,11 +113,11 @@ export function DeckCardList({ cards }: { cards: DeckCardView[] }) {
                     <Highlighted text={card.directAnswer} query={query} />
                   </p>
 
-                  {card.fullExplanation ? (
-                    <p className="text-muted-foreground break-words">
-                      <Highlighted text={card.fullExplanation} query={query} />
-                    </p>
-                  ) : null}
+                  <Explanation
+                    examId={examId}
+                    card={card}
+                    query={query}
+                  />
 
                   {card.essentialPoints.length > 0 ? (
                     <div>
@@ -140,5 +149,62 @@ export function DeckCardList({ cards }: { cards: DeckCardView[] }) {
         </section>
       ))}
     </div>
+  );
+}
+
+/**
+ * The explanation, or the offer to write one.
+ *
+ * Bulk generation stops at the answer, so most cards arrive without this. The
+ * button is the "in-depth breakdown" that fills it in — for this card, because
+ * it was asked for, rather than for the whole deck on the off chance.
+ */
+function Explanation({
+  examId,
+  card,
+  query,
+}: {
+  examId: string;
+  card: DeckCardView;
+  query: string;
+}) {
+  const [text, setText] = useState(card.fullExplanation);
+  const [busy, setBusy] = useState(false);
+
+  if (text) {
+    return (
+      <p className="text-muted-foreground break-words">
+        <Highlighted text={text} query={query} />
+      </p>
+    );
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-7 px-2 text-xs"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          const result = await enrichCardAction(examId, card.id);
+          if (!result.ok) {
+            toast.error(result.error);
+            return;
+          }
+          setText(result.fullExplanation);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        <Sparkles className="size-3.5" />
+      )}
+      {busy ? "Working…" : "Explain in depth"}
+    </Button>
   );
 }

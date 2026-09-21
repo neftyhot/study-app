@@ -127,12 +127,13 @@ export function startGenerationJob(
       touch(db, job.id, {
         // Reported as batches finish, so "3 of 12" means three are safely
         // stored, not three have been attempted.
-        batchIndex: progress.batchIndex + 1,
+        batchIndex: progress.batchIndex,
         batchCount: progress.batchCount,
-        cardsCreated:
-          (activeJob(db, examId)?.cardsCreated ?? 0) + progress.accepted,
-        cardsRejected:
-          (activeJob(db, examId)?.cardsRejected ?? 0) + progress.rejected,
+        // Written as totals rather than added to what was read back. With
+        // five batches finishing at once, read-then-add loses updates, which
+        // showed up as a card count that drifted below the truth.
+        cardsCreated: progress.cardsCreated,
+        cardsRejected: progress.cardsRejected,
       });
       options.onProgress?.(progress);
     },
@@ -148,7 +149,10 @@ export function startGenerationJob(
         summary: {
           mode: summary.mode,
           density: summary.density,
+          detail: summary.detail,
           unitsUsed: summary.unitsUsed,
+          durationMs: summary.durationMs,
+          failedBatches: summary.failedBatches,
           batchCount: summary.batchCount,
           cardsCreated: summary.cardsCreated,
           cardsRejected: summary.cardsRejected,
