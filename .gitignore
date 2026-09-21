@@ -71,3 +71,4 @@ dist-admin/
 workers/licensing/.dev.vars
 workers/licensing/.wrangler/
 workers/licensing/node_modules/
+.env
