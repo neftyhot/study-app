@@ -8,7 +8,7 @@ compatibility_date = "2026-09-01"
 [[kv_namespaces]]
 binding = "LICENSES"
 # Replace with the id printed by: npx wrangler kv namespace create LICENSES
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "b8a5c56d4f744de9b604923f0df18aab"
 
 [vars]
 # Optional: only checkouts from this Payment Link mint a key (plink_…).
