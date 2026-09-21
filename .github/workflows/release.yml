@@ -32,6 +32,9 @@ jobs:
           echo "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID" >> .env.local
           echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
 
+      - name: Build Application
+        run: npm run build
+
       - name: Build and Publish DMG
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
