@@ -71,22 +71,21 @@ BREADTH (this is where most decks fail)
 - Never answer a broad heading with a single summary card. If you find
   yourself writing one card whose answer is a list, split the list.`,
 
-  standard: `WHAT TO EXTRACT
+  standard: `WHAT TO EXTRACT (select, do not exhaust)
 - One card tests exactly ONE fact. Never combine two facts with "and".
-- Take the core of the material: definitions, mechanisms, the steps of a
-  process and the order they happen in, the relationships between structures,
-  numeric values, and the comparisons and exceptions an exam would test.
-- Decompose a concept into the facets that are genuinely tested separately.
-  For a hormone: where it is produced, what triggers its release, what it acts
-  on, what it does, and how it is regulated.
+- For each slide, find the one or two things on it most likely to be examined:
+  a definition, a mechanism, a cause and its effect, the order of a process, a
+  key comparison. Write those. Most slides deserve one card; a dense slide may
+  deserve two or three; a transitional slide deserves none.
+- Do NOT split every concept into all of its facets. Where it is produced,
+  what triggers it, what it acts on and how it is regulated are four cards
+  only if the slide actually teaches all four as separate points.
 - Do NOT write several near-identical cards for one concept. If two cards
   would be answered by the same sentence, write one of them.
-- Skip conversational bullets, transitional slides, administrative content,
-  and anything the material simply repeats.
-- A broad heading is still a container, not a single card: split it into the
-  structures and steps the material actually explains. But a minor sub-bullet
-  that only supports a concept does not need a card of its own.`,
+- Skip conversational bullets, examples that only illustrate, administrative
+  content, and anything the material simply repeats.
 
+`,
   high_yield: `WHAT TO EXTRACT (be selective — this is a final-week pass)
 - Take only what is high-yield: stated learning objectives, bolded or
   emphasised terms, summary tables, and the concepts the rest of the material
@@ -158,6 +157,21 @@ export function nearestPreset(ratio: number): Exclude<DensityMode, "custom"> {
   entries[0][0]);
 }
 
+/**
+ * How far above a stated target the model's output lands.
+ *
+ * Measured on the Endocrine chapter (96 pages) with gemini-2.5-flash: told
+ * 0.3 cards a page it produced 0.67, told 1.0 it produced 1.81 — about 1.9x
+ * both times — so the number the model is given is scaled down by this.
+ *
+ * It is not linear, which is why the estimate does not rely on it: told 0.53,
+ * the model still produced 1.44, because dense material has a floor below
+ * which cutting further would mean dropping testable facts. The estimate uses
+ * measured yields (`expectedPerUnit`) instead. Re-measure with
+ * `npm run generate:bench` if the default model changes.
+ */
+export const MODEL_OVERSHOOT = 1.9;
+
 export function generationSystem(
   density: DensityMode = "exhaustive",
   customRatio?: number | null,
@@ -166,13 +180,15 @@ export function generationSystem(
   const ratio = ratioFor(density, customRatio);
   const selection = SELECTION[density === "custom" ? nearestPreset(ratio) : density];
 
-  // A number is only given to the model when the student set one. For a
-  // preset, the prose is the instruction; adding a quota to it would invite
-  // padding, which the validator would then reject as unsupported cards.
+  // Exhaustive is the one setting with no number. Prose alone was measured
+  // to overshoot badly — "standard" produced three cards a slide, no leaner
+  // than exhaustive — so the leaner settings state their target. Padding, the
+  // risk a number carries, only arises when the target is above what the
+  // material naturally yields, which for these settings it never is.
   const target =
-    density === "custom"
-      ? `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio)} per slide on average across this batch.\nThis is guidance for how finely to cut, not a quota: never invent a card, pad\nwith trivia, or drop a genuinely testable fact in order to hit it.`
-      : "";
+    density === "exhaustive"
+      ? ""
+      : `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio / MODEL_OVERSHOOT)} per slide on average across this batch.\nThis is a ceiling on how finely to cut, not a quota: fewer is right when a\nslide is thin, and you must never invent a card or pad with trivia to reach it.`;
 
   const rubrics = detail === "lean" ? RUBRICS_LEAN : RUBRICS_FULL;
 

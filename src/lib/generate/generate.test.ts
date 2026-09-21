@@ -557,20 +557,32 @@ describe("extraction density", () => {
     expect(requests[0].system).toContain("There is no limit on card count");
   });
 
-  it("gives the model a number only when the student set one", async () => {
+  it("states a target for every density but exhaustive", async () => {
     seedSlides(2);
-    const preset = stubProvider([{ cards: [] }]);
-    await generateCardsForExam(db, preset.provider, examId, {
+
+    const exhaustive = stubProvider([{ cards: [] }]);
+    await generateCardsForExam(db, exhaustive.provider, examId, {
+      density: "exhaustive",
+    });
+    expect(exhaustive.requests[0].system).not.toContain("TARGET DENSITY");
+
+    const standard = stubProvider([{ cards: [] }]);
+    await generateCardsForExam(db, standard.provider, examId, {
       density: "standard",
     });
-    expect(preset.requests[0].system).not.toContain("TARGET DENSITY");
+    expect(standard.requests[0].system).toContain("TARGET DENSITY");
+  });
 
+  it("asks for less than it wants, by the overshoot it measured", async () => {
+    // The model lands about 1.9x above whatever it is told, so a student who
+    // asks for 1.9 cards a page gets the model told 1.0 — and gets ~1.9.
+    seedSlides(2);
     const custom = stubProvider([{ cards: [] }]);
     await generateCardsForExam(db, custom.provider, examId, {
       density: "custom",
-      densityRatio: 1.8,
+      densityRatio: 1.9,
     });
-    expect(custom.requests[0].system).toContain("roughly 1.8 cards per slide");
+    expect(custom.requests[0].system).toContain("roughly 1 card per slide");
   });
 
   it("keeps provenance and rubric rules identical at every density", async () => {

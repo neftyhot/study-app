@@ -22,8 +22,14 @@ export type DensityMode = (typeof DENSITY_MODES)[number];
 
 export type DensityPreset = {
   label: string;
-  /** Rough cards per source unit, used for the estimate only. */
+  /** The density asked for — what the model's target is derived from. */
   cardsPerUnit: number;
+  /**
+   * What that setting actually produces, measured. Used for the estimate and
+   * the label, because a model told "one a page" does not produce one a page:
+   * on dense lecture material it lands well above any target it is given.
+   */
+  expectedPerUnit: number;
   blurb: string;
 };
 
@@ -34,18 +40,24 @@ export const DENSITY_PRESETS: Record<
   high_yield: {
     label: "High-yield cram",
     cardsPerUnit: 0.3,
+    // Endocrine chapter, 96 pages: 64 cards.
+    expectedPerUnit: 0.6,
     blurb:
       "Objectives, bolded emphasis and summary tables only. Related sub-points are folded into one synthesis card.",
   },
   standard: {
     label: "Standard",
     cardsPerUnit: 1,
+    // Endocrine chapter, 96 pages: 138 cards.
+    expectedPerUnit: 1.4,
     blurb:
       "Core definitions, mechanisms and relationships. Conversational and repeated bullets are skipped.",
   },
   exhaustive: {
     label: "Exhaustive",
     cardsPerUnit: 2.5,
+    // Endocrine chapter: 321 cards; whole 314-page deck: 867.
+    expectedPerUnit: 3,
     blurb:
       "Every testable detail, every sub-bullet, every step of every pathway. This is what the deck did before this setting existed.",
   },
@@ -71,6 +83,18 @@ export function ratioFor(mode: DensityMode, custom?: number | null): number {
     return Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio));
   }
   return DENSITY_PRESETS[mode].cardsPerUnit;
+}
+
+/**
+ * What a setting is expected to produce per unit, for the estimate.
+ *
+ * A custom ratio is the student's own statement of what they want, so it is
+ * taken at its word; the observed average shown beside the estimate is what
+ * corrects it after the first run.
+ */
+export function expectedFor(mode: DensityMode, custom?: number | null): number {
+  if (mode === "custom") return ratioFor(mode, custom);
+  return DENSITY_PRESETS[mode].expectedPerUnit;
 }
 
 /**

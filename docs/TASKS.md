@@ -903,8 +903,21 @@ standard for it, and a test asserts that at every density. A range filters and
 deliberately does not renumber: page 68 stays S68, because that is the number
 printed on the student's own file and the one every citation resolves through.
 
-Measured: high-yield produced 367 cards from the deck where standard produced
-948, so the setting genuinely bites.
+**Calibrated against real runs, after the first version was wrong.** As first
+written, "standard" produced three cards a page on the real deck — 948 from 314
+pages, no leaner than the old exhaustive deck — so the estimate on screen would
+have been off by 3x. The standard prompt now selects rather than decomposes, the
+leaner settings state a target, and that target is scaled for the model's
+measured overshoot (~1.9x). Dense lecture material still has a floor — told 0.53
+a page, the model produced 1.44, because cutting further would mean dropping
+testable facts — so the estimate uses measured yields rather than the nominal
+ratios. Endocrine chapter, 96 pages:
+
+| setting | estimate | measured |
+| --- | --- | --- |
+| high-yield | 43–78 | 64 |
+| standard | 101–181 | 138 |
+| exhaustive | 216–389 | 321 |
 
 ---
 

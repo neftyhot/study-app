@@ -17,10 +17,10 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import {
   DENSITY_PRESETS,
+  expectedFor,
   formatEstimate,
   MAX_RATIO,
   MIN_RATIO,
-  ratioFor,
   type DensityMode,
 } from "@/lib/generate/density";
 import {
@@ -59,7 +59,8 @@ export function IngestionOptions({
   /** Cards per unit this deck actually produced last time, when it has. */
   observedRatio?: number | null;
 }) {
-  const ratio = ratioFor(state.density, state.ratio);
+  // What the setting produces, not what it asks for — see `expectedPerUnit`.
+  const ratio = expectedFor(state.density, state.ratio);
   const units = useMemo(
     () => selectedUnits(sources, state.choices),
     [sources, state.choices],
@@ -99,7 +100,7 @@ export function IngestionOptions({
                 {DENSITY_PRESETS[mode].label}
               </span>
               <span className="text-muted-foreground block text-xs tabular-nums">
-                ~{DENSITY_PRESETS[mode].cardsPerUnit} per{" "}
+                ~{DENSITY_PRESETS[mode].expectedPerUnit} per{" "}
                 {unitWord(sources[0]?.fileType ?? "pdf")}
               </span>
             </button>

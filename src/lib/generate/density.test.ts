@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   DENSITY_PRESETS,
   estimateCards,
+  expectedFor,
   formatEstimate,
   isDensityMode,
   MAX_RATIO,
@@ -47,6 +48,30 @@ describe("ratioFor", () => {
 
   it("falls back to standard when custom has no number yet", () => {
     expect(ratioFor("custom", null)).toBe(DENSITY_PRESETS.standard.cardsPerUnit);
+  });
+});
+
+describe("expectedFor", () => {
+  it("estimates from what a preset produces, not what it asks for", () => {
+    // Told one card a page, the model produced 1.4 on real lecture material;
+    // an estimate built on the request would be wrong before the run started.
+    expect(expectedFor("standard")).toBe(DENSITY_PRESETS.standard.expectedPerUnit);
+    expect(expectedFor("standard")).toBeGreaterThan(
+      DENSITY_PRESETS.standard.cardsPerUnit,
+    );
+  });
+
+  it("takes a custom ratio at its word", () => {
+    expect(expectedFor("custom", 2.2)).toBe(2.2);
+  });
+
+  it("keeps the presets in order, leanest first", () => {
+    expect(DENSITY_PRESETS.high_yield.expectedPerUnit).toBeLessThan(
+      DENSITY_PRESETS.standard.expectedPerUnit,
+    );
+    expect(DENSITY_PRESETS.standard.expectedPerUnit).toBeLessThan(
+      DENSITY_PRESETS.exhaustive.expectedPerUnit,
+    );
   });
 });
 
