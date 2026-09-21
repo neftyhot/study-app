@@ -24,13 +24,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Inject OAuth Credentials
+      - name: Inject OAuth Credentials and License Server
         env:
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # A public URL, so a repository variable rather than a secret. Without
+          # it a purchase is not delivered to the app automatically.
+          LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
         run: |
           echo "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID" >> .env.local
           echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
+          echo "LICENSE_SERVER_URL=$LICENSE_SERVER_URL" >> .env.local
 
       - name: Build Standalone and Electron Main
         env:
