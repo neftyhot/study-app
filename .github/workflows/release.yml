@@ -32,16 +32,17 @@ jobs:
           echo "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID" >> .env.local
           echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
 
-      - name: Compile Application & Electron
+      - name: Build Standalone and Electron Main
         env:
           NEXT_TELEMETRY_DISABLED: 1
+          NEXT_CPU_COUNT: 1
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
-          npx next build --no-lint
-          npm run electron:build --if-present || npx electron-builder --mac --publish always
+          npx next build
+          node scripts/prepare-standalone.mjs
+          npm run electron:compile
 
-      - name: Publish DMG
-        if: success()
+      - name: Build and Publish DMG
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --mac --publish always
+        run: npx electron-builder --mac --arm64 --publish always
