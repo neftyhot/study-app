@@ -10,7 +10,12 @@
 import OpenAI from "openai";
 
 import type { JsonSchema } from "./types";
-import { LlmError, type LlmProvider, type StructuredRequest } from "./types";
+import {
+  LlmError,
+  type ChatRequest,
+  type LlmProvider,
+  type StructuredRequest,
+} from "./types";
 
 export const DEFAULT_OPENAI_MODEL = "gpt-4.1";
 
@@ -74,6 +79,61 @@ export function createOpenAiProvider(options?: {
   return {
     name: "openai",
     model,
+    vision: true,
+
+    async generateChat<T>(request: ChatRequest) {
+      try {
+        const response = await client.chat.completions.create({
+          model,
+          temperature: request.temperature ?? 0.4,
+          max_completion_tokens: request.maxOutputTokens ?? 4096,
+          messages: [
+            { role: "system" as const, content: request.system },
+            ...request.turns.map((turn) =>
+              turn.role === "model"
+                ? { role: "assistant" as const, content: turn.text }
+                : {
+                    role: "user" as const,
+                    content: [
+                      ...(turn.images ?? []).map((image) => ({
+                        type: "image_url" as const,
+                        image_url: {
+                          url: `data:${image.mimeType};base64,${image.data}`,
+                        },
+                      })),
+                      { type: "text" as const, text: turn.text },
+                    ],
+                  },
+            ),
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: {
+              name: "structured_response",
+              strict: true,
+              schema: toStrictSchema(request.schema) as Record<string, unknown>,
+            },
+          },
+        });
+
+        const content = response.choices[0]?.message?.content;
+        if (!content) throw new LlmError("OpenAI returned an empty response.");
+
+        return {
+          data: JSON.parse(content) as T,
+          usage: {
+            inputTokens: response.usage?.prompt_tokens,
+            outputTokens: response.usage?.completion_tokens,
+          },
+        };
+      } catch (error) {
+        if (error instanceof LlmError) throw error;
+        throw new LlmError(
+          error instanceof Error ? error.message : String(error),
+          error,
+        );
+      }
+    },
 
     async generateStructured<T>(request: StructuredRequest) {
       try {

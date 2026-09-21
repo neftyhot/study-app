@@ -9,7 +9,12 @@
  */
 import Anthropic from "@anthropic-ai/sdk";
 
-import { LlmError, type LlmProvider, type StructuredRequest } from "./types";
+import {
+  LlmError,
+  type ChatRequest,
+  type LlmProvider,
+  type StructuredRequest,
+} from "./types";
 
 export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5";
 
@@ -33,6 +38,62 @@ export function createAnthropicProvider(options?: {
   return {
     name: "anthropic",
     model,
+    vision: true,
+
+    async generateChat<T>(request: ChatRequest) {
+      try {
+        const response = await client.messages.create({
+          model,
+          max_tokens: request.maxOutputTokens ?? 4096,
+          temperature: request.temperature ?? 0.4,
+          system: request.system,
+          messages: request.turns.map((turn) => ({
+            role: turn.role === "model" ? ("assistant" as const) : ("user" as const),
+            content: [
+              ...(turn.images ?? []).map((image) => ({
+                type: "image" as const,
+                source: {
+                  type: "base64" as const,
+                  media_type: image.mimeType as "image/png",
+                  data: image.data,
+                },
+              })),
+              { type: "text" as const, text: turn.text },
+            ],
+          })),
+          tools: [
+            {
+              name: TOOL_NAME,
+              description: "Return the structured result.",
+              input_schema: request.schema as Anthropic.Tool["input_schema"],
+            },
+          ],
+          tool_choice: { type: "tool", name: TOOL_NAME },
+        });
+
+        const call = response.content.find(
+          (block) => block.type === "tool_use" && block.name === TOOL_NAME,
+        );
+
+        if (!call || call.type !== "tool_use") {
+          throw new LlmError("Anthropic returned no structured result.");
+        }
+
+        return {
+          data: call.input as T,
+          usage: {
+            inputTokens: response.usage?.input_tokens,
+            outputTokens: response.usage?.output_tokens,
+          },
+        };
+      } catch (error) {
+        if (error instanceof LlmError) throw error;
+        throw new LlmError(
+          error instanceof Error ? error.message : String(error),
+          error,
+        );
+      }
+    },
 
     async generateStructured<T>(request: StructuredRequest) {
       try {

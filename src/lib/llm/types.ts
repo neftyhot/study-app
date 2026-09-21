@@ -30,10 +30,52 @@ export type StructuredResult<T> = {
   usage?: { inputTokens?: number; outputTokens?: number };
 };
 
+/**
+ * An image handed to a model.
+ *
+ * Base64 rather than a path or a URL: the app is offline, so there is nowhere
+ * to link to, and the provider is the only thing that ever sees the bytes.
+ */
+export type ChatImage = {
+  mimeType: string;
+  /** Base64, with no `data:` prefix. */
+  data: string;
+};
+
+export type ChatTurn = {
+  role: "user" | "model";
+  text: string;
+  images?: ChatImage[];
+};
+
+/**
+ * A conversation, answered under a schema like everything else.
+ *
+ * The tutor talks in prose, but the response is still a schema'd object with
+ * the prose inside a field (ARCHITECTURE principle #2). That is not a
+ * formality: it means a reply can carry follow-up suggestions and extracted
+ * cards in the same round trip, and it means a malformed response is caught
+ * here rather than halfway down a rendering pipeline.
+ */
+export type ChatRequest = {
+  system: string;
+  turns: ChatTurn[];
+  schema: JsonSchema;
+  temperature?: number;
+  maxOutputTokens?: number;
+};
+
 export interface LlmProvider {
   readonly name: string;
   readonly model: string;
+  /**
+   * Whether this provider can be shown a picture. A text-only model must say
+   * so rather than silently ignoring the diagram it was asked about.
+   */
+  readonly vision?: boolean;
   generateStructured<T>(request: StructuredRequest): Promise<StructuredResult<T>>;
+  /** Multi-turn conversation. Absent on a provider that cannot hold one. */
+  generateChat?<T>(request: ChatRequest): Promise<StructuredResult<T>>;
 }
 
 export class LlmError extends Error {

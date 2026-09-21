@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MessageCircleQuestion } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { GeneratePanel } from "@/components/generate/generate-panel";
+import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { ExamSettings } from "@/components/manage/exam-settings";
 import { db } from "@/db";
 import { listDrills } from "@/lib/diagrams";
@@ -134,6 +136,15 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
             </Link>
           </Button>
         ) : null}
+        <TutorPanel
+          examId={examId}
+          trigger={
+            <Button variant="outline">
+              <MessageCircleQuestion className="size-4" />
+              Ask the tutor
+            </Button>
+          }
+        />
         {stats.objectives > 0 ? (
           <Button asChild variant="outline">
             <Link href={`/exams/${examId}/coverage`}>Coverage matrix</Link>

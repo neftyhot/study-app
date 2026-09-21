@@ -12,7 +12,12 @@
  * would cost more than the request.
  */
 import type { JsonSchema } from "./types";
-import { LlmError, type LlmProvider, type StructuredRequest } from "./types";
+import {
+  LlmError,
+  type ChatRequest,
+  type LlmProvider,
+  type StructuredRequest,
+} from "./types";
 
 /** Context window. Generous enough for a slide batch, small enough to load. */
 const CONTEXT_SIZE = 8192;
@@ -96,6 +101,68 @@ export function createLocalProvider(options: {
   return {
     name: "local",
     model: options.modelName ?? "local model",
+    // The catalog is text-only GGUF models. Claiming otherwise would mean
+    // answering questions about a diagram the model never saw.
+    vision: false,
+
+    async generateChat<T>(request: ChatRequest) {
+      if (request.turns.some((turn) => turn.images?.length)) {
+        throw new LlmError(
+          "The offline model reads text, not pictures. Switch to Gemini, Claude or OpenAI in Settings to ask about a diagram.",
+        );
+      }
+
+      try {
+        const { llama, model } = await load(options.modelPath);
+        const { LlamaChatSession, LlamaJsonSchemaGrammar } = await importLlama();
+
+        const grammar = new LlamaJsonSchemaGrammar(
+          llama,
+          toGrammarSchema(request.schema) as never,
+        );
+
+        const context = await model.createContext({
+          contextSize: Math.min(CONTEXT_SIZE, model.trainContextSize),
+        });
+
+        try {
+          const session = new LlamaChatSession({
+            contextSequence: context.getSequence(),
+            systemPrompt: request.system,
+          });
+
+          // Earlier turns are replayed as context rather than as chat history:
+          // the session's own history format varies by model template, and a
+          // transcript in the prompt is the one thing every model understands.
+          const transcript = request.turns
+            .slice(0, -1)
+            .map((turn) => `${turn.role === "user" ? "Student" : "Tutor"}: ${turn.text}`)
+            .join("\n\n");
+          const last = request.turns.at(-1)?.text ?? "";
+
+          const answer = await session.prompt(
+            transcript ? `${transcript}\n\nStudent: ${last}` : last,
+            {
+              grammar,
+              temperature: request.temperature ?? 0.4,
+              maxTokens: request.maxOutputTokens,
+            },
+          );
+
+          return { data: grammar.parse(answer) as T };
+        } finally {
+          await context.dispose();
+        }
+      } catch (error) {
+        if (error instanceof LlmError) throw error;
+        throw new LlmError(
+          error instanceof Error
+            ? `Local model failed: ${error.message}`
+            : String(error),
+          error,
+        );
+      }
+    },
 
     async generateStructured<T>(request: StructuredRequest) {
       try {

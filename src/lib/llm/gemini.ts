@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 
 import {
   LlmError,
+  type ChatRequest,
   type LlmProvider,
   type StructuredRequest,
   type StructuredResult,
@@ -26,6 +27,58 @@ export function createGeminiProvider(options?: {
   return {
     name: "gemini",
     model,
+    vision: true,
+
+    async generateChat<T>(request: ChatRequest): Promise<StructuredResult<T>> {
+      let response;
+      try {
+        response = await client.models.generateContent({
+          model,
+          contents: request.turns.map((turn) => ({
+            role: turn.role,
+            parts: [
+              ...(turn.images ?? []).map((image) => ({
+                inlineData: { mimeType: image.mimeType, data: image.data },
+              })),
+              { text: turn.text },
+            ],
+          })),
+          config: {
+            systemInstruction: request.system,
+            responseMimeType: "application/json",
+            responseJsonSchema: request.schema,
+            temperature: request.temperature ?? 0.4,
+            maxOutputTokens: request.maxOutputTokens,
+          },
+        });
+      } catch (error) {
+        throw new LlmError(`Gemini request failed: ${describe(error)}`, error);
+      }
+
+      const text = response.text;
+      if (!text) {
+        throw new LlmError(
+          `Gemini returned no content (finishReason: ${
+            response.candidates?.[0]?.finishReason ?? "unknown"
+          }).`,
+        );
+      }
+
+      try {
+        return {
+          data: JSON.parse(text) as T,
+          usage: {
+            inputTokens: response.usageMetadata?.promptTokenCount,
+            outputTokens: response.usageMetadata?.candidatesTokenCount,
+          },
+        };
+      } catch (error) {
+        throw new LlmError(
+          `Gemini returned malformed JSON despite a response schema: ${describe(error)}`,
+          error,
+        );
+      }
+    },
 
     async generateStructured<T>(
       request: StructuredRequest,

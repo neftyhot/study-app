@@ -4,6 +4,7 @@ import { FileText, Presentation, TriangleAlert } from "lucide-react";
 
 import { CreateDrillDialog } from "@/components/diagrams/create-drill-dialog";
 import { UploadPanel } from "@/components/ingest/upload-panel";
+import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { SourceFileActions } from "@/components/manage/source-file-actions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -196,6 +197,11 @@ export default async function SourcesPage(
 
                           {DRILLABLE.has(file.fileType) ? (
                             <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+                              <TutorPanel
+                                examId={examId}
+                                slideId={slide.id}
+                                slideLabel={`${UNIT_NOUN_SINGULAR[file.fileType] ?? "Section"} ${slide.index} of ${file.filename}`}
+                              />
                               <CreateDrillDialog
                                 examId={examId}
                                 slideId={slide.id}
