@@ -65,3 +65,4 @@ revocations.json
 
 # License Authority build output (admin tooling, never distributed)
 dist-admin/
+!electron/license/license-public-key.pem
