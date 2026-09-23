@@ -19,8 +19,14 @@ import {
   paperQuestions,
   timeRemaining,
 } from "@/lib/exam/session";
-import { getExam, listTopics } from "@/lib/queries";
-import { getExamStats } from "@/lib/queries";
+import { OWN_CARDS } from "@/lib/exam/paper";
+import type { SourceOption } from "@/lib/generate/selection";
+import {
+  getExam,
+  getExamStats,
+  listAnswerSources,
+  listTopicsBySource,
+} from "@/lib/queries";
 
 const ERROR_LABELS: Record<string, string> = {
   directionality: "direction reversed",
@@ -36,10 +42,38 @@ export default async function PracticePage(
   const exam = await getExam(examId);
   if (!exam) notFound();
 
-  const [topics, stats] = await Promise.all([
-    listTopics(examId),
+  const [files, topicRows, stats] = await Promise.all([
+    listAnswerSources(examId),
+    listTopicsBySource(examId),
     getExamStats(examId),
   ]);
+
+  // Topics sit under the file their cards came from; cards the student wrote
+  // themselves come from no file, so they get an entry of their own.
+  const topics: Record<string, { topic: string; cards: number }[]> = {};
+  for (const row of topicRows) {
+    const key = row.fileId ?? OWN_CARDS;
+    (topics[key] ??= []).push({ topic: row.topic, cards: row.cards });
+  }
+  for (const list of Object.values(topics)) {
+    list.sort((a, b) => b.cards - a.cards || a.topic.localeCompare(b.topic));
+  }
+
+  const sources: SourceOption[] = [
+    ...files.filter((file) => topics[file.id]),
+    ...(topics[OWN_CARDS]
+      ? [
+          {
+            id: OWN_CARDS,
+            filename: "Cards you wrote",
+            fileType: "manual",
+            units: 0,
+            firstIndex: 0,
+            lastIndex: 0,
+          },
+        ]
+      : []),
+  ];
 
   const open = activePaper(db, examId);
   const latest = latestPaper(db, examId);
@@ -71,6 +105,7 @@ export default async function PracticePage(
         // the timer all start from that paper rather than the last one.
         key={open?.id ?? "setup"}
         examId={examId}
+        sources={sources}
         topics={topics}
         cardCount={stats.flashcards}
         paper={

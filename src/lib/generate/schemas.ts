@@ -121,7 +121,7 @@ export const GENERATED_CARD_SCHEMA: JsonSchema = {
           topic: {
             type: "string",
             description:
-              "The concept this card belongs to, e.g. 'ADH' or 'Glycolysis'.",
+              "The broad section of the material this card belongs to, e.g. 'Posterior pituitary' or 'Olfactory system' — not the single fact or term it tests. Cards from the same section share one topic.",
           },
           facet: {
             type: "string",

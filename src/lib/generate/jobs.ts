@@ -16,6 +16,8 @@ import type { Db } from "@/db/client";
 import { generationJobs, type GenerationJob } from "@/db/schema";
 import type { LlmProvider } from "@/lib/llm";
 
+import { regroupTopics } from "@/lib/topics";
+
 import { generateCardsForExam, type GenerateOptions } from "./index";
 
 export type JobMode = "append" | "replace" | "separate";
@@ -94,6 +96,8 @@ function touch(db: Db, jobId: string, patch: Partial<GenerationJob>) {
 export type StartOptions = GenerateOptions & {
   mode?: JobMode;
   targetExamId?: string;
+  /** Fold each file's topics into a few broad ones afterwards. Default on. */
+  regroupTopics?: boolean;
 };
 
 /**
@@ -163,6 +167,13 @@ export function startGenerationJob(
           rejections: summary.rejectionViews,
         },
       });
+
+      // Batches name topics independently, so a run leaves each file with
+      // more, narrower topics than anyone would choose from. Folded after the
+      // job is marked done: it is tidying, and must never hold up the cards.
+      if (summary.cardsCreated > 0 && options.regroupTopics !== false) {
+        void regroupTopics(db, llm, targetExamId).catch(() => undefined);
+      }
     })
     .catch((error: unknown) => {
       touch(db, job.id, {

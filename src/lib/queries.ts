@@ -289,6 +289,31 @@ export async function listTopics(examId: string) {
     .filter((topic): topic is string => Boolean(topic));
 }
 
+/**
+ * Each file's broad topics and card counts, for choosing what a practice paper
+ * covers. Cards the student wrote themselves, which cite no file, come back
+ * under `fileId: null`.
+ */
+export async function listTopicsBySource(examId: string) {
+  const rows = await db
+    .select({
+      fileId: sourceSlides.sourceFileId,
+      topic: flashcards.topic,
+      cards: count(flashcards.id),
+    })
+    .from(flashcards)
+    .leftJoin(sourceSlides, eq(sourceSlides.id, flashcards.sourceSlideId))
+    .where(and(eq(flashcards.examId, examId), eq(flashcards.excluded, false)))
+    .groupBy(sourceSlides.sourceFileId, flashcards.topic)
+    .orderBy(flashcards.topic);
+
+  return rows.map((row) => ({
+    fileId: row.fileId,
+    topic: row.topic ?? "Untitled",
+    cards: row.cards,
+  }));
+}
+
 /** Cards whose review is due today or overdue (PRD §6). */
 export async function countDueCards(examId: string, today = todayIso()) {
   const [row] = await db

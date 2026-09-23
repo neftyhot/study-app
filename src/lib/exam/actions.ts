@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { getTypedGrader } from "@/lib/grade";
 import { getProvider } from "@/lib/llm";
+import { regroupTopics } from "@/lib/topics";
 
 import {
   abandonPaper,
@@ -21,6 +22,9 @@ import { rewriteQuestions } from "./rewrite";
 export type StartRequest = {
   questionCount: number;
   durationMinutes: number | null;
+  /** File ids (or "own"); empty means every source. */
+  sources: string[];
+  ranges: Record<string, { from: number; to: number }>;
   topics: string[];
   rephrase: boolean;
 };
@@ -33,13 +37,25 @@ export type StartRequest = {
  */
 export async function startPaper(examId: string, request: StartRequest) {
   const cards = loadPaperCards(db, examId);
+  const scope = {
+    sources: request.sources,
+    ranges: request.ranges,
+    topics: request.topics,
+  };
+  // One seed for both picks: the cards reworded here must be the cards the
+  // paper is then built from, or the rewrites land on questions not asked.
+  const seed = Math.floor(Math.random() * 2 ** 31);
   const selected = selectCards(cards, {
     questionCount: request.questionCount,
-    topics: request.topics,
+    ...scope,
+    seed,
   });
 
   if (selected.length === 0) {
-    return { ok: false as const, error: "No cards match those topics." };
+    return {
+      ok: false as const,
+      error: "No cards come from those sources and pages. Widen the range or pick another file.",
+    };
   }
 
   let rephrased: Map<string, string> | undefined;
@@ -58,7 +74,8 @@ export async function startPaper(examId: string, request: StartRequest) {
 
   const paper = createPaper(db, examId, {
     questionCount: request.questionCount,
-    topics: request.topics,
+    ...scope,
+    seed,
     durationMinutes: request.durationMinutes,
     rephrased,
   });
@@ -117,4 +134,21 @@ export async function loadDiagnostic(paperId: string) {
     missedPoints: row.missedPoints,
     source: row.source,
   }));
+}
+
+/**
+ * Folds each file's narrow topics into a few broad ones (see `lib/topics`).
+ * Force regroups even files that already look broad enough.
+ */
+export async function regroupTopicsAction(examId: string, force = false) {
+  try {
+    const result = await regroupTopics(db, getProvider(), examId, { force });
+    revalidatePath(`/exams/${examId}`, "layout");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Could not regroup topics.",
+    };
+  }
 }

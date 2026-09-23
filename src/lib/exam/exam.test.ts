@@ -35,6 +35,7 @@ import {
   selectCards,
   submitPaper,
   timeRemaining,
+  OWN_CARDS,
   type PaperCard,
 } from "./session";
 
@@ -54,6 +55,8 @@ function paperCard(overrides: Partial<PaperCard> = {}): PaperCard {
     cardType: "atomic",
     state: null,
     excluded: false,
+    sourceFileId: null,
+    slideIndex: null,
     ...overrides,
   };
 }
@@ -124,6 +127,36 @@ describe("choosing what to ask", () => {
 
     const picked = selectCards(cards, { questionCount: 8, topics: ["RAAS"] });
     expect(picked.every((card) => card.topic === "RAAS")).toBe(true);
+  });
+
+  it("keeps to the chosen files and page ranges", () => {
+    const cards = [
+      ...Array.from({ length: 10 }, (_, i) =>
+        paperCard({ sourceFileId: "olfaction", slideIndex: i + 1 }),
+      ),
+      ...Array.from({ length: 10 }, (_, i) =>
+        paperCard({ sourceFileId: "vision", slideIndex: i + 1 }),
+      ),
+      ...Array.from({ length: 5 }, () => paperCard()),
+    ];
+
+    const picked = selectCards(cards, {
+      questionCount: 20,
+      sources: ["olfaction"],
+      ranges: { olfaction: { from: 3, to: 6 } },
+    });
+    expect(picked).toHaveLength(4);
+    expect(
+      picked.every(
+        (card) =>
+          card.sourceFileId === "olfaction" &&
+          card.slideIndex! >= 3 &&
+          card.slideIndex! <= 6,
+      ),
+    ).toBe(true);
+
+    const own = selectCards(cards, { questionCount: 20, sources: [OWN_CARDS] });
+    expect(own).toHaveLength(5);
   });
 
   it("never asks about excluded cards", () => {

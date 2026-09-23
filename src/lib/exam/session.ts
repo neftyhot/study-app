@@ -30,6 +30,7 @@ import {
   interleave,
   selectCards,
   type PaperCard,
+  type PaperScope,
 } from "./paper";
 
 export * from "./paper";
@@ -47,10 +48,13 @@ export function loadPaperCards(db: Db, examId: string): PaperCard[] {
       essentialPoints: cardRubrics.essentialPoints,
       misconceptions: cardRubrics.commonMisconceptions,
       state: studyProgress.state,
+      sourceFileId: sourceSlides.sourceFileId,
+      slideIndex: sourceSlides.index,
     })
     .from(flashcards)
     .leftJoin(cardRubrics, eq(cardRubrics.flashcardId, flashcards.id))
     .leftJoin(studyProgress, eq(studyProgress.flashcardId, flashcards.id))
+    .leftJoin(sourceSlides, eq(sourceSlides.id, flashcards.sourceSlideId))
     .where(eq(flashcards.examId, examId))
     .all()
     .map((row) => ({
@@ -60,9 +64,8 @@ export function loadPaperCards(db: Db, examId: string): PaperCard[] {
     }));
 }
 
-export type PaperRequest = {
+export type PaperRequest = PaperScope & {
   questionCount?: number;
-  topics?: string[];
   durationMinutes?: number | null;
   typedShare?: number;
   seed?: number;
@@ -78,6 +81,8 @@ export function createPaper(
   const cards = loadPaperCards(db, examId);
   const selected = selectCards(cards, {
     questionCount: request.questionCount ?? DEFAULT_QUESTION_COUNT,
+    sources: request.sources,
+    ranges: request.ranges,
     topics: request.topics,
     seed: request.seed,
   });

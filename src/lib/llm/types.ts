@@ -32,7 +32,8 @@ export type UsageFeature =
   | "search"
   | "exam_rewrite"
   | "tutor"
-  | "tutor_extract";
+  | "tutor_extract"
+  | "topics";
 
 export type StructuredRequest = {
   feature?: UsageFeature;

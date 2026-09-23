@@ -149,7 +149,14 @@ const PROVENANCE_AND_RUBRICS = `PROVENANCE (non-negotiable)
   do not fill the gap from your own knowledge. Make no card instead.
 
 Write questions a student can answer from memory, not questions about the
-slides. Never write "According to slide 7, ...".`;
+slides. Never write "According to slide 7, ...".
+
+TOPICS
+- topic is the broad section a card sits in — the heading a lecturer would put
+  on a contents slide ("Olfactory system", "Thyroid gland"), never the single
+  term the card asks about ("Olfactory bulb", "TSH").
+- Every card from the same section uses the same topic, spelled the same way.
+  A batch of slides normally needs one to three topics, not one per card.`;
 
 /** The preset whose prose fits a custom ratio most closely. */
 export function nearestPreset(ratio: number): Exclude<DensityMode, "custom"> {

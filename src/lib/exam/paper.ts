@@ -25,12 +25,44 @@ export type PaperCard = {
   /** Progress state, used to favour material that is not yet solid. */
   state: string | null;
   excluded: boolean;
+  /** The file and page the card cites; null for a card the student wrote. */
+  sourceFileId: string | null;
+  slideIndex: number | null;
 };
 
-export type PaperOptions = {
-  questionCount: number;
-  /** Empty means the whole deck. */
+/** Stands in for a file id: the cards a student wrote themselves. */
+export const OWN_CARDS = "own";
+
+/**
+ * What a paper is drawn from — the same choice generation offers: which files,
+ * and which pages of each.
+ */
+export type PaperScope = {
+  /** File ids, or `OWN_CARDS`. Empty or missing means the whole deck. */
+  sources?: string[];
+  /** Page ranges by file id; a file with no range is taken whole. */
+  ranges?: Record<string, { from: number; to: number }>;
+  /** Broad topics within those files. Empty means all of them. */
   topics?: string[];
+};
+
+export function inScope(card: PaperCard, scope: PaperScope): boolean {
+  const sources = scope.sources ?? [];
+  const topics = scope.topics ?? [];
+  const file = card.sourceFileId ?? OWN_CARDS;
+
+  if (sources.length > 0 && !sources.includes(file)) return false;
+
+  const range = card.sourceFileId ? scope.ranges?.[card.sourceFileId] : undefined;
+  if (range && card.slideIndex !== null) {
+    if (card.slideIndex < range.from || card.slideIndex > range.to) return false;
+  }
+
+  return topics.length === 0 || topics.includes(card.topic ?? "");
+}
+
+export type PaperOptions = PaperScope & {
+  questionCount: number;
   /** Share of questions that should be typed rather than multiple choice. */
   typedShare?: number;
   seed?: number;
@@ -50,11 +82,7 @@ export function selectCards(
   cards: PaperCard[],
   options: PaperOptions,
 ): PaperCard[] {
-  const topics = options.topics ?? [];
-  const pool = cards.filter(
-    (card) =>
-      !card.excluded && (topics.length === 0 || topics.includes(card.topic ?? "")),
-  );
+  const pool = cards.filter((card) => !card.excluded && inScope(card, options));
 
   if (pool.length === 0) return [];
 

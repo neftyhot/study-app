@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Clock, FileText, Loader2, Send } from "lucide-react";
+import { Clock, FileText, Layers, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 
+import { SourceRangePicker } from "@/components/generate/source-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,9 +30,21 @@ import {
   abandon,
   answerQuestion,
   loadQuestions,
+  regroupTopicsAction,
   startPaper,
   submit,
 } from "@/lib/exam/actions";
+import {
+  defaultChoices,
+  type FileChoice,
+  type SourceOption,
+} from "@/lib/generate/selection";
+
+/** A file's broad topics, as the practice setup lists them. */
+export type SourceTopics = Record<string, { topic: string; cards: number }[]>;
+
+/** Past this many topics under one file, the list is too fine to choose from. */
+const NARROW_TOPICS = 8;
 
 export type Question = {
   id: string;
@@ -60,13 +73,17 @@ export type PaperView = {
  */
 export function PracticeRunner({
   examId,
+  sources,
   topics,
   cardCount,
   paper,
   initialQuestions,
 }: {
   examId: string;
-  topics: string[];
+  /** Files with cards behind them, plus "your own cards" when there are any. */
+  sources: SourceOption[];
+  /** Broad topics by file id. */
+  topics: SourceTopics;
   cardCount: number;
   paper: PaperView | null;
   initialQuestions: Question[];
@@ -83,7 +100,14 @@ export function PracticeRunner({
   const [count, setCount] = useState("20");
   const [duration, setDuration] = useState("none");
   const [rephrase, setRephrase] = useState(true);
+  const [choices, setChoices] = useState<Record<string, FileChoice>>(() =>
+    defaultChoices(sources),
+  );
   const [chosen, setChosen] = useState<string[]>([]);
+  const [regrouping, setRegrouping] = useState(false);
+  const narrow = sources.some(
+    (source) => (topics[source.id]?.length ?? 0) > NARROW_TOPICS,
+  );
 
   // Counted over this paper's questions only. Counting every stored answer
   // carried the last paper's answers into the next one: 21 of 20, 22 of 20.
@@ -113,10 +137,37 @@ export function PracticeRunner({
 
   async function handleStart() {
     setBusy(true);
+    const included = sources.filter((source) => choices[source.id]?.included);
+    if (included.length === 0) {
+      toast.error("Pick at least one source.");
+      setBusy(false);
+      return;
+    }
+
+    // Everything included and whole sends no filter at all, so a card added
+    // since the page loaded is still fair game.
+    const everything =
+      included.length === sources.length &&
+      included.every((source) => choices[source.id].whole);
+    const ranges: Record<string, { from: number; to: number }> = {};
+    for (const source of included) {
+      const choice = choices[source.id];
+      if (!choice.whole) ranges[source.id] = { from: choice.from, to: choice.to };
+    }
+    // A topic only narrows the files it belongs to; one left over from a file
+    // since unticked would otherwise empty the paper.
+    const topicsInPlay = chosen.filter((topic) =>
+      included.some((source) =>
+        topics[source.id]?.some((entry) => entry.topic === topic),
+      ),
+    );
+
     const result = await startPaper(examId, {
       questionCount: Number(count),
       durationMinutes: duration === "none" ? null : Number(duration),
-      topics: chosen,
+      sources: everything ? [] : included.map((source) => source.id),
+      ranges,
+      topics: topicsInPlay,
       rephrase,
     });
     setBusy(false);
@@ -194,31 +245,90 @@ export function PracticeRunner({
             </div>
           </div>
 
-          {topics.length > 1 ? (
-            <div className="space-y-2">
-              <Label className="text-xs">
-                Topics {chosen.length === 0 ? "(all)" : `(${chosen.length} chosen)`}
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {topics.map((topic) => (
-                  <Button
-                    key={topic}
-                    type="button"
-                    size="sm"
-                    variant={chosen.includes(topic) ? "default" : "outline"}
-                    className="h-7 text-xs"
-                    onClick={() =>
-                      setChosen((previous) =>
-                        previous.includes(topic)
-                          ? previous.filter((item) => item !== topic)
-                          : [...previous, topic],
-                      )
-                    }
-                  >
-                    {topic}
-                  </Button>
-                ))}
-              </div>
+          {sources.length > 0 ? (
+            <SourceRangePicker
+              sources={sources}
+              choices={choices}
+              onChange={setChoices}
+              disabled={busy}
+              title="Sources and pages"
+              alwaysCheckable
+            >
+              {(source) => {
+                const list = topics[source.id] ?? [];
+                if (list.length < 2) return null;
+
+                return (
+                  <div className="space-y-1.5">
+                    <p className="text-muted-foreground text-xs">
+                      Topics{" "}
+                      {list.some((entry) => chosen.includes(entry.topic))
+                        ? ""
+                        : "(all)"}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {list.map((entry) => (
+                        <Button
+                          key={entry.topic}
+                          type="button"
+                          size="sm"
+                          variant={
+                            chosen.includes(entry.topic) ? "default" : "outline"
+                          }
+                          className="h-7 text-xs"
+                          onClick={() =>
+                            setChosen((previous) =>
+                              previous.includes(entry.topic)
+                                ? previous.filter((item) => item !== entry.topic)
+                                : [...previous, entry.topic],
+                            )
+                          }
+                        >
+                          {entry.topic}
+                          <span className="opacity-60 tabular-nums">
+                            {entry.cards}
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }}
+            </SourceRangePicker>
+          ) : null}
+
+          {narrow ? (
+            <div className="bg-muted/50 flex flex-wrap items-center justify-between gap-2 rounded-md p-3 text-sm">
+              <p className="text-muted-foreground">
+                Some files have lots of one-card topics. Merge them into a few
+                broad topics per file?
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={regrouping || busy}
+                onClick={async () => {
+                  setRegrouping(true);
+                  const result = await regroupTopicsAction(examId);
+                  setRegrouping(false);
+                  if (!result.ok) {
+                    toast.error(result.error);
+                    return;
+                  }
+                  setChosen([]);
+                  toast.success(
+                    `${result.topicsBefore} topics merged into ${result.topicsAfter}`,
+                  );
+                  router.refresh();
+                }}
+              >
+                {regrouping ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Layers className="size-3.5" />
+                )}
+                {regrouping ? "Merging…" : "Merge topics"}
+              </Button>
             </div>
           ) : null}
 
