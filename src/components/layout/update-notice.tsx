@@ -1,14 +1,23 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Download, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
+import "@/main/auth/ipc";
 import { Button } from "@/components/ui/button";
 import { checkForUpdateAction, type UpdateInfo } from "@/lib/app-actions";
 
-/** A header chip when GitHub has a newer release than this build. */
+/**
+ * A header button when GitHub has a newer release than this build.
+ *
+ * In the desktop app it installs the update in place and restarts — no DMG
+ * to open, and nothing for Gatekeeper to quarantine (electron/updater.cjs).
+ * Anywhere else it links to the release.
+ */
 export function UpdateNotice() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
     void checkForUpdateAction().then(setUpdate).catch(() => undefined);
@@ -16,14 +25,36 @@ export function UpdateNotice() {
 
   if (!update) return null;
 
+  const installer = typeof window === "undefined" ? undefined : window.studyApp?.update;
+
+  if (!installer) {
+    return (
+      <Button asChild size="sm" variant="secondary" className="gap-1">
+        <a href={update.url} target="_blank" rel="noreferrer">
+          <Download className="size-3.5" />
+          <span className="hidden sm:inline">Update to</span> v{update.version}
+        </a>
+      </Button>
+    );
+  }
+
+  async function install() {
+    if (!installer) return;
+    setInstalling(true);
+    const id = toast.loading(`Downloading v${update!.version}…`);
+    const result = await installer.install();
+    if (result.ok) {
+      toast.success(`Updated to v${result.version} — restarting…`, { id });
+    } else {
+      toast.error(result.error, { id });
+      setInstalling(false);
+    }
+  }
+
   return (
-    <Button asChild size="sm" variant="secondary" className="gap-1">
-      {/* Opens in the system browser (electron/main.cjs); the download is a
-          new DMG — drag it over the old app, and your decks stay. */}
-      <a href={update.download ?? update.url} target="_blank" rel="noreferrer">
-        <Download className="size-3.5" />
-        <span className="hidden sm:inline">Update to</span> v{update.version}
-      </a>
+    <Button size="sm" variant="secondary" className="gap-1" disabled={installing} onClick={() => void install()}>
+      {installing ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+      <span className="hidden sm:inline">{installing ? "Updating to" : "Update to"}</span> v{update.version}
     </Button>
   );
 }

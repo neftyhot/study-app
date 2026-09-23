@@ -20,6 +20,7 @@ files:
   - tools/license-manager/preload.js
   - tools/license-manager/index.html
   - tools/license-manager/handlers.js
+  - tools/license-manager/insights.js
   - package.json
   - "!**/node_modules/**"
 

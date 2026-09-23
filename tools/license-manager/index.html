@@ -67,16 +67,39 @@
       .paths { color: var(--muted); font-size: 11px; }
       .paths code { color: var(--fg); overflow-wrap: anywhere; }
       .actions { display: flex; gap: 6px; justify-content: flex-end; }
+      nav.tabs { display: flex; gap: 4px; margin-top: 12px; -webkit-app-region: no-drag; }
+      nav.tabs button { border-radius: 999px; }
+      nav.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+      [data-tab] { display: grid; gap: 20px; }
+      [data-tab][hidden] { display: none; }
+      .tiles { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+      .tile { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+      .tile .k { color: var(--muted); font-size: 11px; }
+      .tile .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+      .tile .h { color: var(--muted); font-size: 11px; }
+      .bar { height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; min-width: 80px; }
+      .bar > span { display: block; height: 100%; background: var(--good); }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      .suggestion { border-bottom: 1px solid var(--border); padding: 12px 16px; }
+      .suggestion:last-child { border-bottom: none; }
+      .suggestion p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
     </style>
   </head>
   <body>
     <header>
       <h1>Study Suite — License Authority</h1>
       <p>Signs offline licences for the student app. Runs only on this machine.</p>
+      <nav class="tabs" role="tablist">
+        <button type="button" role="tab" data-show="licences" aria-selected="true">Licences</button>
+        <button type="button" role="tab" data-show="stats" aria-selected="false">Dev stats</button>
+        <button type="button" role="tab" data-show="suggestions" aria-selected="false">Suggestions</button>
+      </nav>
     </header>
 
     <main>
       <div id="alert" class="alert" role="alert" hidden></div>
+
+      <div data-tab="licences">
 
       <section class="panel">
         <h2>Mint a key</h2>
@@ -153,6 +176,72 @@
           </div>
         </div>
       </section>
+      </div>
+
+      <div data-tab="stats" hidden>
+        <section class="panel">
+          <h2>Everyone, combined</h2>
+          <div class="body">
+            <div class="row" style="margin-bottom: 12px">
+              <span class="paths">From installs with “Share usage statistics” on. Each sends its totals every few hours.</span>
+              <span class="spacer"></span>
+              <span id="stats-status" class="paths"></span>
+              <button id="stats-refresh" type="button">Refresh</button>
+            </div>
+            <div id="stats-tiles" class="tiles"></div>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Versions</h2>
+          <div class="body" style="padding: 0"><table id="versions"></table></div>
+        </section>
+        <section class="panel">
+          <h2>Tokens by feature</h2>
+          <div class="body" style="padding: 0"><table id="by-feature"></table></div>
+        </section>
+        <section class="panel">
+          <h2>Tokens by model</h2>
+          <div class="body" style="padding: 0"><table id="by-model"></table></div>
+        </section>
+        <section class="panel">
+          <h2>How calls are paid for</h2>
+          <div class="body" style="padding: 0"><table id="by-auth"></table></div>
+        </section>
+        <section class="panel">
+          <h2>Connection</h2>
+          <div class="body">
+            <div class="grid">
+              <div>
+                <label for="insights-url">Worker URL</label>
+                <input id="insights-url" autocomplete="off" />
+              </div>
+              <div>
+                <label for="insights-token">Admin token</label>
+                <input id="insights-token" type="password" autocomplete="off" placeholder="Saved — paste to replace" />
+              </div>
+            </div>
+            <div class="row" style="margin-top: 12px">
+              <button id="insights-save" type="button">Save</button>
+              <span id="insights-conn" class="paths"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div data-tab="suggestions" hidden>
+        <section class="panel">
+          <h2>Feature suggestions</h2>
+          <div class="body" style="padding: 0">
+            <div class="row" style="padding: 12px 16px; border-bottom: 1px solid var(--border)">
+              <span id="fb-status" class="paths"></span>
+              <span class="spacer"></span>
+              <button id="fb-refresh" type="button">Refresh</button>
+              <button id="fb-export" type="button" class="primary">Save as text file…</button>
+            </div>
+            <div id="fb-list"></div>
+          </div>
+        </section>
+      </div>
     </main>
 
     <script>
@@ -313,6 +402,146 @@
       $("choose").addEventListener("click", async () => {
         clearAlert();
         render(await window.authority.chooseFolder());
+      });
+
+      /* ------------------------------------------------ Tabs and insights */
+
+      const tabs = document.querySelectorAll("nav.tabs button");
+      const loaded = { stats: false, suggestions: false };
+      tabs.forEach((tab) =>
+        tab.addEventListener("click", () => {
+          const name = tab.dataset.show;
+          tabs.forEach((t) => t.setAttribute("aria-selected", String(t === tab)));
+          document.querySelectorAll("[data-tab]").forEach((panel) => {
+            panel.hidden = panel.dataset.tab !== name;
+          });
+          clearAlert();
+          if (name === "stats" && !loaded.stats) loadStats();
+          if (name === "suggestions" && !loaded.suggestions) loadFeedback();
+        }),
+      );
+
+      const fmt = (n) => Math.round(n).toLocaleString();
+      const money = (n) => `$${n.toFixed(n < 10 ? 4 : 2)}`;
+      function hours(seconds) {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.round((seconds % 3600) / 60);
+        return h > 0 ? `${h.toLocaleString()}h ${m}m` : `${m}m`;
+      }
+
+      function tile(label, value, hint = "") {
+        return `<div class="tile"><div class="k">${escapeHtml(label)}</div><div class="v">${escapeHtml(value)}</div>${
+          hint ? `<div class="h">${escapeHtml(hint)}</div>` : ""
+        }</div>`;
+      }
+
+      function table(id, head, rows) {
+        $(id).innerHTML = rows.length
+          ? `<tr>${head.map((h, i) => `<th${i ? ' style="text-align:right"' : ""}>${h}</th>`).join("")}</tr>` +
+            rows.map((r) => `<tr>${r.map((c, i) => `<td${i ? ' class="num"' : ""}>${c}</td>`).join("")}</tr>`).join("")
+          : `<tr><td class="empty">Nothing yet.</td></tr>`;
+      }
+
+      async function loadStats() {
+        $("stats-status").textContent = "Loading…";
+        const result = await window.authority.insights.stats();
+        $("stats-status").textContent = "";
+        if (!result.ok) return fail(result.error);
+        loaded.stats = true;
+        const s = result.data;
+        const t = s.totals;
+
+        $("stats-tiles").innerHTML = [
+          tile("Installs reporting", fmt(s.installs), `${fmt(s.new7)} new this week`),
+          tile("Active, 7 days", fmt(s.active7), `${fmt(s.active30)} in 30 days`),
+          tile("Time studying", hours(t.focusedSeconds), "App window in front"),
+          tile("Open in background", hours(t.backgroundSeconds)),
+          tile("Avg. study time", s.installs ? hours(t.focusedSeconds / s.installs) : "—", "Per install"),
+          tile("Model calls", fmt(t.calls)),
+          tile("Input tokens", fmt(t.inputTokens)),
+          tile("Output tokens", fmt(t.outputTokens)),
+          tile("Estimated cost", money(t.costUsd), "At list prices; free-quota calls included"),
+          tile("Cards made", fmt(t.cards), `${fmt(t.decks)} decks · ${fmt(t.subjects)} subjects`),
+          tile("Cards reviewed", fmt(t.reviewed)),
+          tile("Suggestions", fmt(s.suggestions)),
+        ].join("");
+
+        table(
+          "versions",
+          ["Version", "Installs", "Share", ""],
+          s.versions.map((v) => [
+            `v${escapeHtml(v.version)}`,
+            fmt(v.count),
+            `${v.percent}%`,
+            `<div class="bar"><span style="width:${v.percent}%"></span></div>`,
+          ]),
+        );
+        const tokenRows = (list) =>
+          list.map((r) => [escapeHtml(r.name), fmt(r.calls), fmt(r.inputTokens), fmt(r.outputTokens), money(r.costUsd)]);
+        table("by-feature", ["Feature", "Calls", "Input", "Output", "Cost"], tokenRows(s.byFeature));
+        table("by-model", ["Provider · model", "Calls", "Input", "Output", "Cost"], tokenRows(s.byModel));
+        const totalCalls = s.byAuth.reduce((sum, r) => sum + r.calls, 0) || 1;
+        table(
+          "by-auth",
+          ["Paid by", "Calls", "Share"],
+          s.byAuth.map((r) => [escapeHtml(r.name.replace("_", " ")), fmt(r.calls), `${Math.round((r.calls / totalCalls) * 100)}%`]),
+        );
+      }
+
+      async function loadFeedback() {
+        $("fb-status").textContent = "Loading…";
+        const result = await window.authority.insights.feedback();
+        if (!result.ok) {
+          $("fb-status").textContent = "";
+          return fail(result.error);
+        }
+        loaded.suggestions = true;
+        const entries = result.data.slice().reverse();
+        $("fb-status").textContent = `${entries.length} suggestion${entries.length === 1 ? "" : "s"}, newest first`;
+        const list = $("fb-list");
+        list.innerHTML = entries.length ? "" : '<div class="empty">No suggestions yet.</div>';
+        for (const entry of entries) {
+          const item = document.createElement("div");
+          item.className = "suggestion";
+          item.innerHTML = `<div class="row"><span class="paths">${escapeHtml(new Date(entry.receivedAt).toLocaleString())}${
+            entry.version ? ` · v${escapeHtml(entry.version)}` : ""
+          }${entry.contact ? ` · ${escapeHtml(entry.contact)}` : ""}</span><span class="spacer"></span></div><p>${escapeHtml(entry.text)}</p>`;
+          item.querySelector(".row").append(
+            button("Delete", async () => {
+              if (!confirm("Delete this suggestion?")) return;
+              const done = await window.authority.insights.deleteFeedback(entry.key);
+              if (!done.ok) return fail(done.error);
+              loadFeedback();
+            }, "danger"),
+          );
+          list.append(item);
+        }
+      }
+
+      $("stats-refresh").addEventListener("click", () => { clearAlert(); loadStats(); });
+      $("fb-refresh").addEventListener("click", () => { clearAlert(); loadFeedback(); });
+      $("fb-export").addEventListener("click", async () => {
+        clearAlert();
+        const result = await window.authority.insights.exportFeedback();
+        if (!result.ok) return fail(result.error);
+        if (result.data.saved) $("fb-status").textContent = `Saved ${result.data.count} to ${result.data.path}`;
+      });
+
+      window.authority.insights.config().then((result) => {
+        if (!result.ok) return;
+        $("insights-url").value = result.data.url;
+        $("insights-conn").textContent = result.data.hasToken ? "Token saved." : "No token yet.";
+      });
+      $("insights-save").addEventListener("click", async () => {
+        clearAlert();
+        const result = await window.authority.insights.setConfig({
+          url: $("insights-url").value,
+          token: $("insights-token").value,
+        });
+        if (!result.ok) return fail(result.error);
+        $("insights-token").value = "";
+        $("insights-conn").textContent = "Saved.";
+        loaded.stats = loaded.suggestions = false;
       });
 
       window.authority.state().then(render).catch((error) => fail(String(error)));

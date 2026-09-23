@@ -15,6 +15,7 @@ import {
   unloadLocalModel,
 } from "@/lib/llm";
 import { LOCAL_MODELS, recommendedModel } from "@/lib/llm/catalog";
+import { maybeSendReport } from "@/lib/telemetry";
 import {
   allKeyStatuses,
   apiKeyStatus,
@@ -127,6 +128,7 @@ export async function setGradingStrictness(value: string) {
 /** The usage-statistics opt-in; applies from the next model call. */
 export async function setUsageLoggingAction(enabled: boolean) {
   setUsageLogging(enabled, db);
+  if (enabled) void maybeSendReport(db, { force: true });
   revalidatePath("/settings");
   return { ok: true as const };
 }

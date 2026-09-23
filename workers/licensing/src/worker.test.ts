@@ -33,6 +33,15 @@ class MemoryKV implements KVLike {
   async put(key: string, value: string) {
     this.data.set(key, value);
   }
+  async delete(key: string) {
+    this.data.delete(key);
+  }
+  async list({ prefix }: { prefix: string; cursor?: string }) {
+    return {
+      keys: [...this.data.keys()].filter((key) => key.startsWith(prefix)).map((name) => ({ name })),
+      list_complete: true,
+    };
+  }
 }
 
 let kv: MemoryKV;
@@ -240,5 +249,82 @@ describe("feedback", () => {
     await post({ text: "y".repeat(9_000) });
     const stored = [...kv.data.values()].map((value) => JSON.parse(value).text as string);
     expect(stored.some((text) => text.startsWith("y") && text.length === 5000)).toBe(true);
+  });
+});
+
+describe("telemetry and admin", () => {
+  const TOKEN = "admin-token-for-tests-0123456789";
+  const INSTALL = "3f2b8c4e-1111-4222-8333-944455556666";
+
+  function call(path: string, init: RequestInit = {}, token: string | null = TOKEN) {
+    return worker.fetch(
+      new Request(`https://licensing.example${path}`, {
+        ...init,
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      }),
+      { ...env, ADMIN_TOKEN: TOKEN },
+    );
+  }
+
+  function report(overrides: Record<string, unknown> = {}) {
+    return call("/telemetry", {
+      method: "POST",
+      body: JSON.stringify({
+        installId: INSTALL,
+        version: "0.2.0",
+        platform: "darwin-arm64",
+        focusedSeconds: 3600,
+        backgroundSeconds: 600,
+        subjects: 2,
+        decks: 3,
+        cards: 400,
+        reviewed: 120,
+        usage: [
+          { feature: "generate", provider: "gemini", model: "gemini-2.5-flash", authMode: "api_key", calls: 10, inputTokens: 50_000, outputTokens: 20_000, costUsd: 0.12 },
+        ],
+        ...overrides,
+      }),
+    }, null);
+  }
+
+  it("keeps one record per install, replaced by each report", async () => {
+    await report();
+    await report({ focusedSeconds: 7200, version: "0.2.1" });
+    await call("/telemetry", { method: "POST", body: JSON.stringify({ installId: "a1b2c3d4-0000-4000-8000-000000000000", version: "0.2.0" }) }, null);
+
+    const stats = await (await call("/admin/stats")).json();
+    expect(stats.installs).toBe(2);
+    expect(stats.totals.focusedSeconds).toBe(7200);
+    expect(stats.totals.inputTokens).toBe(50_000);
+    expect(stats.versions).toEqual(
+      expect.arrayContaining([
+        { version: "0.2.1", count: 1, percent: 50 },
+        { version: "0.2.0", count: 1, percent: 50 },
+      ]),
+    );
+    expect(stats.byFeature[0]).toMatchObject({ name: "generate", calls: 10 });
+  });
+
+  it("refuses a report without a proper install id", async () => {
+    expect((await report({ installId: "../../etc" })).status).toBe(400);
+  });
+
+  it("keeps the admin routes behind the token", async () => {
+    expect((await call("/admin/stats", {}, null)).status).toBe(401);
+    expect((await call("/admin/stats", {}, "wrong-token-wrong-token-wrong-tok")).status).toBe(401);
+    expect((await call("/admin/feedback", {}, null)).status).toBe(401);
+  });
+
+  it("lists and deletes suggestions", async () => {
+    await worker.fetch(
+      new Request("https://licensing.example/feedback", { method: "POST", body: JSON.stringify({ text: "Add dark mode" }) }),
+      env,
+    );
+    const list = await (await call("/admin/feedback")).json();
+    expect(list).toHaveLength(1);
+    expect(list[0].text).toBe("Add dark mode");
+
+    await call(`/admin/feedback/${encodeURIComponent(list[0].key)}`, { method: "DELETE" });
+    expect(await (await call("/admin/feedback")).json()).toHaveLength(0);
   });
 });

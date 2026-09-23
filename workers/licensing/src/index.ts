@@ -9,9 +9,11 @@
  *                          the signature itself, like any pasted key.
  *   GET  /success          Where the Payment Link redirects after paying:
  *                          shows the key, as a fallback to automatic delivery.
+ *   POST /telemetry, /admin/*  Opted-in usage totals and the developer's
+ *                          view of them and of suggestions (insights.ts).
  *   POST /feedback         A feature suggestion from the app's settings.
- *                          Stored under `feedback:`; `npm run feedback:pull`
- *                          collects them into feedback.txt.
+ *                          Stored under `feedback:`; read in the License
+ *                          Manager's Suggestions tab.
  *
  * The key is minted in exactly the format scripts/license-store.mjs produces
  * and electron/license/verify.cjs accepts: base64 of { payload, signature },
@@ -22,9 +24,13 @@
  * the tests run this same file.
  */
 
+import { handleAdmin, handleTelemetry, type ListResult } from "./insights";
+
 export type KVLike = {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+  list(options: { prefix: string; cursor?: string }): Promise<ListResult>;
 };
 
 export type Env = {
@@ -34,6 +40,8 @@ export type Env = {
   LICENSE_PRIVATE_KEY: string;
   /** When set, only checkouts from this Payment Link (plink_…) mint a key. */
   PAYMENT_LINK_ID?: string;
+  /** Bearer token for the /admin routes; held by the License Manager. */
+  ADMIN_TOKEN?: string;
   LICENSES: KVLike;
 };
 
@@ -66,6 +74,14 @@ const worker = {
         decodeURIComponent(url.pathname.slice("/license/".length)),
         env,
       );
+    }
+
+    if (request.method === "POST" && url.pathname === "/telemetry") {
+      return handleTelemetry(request, env);
+    }
+
+    if (url.pathname.startsWith("/admin/")) {
+      return handleAdmin(request, env, url.pathname);
     }
 
     if (request.method === "POST" && url.pathname === "/feedback") {

@@ -15,4 +15,12 @@ contextBridge.exposeInMainWorld("authority", {
   copy: (text) => ipcRenderer.invoke("copy", text),
   reveal: () => ipcRenderer.invoke("reveal"),
   chooseFolder: () => ipcRenderer.invoke("choose-folder"),
+  insights: {
+    config: () => ipcRenderer.invoke("insights:config"),
+    setConfig: (config) => ipcRenderer.invoke("insights:set-config", config),
+    stats: () => ipcRenderer.invoke("insights:stats"),
+    feedback: () => ipcRenderer.invoke("insights:feedback"),
+    deleteFeedback: (key) => ipcRenderer.invoke("insights:delete-feedback", key),
+    exportFeedback: () => ipcRenderer.invoke("insights:export-feedback"),
+  },
 });

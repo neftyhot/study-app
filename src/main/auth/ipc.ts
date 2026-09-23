@@ -69,9 +69,15 @@ export type LicenseApi = {
   checkPurchase(): Promise<PurchaseCheck>;
 };
 
+/** What the preload puts on `window.studyApp.update` (electron/updater.cjs). */
+export type UpdateApi = {
+  /** Installs GitHub's latest release in place; the app restarts on success. */
+  install(): Promise<{ ok: true; version: string } | { ok: false; error: string }>;
+};
+
 declare global {
   interface Window {
     /** Present only inside the desktop app. */
-    studyApp?: { googleAuth: GoogleAuthApi; license: LicenseApi };
+    studyApp?: { googleAuth: GoogleAuthApi; license: LicenseApi; update?: UpdateApi };
   }
 }

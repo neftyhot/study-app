@@ -43,9 +43,12 @@ export function UsageLoggingToggle({ initial }: { initial: boolean }) {
           Share usage statistics to help improve Study App
         </Label>
         <p className="text-muted-foreground text-xs">
-          Records which features call a model, token counts, and estimated
-          cost. Never your files, cards, questions, or answers. Off unless
-          you turn it on; change it any time in Settings.
+          Sends the developer, every few hours: which features call a model,
+          token counts and estimated cost; time spent in the app; how many
+          subjects, decks and cards you have and have reviewed; and the app
+          version — under a random id, not your name or machine. Never your
+          files, cards, questions, or answers. Off unless you turn it on;
+          change it any time in Settings.
         </p>
       </div>
     </div>

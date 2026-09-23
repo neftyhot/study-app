@@ -91,6 +91,7 @@ app.whenReady().then(async () => {
     isDev,
     root: defaultRoot(),
     electron: { clipboard, dialog, shell },
+    configDir: app.getPath("userData"),
     onRootChange: saveRoot,
   });
 

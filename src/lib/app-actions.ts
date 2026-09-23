@@ -4,10 +4,13 @@ import { db } from "@/db";
 import { APP_VERSION, compareVersions, RELEASES_REPO, serverUrl } from "@/lib/app-info";
 import { readSetting, writeSetting } from "@/lib/settings";
 import { recordTime } from "@/lib/stats";
+import { maybeSendReport } from "@/lib/telemetry";
 
 /** The window reporting how long it has been open, focused or not. */
 export async function recordTimeAction(focused: number, background: number) {
   recordTime(db, focused, background);
+  // Piggybacks on the minute tick; sends only if opted in and 6h have passed.
+  void maybeSendReport(db);
 }
 
 /* --------------------------------------------------------------- Feedback */

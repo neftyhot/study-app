@@ -7,6 +7,8 @@
  */
 const path = require("node:path");
 
+const { registerInsights } = require("./insights.js");
+
 let storePromise = null;
 
 function loadStore(isDev) {
@@ -36,10 +38,11 @@ async function snapshot(isDev) {
 
 /**
  * @param {import("electron").IpcMain} ipcMain
- * @param {{isDev: boolean, root: string, electron: object, onRootChange?: (root: string) => void}} context
+ * @param {{isDev: boolean, root: string, electron: object, configDir?: string, onRootChange?: (root: string) => void}} context
  */
 async function registerHandlers(ipcMain, context) {
   const { isDev, electron } = context;
+  registerInsights(ipcMain, context);
   const api = await loadStore(isDev);
   api.setRoot(context.root);
 

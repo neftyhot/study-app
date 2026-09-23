@@ -28,6 +28,7 @@ const fs = require("node:fs");
 const gate = require("./license/gate.cjs");
 const purchase = require("./license/purchase.cjs");
 const { registerGoogleAuth } = require("./google-auth.cjs");
+const updater = require("./updater.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
@@ -332,6 +333,13 @@ app.whenReady().then(async () => {
     if (!fromApp(event)) return { configured: false, found: false };
     return checkPurchase();
   });
+
+  // Only ever installs GitHub's latest release; the page cannot name a file.
+  ipcMain.handle("update:install", async (event) => {
+    if (!fromApp(event)) return { ok: false, error: "Not allowed." };
+    return updater.installUpdate(app);
+  });
+  updater.cleanUpAfterUpdate(app);
 
   try {
     const license = gate.evaluate(userData);

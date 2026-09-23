@@ -6,6 +6,14 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.2.1",
+    date: "2026-09-23",
+    notes: [
+      "Updates now install from inside the app: click “Update” in the header and it restarts on the new version — no download to open, and no “damaged app” warning.",
+      "Clearer wording on what “Share usage statistics” sends, if you turn it on.",
+    ],
+  },
+  {
     version: "0.2.0",
     date: "2026-09-23",
     notes: [

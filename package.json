@@ -1,6 +1,6 @@
 {
   "name": "study-app",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -28,8 +28,7 @@
     "license-manager:selftest": "electron tools/license-manager/selftest.js",
     "tutor:check": "tsx --env-file=.env.local scripts/tutor-check.ts",
     "generate:bench": "tsx --env-file=.env.local scripts/generate-bench.ts",
-    "coverage:bench": "tsx --env-file=.env.local scripts/coverage-bench.ts",
-    "feedback:pull": "node scripts/pull-feedback.mjs"
+    "coverage:bench": "tsx --env-file=.env.local scripts/coverage-bench.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
