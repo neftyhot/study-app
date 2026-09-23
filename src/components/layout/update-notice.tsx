@@ -15,12 +15,23 @@ import { checkForUpdateAction, type UpdateInfo } from "@/lib/app-actions";
  * to open, and nothing for Gatekeeper to quarantine (electron/updater.cjs).
  * Anywhere else it links to the release.
  */
+const CHECK_EVERY_MS = 60 * 60 * 1000;
+
 export function UpdateNotice() {
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [installing, setInstalling] = useState(false);
 
+  // The header never remounts while the app is open — it can run for days —
+  // so check again every hour and whenever the window comes back to the front.
   useEffect(() => {
-    void checkForUpdateAction().then(setUpdate).catch(() => undefined);
+    const check = () => void checkForUpdateAction().then(setUpdate).catch(() => undefined);
+    check();
+    const timer = setInterval(check, CHECK_EVERY_MS);
+    window.addEventListener("focus", check);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", check);
+    };
   }, []);
 
   if (!update) return null;

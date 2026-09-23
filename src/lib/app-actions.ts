@@ -71,7 +71,9 @@ export async function sendFeedbackAction(text: string, contact: string) {
 /* ---------------------------------------------------------------- Updates */
 
 let cached: { at: number; result: UpdateInfo | null } | null = null;
-const CACHE_MS = 6 * 60 * 60 * 1000;
+// Short enough that an app left open all day still hears about a release
+// the same afternoon; the header asks at most hourly and on focus.
+const CACHE_MS = 30 * 60 * 1000;
 
 export type UpdateInfo = { version: string; url: string; download: string | null };
 
