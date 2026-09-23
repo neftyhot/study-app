@@ -38,6 +38,26 @@ export const GOOGLE_OAUTH_SCOPES = [
   "https://www.googleapis.com/auth/generative-language.retriever",
 ] as const;
 
+/**
+ * The scopes Gemini calls actually need. Google's consent screen lets a
+ * person untick individual permissions, and a sign-in without these looks
+ * connected but fails every generation with ACCESS_TOKEN_SCOPE_INSUFFICIENT.
+ */
+export const GEMINI_SCOPES = [
+  "https://www.googleapis.com/auth/generative-language.peruserquota",
+  "https://www.googleapis.com/auth/generative-language.retriever",
+] as const;
+
+/** Which Gemini scopes a granted-scope string lacks. Unknown (no string) is trusted. */
+export function missingGeminiScopes(granted: string | null | undefined): string[] {
+  if (!granted) return [];
+  const have = new Set(granted.split(/\s+/));
+  return GEMINI_SCOPES.filter((scope) => !have.has(scope));
+}
+
+export const MISSING_SCOPE_MESSAGE =
+  "Google didn't give Study App permission to use Gemini. Sign in again, and on Google's permissions screen tick every box (or \"Select all\") before pressing Continue.";
+
 /** How long the loopback server waits for the student to finish in the browser. */
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -183,6 +203,13 @@ export async function signInWithGoogle(options: {
       "no_refresh_token",
       "Google did not return a refresh token. Try signing in again.",
     );
+  }
+
+  if (missingGeminiScopes(tokens.scope).length > 0) {
+    // A half grant is worse than none: it would look connected and fail
+    // every generation. Hand it back so the next sign-in asks afresh.
+    await revokeToken(tokens.refreshToken, fetchImpl).catch(() => undefined);
+    throw new GoogleOAuthError("missing_scope", MISSING_SCOPE_MESSAGE);
   }
 
   return {

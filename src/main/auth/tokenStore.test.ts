@@ -3,6 +3,7 @@
  * like the app's, with a stand-in for Electron's `safeStorage`.
  */
 import Database from "better-sqlite3";
+import { GOOGLE_OAUTH_SCOPES } from "./googleOAuth";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -281,7 +282,11 @@ describe("the web server's side", () => {
   it("reports who is signed in, and never a token", () => {
     expect(readGoogleSession(db)).toBeNull();
     signIn();
-    expect(readGoogleSession(db)).toEqual({ email: "student@gmail.com" });
+    // The fixture grants only "openid": signed in, but Gemini would refuse.
+    expect(readGoogleSession(db)).toEqual({ email: "student@gmail.com", missingScopes: true });
+
+    signIn({ scope: GOOGLE_OAUTH_SCOPES.join(" ") });
+    expect(readGoogleSession(db)).toEqual({ email: "student@gmail.com", missingScopes: false });
   });
 
   it("asks the main process for a token when it is in the same process", async () => {

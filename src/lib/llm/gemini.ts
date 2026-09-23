@@ -1,3 +1,4 @@
+import { MISSING_SCOPE_MESSAGE } from "@/main/auth/googleOAuth";
 import {
   GoogleGenAI,
   ThinkingLevel,
@@ -287,5 +288,11 @@ export function isModelUnavailable(error: unknown): boolean {
 }
 
 function describe(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  const message = error instanceof Error ? error.message : String(error);
+  // A Google sign-in whose Gemini permission was unticked on the consent
+  // screen: the raw 403 means nothing to a student, and the fix is theirs.
+  if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient authentication scopes/i.test(message)) {
+    return MISSING_SCOPE_MESSAGE.replace("Sign in again", "In Settings, sign out of Google and sign in again");
+  }
+  return message;
 }

@@ -107,6 +107,14 @@ export function GoogleSignIn({
             Sign out
           </Button>
         </div>
+        {google.missingScopes ? (
+          <p role="alert" className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+            This sign-in doesn&apos;t include permission to use Gemini, so
+            generating cards will fail. Sign out, sign in again, and on
+            Google&apos;s permissions screen tick every box (or &ldquo;Select
+            all&rdquo;) before pressing Continue.
+          </p>
+        ) : null}
         {envKey ? (
           <p className="text-muted-foreground text-xs">
             GEMINI_API_KEY is set in the environment, and is used instead

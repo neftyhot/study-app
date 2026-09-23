@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   GOOGLE_OAUTH_SCOPES,
+  missingGeminiScopes,
   GOOGLE_TOKEN_ENDPOINT,
   GoogleOAuthError,
   buildAuthUrl,
@@ -201,6 +202,31 @@ describe("signing in", () => {
         fetch: tokenEndpoint({ access_token: "a", expires_in: 3600 }),
       }),
     ).rejects.toMatchObject({ code: "no_refresh_token" });
+  });
+
+  it("refuses, and hands back, a grant with the Gemini boxes unticked", async () => {
+    const openExternal = browser((auth) => ({
+      code: "c",
+      state: auth.searchParams.get("state")!,
+    }));
+    const fetch = tokenEndpoint({
+      access_token: "a",
+      refresh_token: "r",
+      expires_in: 3600,
+      scope: "openid https://www.googleapis.com/auth/userinfo.email",
+    });
+
+    await expect(signInWithGoogle({ config, openExternal, fetch })).rejects.toMatchObject({
+      code: "missing_scope",
+    });
+    // The partial grant is revoked, so the next sign-in asks for everything.
+    expect(fetch.mock.calls.some(([url]) => String(url).includes("revoke"))).toBe(true);
+  });
+
+  it("reads which Gemini scopes a grant lacks", () => {
+    expect(missingGeminiScopes(GOOGLE_OAUTH_SCOPES.join(" "))).toEqual([]);
+    expect(missingGeminiScopes("openid")).toHaveLength(2);
+    expect(missingGeminiScopes(undefined)).toEqual([]);
   });
 });
 

@@ -18,11 +18,16 @@ import { createClient, type Db } from "@/db/client";
 import { googleOAuthSessions } from "@/db/schema";
 import { LlmError } from "@/lib/llm/types";
 import { GOOGLE_AUTH_BRIDGE_KEY, type GoogleAuthBridge } from "@/main/auth/ipc";
+import { missingGeminiScopes } from "@/main/auth/googleOAuth";
 import { isExpiring } from "@/main/auth/tokenStore";
 
 const SESSION_ID = "default";
 
-export type GoogleSessionSummary = { email: string | null };
+export type GoogleSessionSummary = {
+  email: string | null;
+  /** Signed in, but without the Gemini permissions: every call will fail. */
+  missingScopes: boolean;
+};
 
 function row(db?: Db) {
   try {
@@ -42,7 +47,9 @@ function row(db?: Db) {
 /** Who is signed in, without any token. Safe to hand to the browser. */
 export function readGoogleSession(db?: Db): GoogleSessionSummary | null {
   const session = row(db);
-  return session ? { email: session.email } : null;
+  return session
+    ? { email: session.email, missingScopes: missingGeminiScopes(session.scope).length > 0 }
+    : null;
 }
 
 export function hasGoogleSession(db?: Db): boolean {
