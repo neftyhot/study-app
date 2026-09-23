@@ -17,7 +17,7 @@ export async function SiteHeader() {
 
   return (
     <header className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-6xl items-center gap-3 px-4">
+      <div className="mx-auto flex h-14 w-full max-w-(--content-width) items-center gap-3 px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <GraduationCap className="size-5" />
           <span className="hidden sm:inline">Study App</span>

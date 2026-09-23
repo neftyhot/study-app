@@ -15,6 +15,11 @@ import { eq } from "drizzle-orm";
 
 import { createClient, type Db } from "@/db/client";
 import { appSettings } from "@/db/schema";
+import {
+  DEFAULT_APPEARANCE,
+  sanitizeAppearance,
+  type Appearance,
+} from "@/lib/appearance";
 import { hasGoogleSession } from "@/lib/auth/google-session";
 import {
   DEFAULT_STRICTNESS,
@@ -101,6 +106,27 @@ export function readGradingStrictness(db?: Db): Strictness {
 
 export function writeGradingStrictness(strictness: Strictness, db?: Db) {
   writeSetting(STRICTNESS_KEY, strictness, db);
+}
+
+/* ------------------------------------------------------------- Appearance */
+
+const APPEARANCE_KEY = "appearance";
+
+export function readAppearance(db?: Db): Appearance {
+  const raw = readSetting(APPEARANCE_KEY, db);
+  if (!raw) return DEFAULT_APPEARANCE;
+  try {
+    return sanitizeAppearance(JSON.parse(raw));
+  } catch {
+    return DEFAULT_APPEARANCE;
+  }
+}
+
+/** Stores it cleaned: nothing reaches the page's CSS that was not checked. */
+export function writeAppearance(appearance: unknown, db?: Db): Appearance {
+  const clean = sanitizeAppearance(appearance);
+  writeSetting(APPEARANCE_KEY, JSON.stringify(clean), db);
+  return clean;
 }
 
 /* ------------------------------------------------------------------- Keys */

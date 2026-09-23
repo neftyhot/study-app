@@ -2,7 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-@custom-variant dark (&:is(.dark *));
+/* Midnight is a dark style too, so every dark: variant applies to it. */
+@custom-variant dark (&:is(.dark *, .midnight *));
 
 @theme inline {
   --color-background: var(--background);
@@ -49,6 +50,8 @@
 }
 
 :root {
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --content-width: 72rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
@@ -115,6 +118,109 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+
+/*
+ * The extra styles. Their four main colours match `THEMES` in
+ * src/lib/appearance.ts, which is what the colour pickers and the readability
+ * check start from; the rest are derived the same way appearance.ts derives
+ * them for a customised palette.
+ */
+.bubble {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #f6f7fb;
+  --foreground: #282e3e;
+  --card: #ffffff;
+  --card-foreground: #282e3e;
+  --popover: #ffffff;
+  --popover-foreground: #282e3e;
+  --primary: #4255ff;
+  --primary-foreground: #ffffff;
+  --secondary: #edefff;
+  --secondary-foreground: #2e3856;
+  --muted: #edeff4;
+  --muted-foreground: #586380;
+  --accent: #edefff;
+  --accent-foreground: #2e3856;
+  --destructive: #e5484d;
+  --border: #d9dde8;
+  --input: #d9dde8;
+  --ring: #4255ff;
+  --chart-1: #4255ff;
+  --chart-2: #18ae79;
+  --chart-3: #ffcd1f;
+  --chart-4: #ff7873;
+  --chart-5: #98f1d1;
+}
+
+.midnight {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #0a092d;
+  --foreground: #f6f7fb;
+  --card: #2e3856;
+  --card-foreground: #f6f7fb;
+  --popover: #2e3856;
+  --popover-foreground: #f6f7fb;
+  --primary: #6a78ff;
+  --primary-foreground: #0a092d;
+  --secondary: #282e3e;
+  --secondary-foreground: #f6f7fb;
+  --muted: #1a1d42;
+  --muted-foreground: #a8b1ce;
+  --accent: #303a5e;
+  --accent-foreground: #f6f7fb;
+  --destructive: #ff7873;
+  --border: #3b4566;
+  --input: #3b4566;
+  --ring: #6a78ff;
+  --chart-1: #6a78ff;
+  --chart-2: #18ae79;
+  --chart-3: #ffcd1f;
+  --chart-4: #ff7873;
+  --chart-5: #98f1d1;
+}
+
+.sepia {
+  --font-sans: ui-serif, Charter, "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif;
+  --radius: 0.5rem;
+  --background: #f4ecd8;
+  --foreground: #3b2f1e;
+  --card: #fbf6ea;
+  --card-foreground: #3b2f1e;
+  --popover: #fbf6ea;
+  --popover-foreground: #3b2f1e;
+  --primary: #8a5a2b;
+  --primary-foreground: #ffffff;
+  --secondary: #ebe1c8;
+  --secondary-foreground: #3b2f1e;
+  --muted: #ebe1c8;
+  --muted-foreground: #6b5a40;
+  --accent: #e6d9b8;
+  --accent-foreground: #3b2f1e;
+  --destructive: #b3261e;
+  --border: #dccfae;
+  --input: #dccfae;
+  --ring: #8a5a2b;
+  --chart-1: #8a5a2b;
+  --chart-2: #5b7a3a;
+  --chart-3: #c08a2e;
+  --chart-4: #a4452c;
+  --chart-5: #6b5a40;
+}
+
+/* Bubble styles float their cards on a soft shadow instead of an outline. */
+.bubble [data-slot="card"],
+.midnight [data-slot="card"] {
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent),
+    0 6px 20px color-mix(in oklab, var(--foreground) 9%, transparent);
+}
+
+.bubble h1,
+.midnight h1 {
+  font-weight: 800;
 }
 
 @layer base {

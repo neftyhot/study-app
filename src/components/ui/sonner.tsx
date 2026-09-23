@@ -2,14 +2,18 @@
 
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
+
+import { isThemeId, THEMES } from "@/lib/appearance"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+  const { resolvedTheme } = useTheme()
+  // Sonner knows light and dark; the other styles are one or the other.
+  const theme = isThemeId(resolvedTheme) && THEMES[resolvedTheme].dark ? "dark" : "light"
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
+      theme={theme}
       className="toaster group"
       icons={{
         success: (

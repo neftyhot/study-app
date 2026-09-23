@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { GradingSettings } from "@/components/settings/grading-settings";
 import { ProviderSettings } from "@/components/settings/provider-settings";
 import { PurchaseLicense } from "@/components/settings/purchase-license";
@@ -17,7 +18,8 @@ import { uploadsRoot } from "@/lib/ingest/storage";
 import { LOCAL_MODELS } from "@/lib/llm/catalog";
 import { modelsRoot } from "@/lib/llm/download";
 import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/status";
-import { readGradingStrictness } from "@/lib/settings";
+import { readAppearance, readGradingStrictness } from "@/lib/settings";
+import { db } from "@/db";
 import { getSetupSnapshot } from "@/lib/settings-actions";
 
 export default async function SettingsPage() {
@@ -61,6 +63,8 @@ export default async function SettingsPage() {
           </CardHeader>
         </Card>
       ) : null}
+
+      <AppearanceSettings initial={readAppearance(db)} />
 
       <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
 

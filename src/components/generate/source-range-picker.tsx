@@ -163,12 +163,16 @@ export function SourceRangePicker({
   );
 }
 
-/** Upload names arrive URL-encoded; a renamed file may hold a bare "%". */
+/**
+ * Upload names arrive form-encoded ("Chapter+16+Sense+Organs.pdf"); a renamed
+ * file may hold a bare "%", which must not throw.
+ */
 function displayName(filename: string): string {
+  const spaced = filename.replace(/\+/g, " ");
   try {
-    return decodeURIComponent(filename);
+    return decodeURIComponent(spaced);
   } catch {
-    return filename;
+    return spaced;
   }
 }
 

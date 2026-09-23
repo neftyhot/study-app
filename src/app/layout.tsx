@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
 import { SiteHeader } from "@/components/layout/site-header";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { db } from "@/db";
+import { appearanceCss, THEME_IDS } from "@/lib/appearance";
+import { readAppearance } from "@/lib/settings";
 
 import "./globals.css";
 
@@ -14,6 +17,12 @@ const geistSans = Geist({
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+/** The Bubble styles' rounded face, and a choice in Appearance settings. */
+const nunito = Nunito({
+  variable: "--font-nunito",
   subsets: ["latin"],
 });
 
@@ -40,17 +49,26 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${nunito.variable} h-full antialiased`}
     >
+      <head>
+        {/* The student's colours, corners and sizes, in place before first
+            paint. Built only from checked values (see appearance.ts). */}
+        <style
+          id="appearance-css"
+          dangerouslySetInnerHTML={{ __html: appearanceCss(readAppearance(db)) }}
+        />
+      </head>
       <body className="flex min-h-full flex-col">
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
+          themes={[...THEME_IDS]}
           enableSystem
           disableTransitionOnChange
         >
           <SiteHeader />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+          <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
             {children}
           </main>
           <Toaster />
