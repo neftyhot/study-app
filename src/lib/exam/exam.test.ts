@@ -271,6 +271,16 @@ describe("sitting a paper", () => {
     expect(timeRemaining(paper)).toBeNull();
   });
 
+  it("spreads the correct answers across the options instead of the bottom two", () => {
+    const paper = createPaper(db, examId, { questionCount: 12, typedShare: 0 })!;
+    const slots = paperQuestions(db, paper.id)
+      .filter((q) => q.options.length === 4)
+      .map((q) => q.options.indexOf(q.correctOption!));
+
+    const counts = [0, 1, 2, 3].map((slot) => slots.filter((s) => s === slot).length);
+    expect(Math.max(...counts) - Math.min(...counts)).toBeLessThanOrEqual(1);
+  });
+
   it("returns nothing for a deck with no usable cards", () => {
     db.update(flashcards).set({ excluded: true }).run();
     expect(createPaper(db, examId, { questionCount: 5 })).toBeUndefined();

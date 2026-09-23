@@ -13,7 +13,7 @@
  *     answer's length. Length matching removes the oldest test-taking tell
  *     there is: the longest option is the right one.
  */
-import { shuffle } from "@/lib/random";
+import { mulberry32, shuffle } from "@/lib/random";
 
 export type McqCard = {
   id: string;
@@ -181,5 +181,29 @@ export function buildMcq(
   }));
   const distinct = new Set(trimmed.map((option) => normalize(option.text)));
 
-  return shuffle(distinct.size === trimmed.length ? trimmed : all, seed);
+  const [correct, ...wrong] =
+    distinct.size === trimmed.length ? trimmed : all;
+
+  // The correct option's slot is drawn on its own rather than left to wherever
+  // a shuffle happens to put it, so it is uniform by construction: every slot
+  // equally likely, whatever the seed.
+  const random = seed === undefined ? Math.random : mulberry32(seed);
+  const ordered = shuffle(wrong, seed === undefined ? undefined : seed + 1);
+  ordered.splice(Math.floor(random() * (wrong.length + 1)), 0, correct);
+  return ordered;
+}
+
+/**
+ * Moves the correct option to `slot`, keeping the others in their order.
+ *
+ * For a caller balancing positions over several questions (a practice paper,
+ * via `dealPositions`); a single question needs nothing but `buildMcq`.
+ */
+export function placeCorrect(options: McqOption[], slot: number): McqOption[] {
+  const correct = options.find((option) => option.correct);
+  if (!correct) return options;
+
+  const rest = options.filter((option) => option !== correct);
+  rest.splice(Math.min(Math.max(0, slot), rest.length), 0, correct);
+  return rest;
 }

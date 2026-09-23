@@ -19,7 +19,8 @@ import {
   studyProgress,
   type PracticeExam,
 } from "@/db/schema";
-import { buildMcq } from "@/lib/learn/mcq";
+import { buildMcq, placeCorrect } from "@/lib/learn/mcq";
+import { dealPositions } from "@/lib/random";
 import type { TypedAnswerGrader } from "@/lib/learn/typed";
 
 import {
@@ -112,24 +113,34 @@ export function createPaper(
     misconceptions: card.misconceptions,
   }));
 
+  const built = drafts.map(({ card, format }, position) =>
+    format === "mcq"
+      ? buildMcq(
+          {
+            id: card.id,
+            topic: card.topic,
+            question: card.question,
+            directAnswer: card.directAnswer,
+            misconceptions: card.misconceptions,
+          },
+          mcqDeck,
+          { seed: request.seed === undefined ? undefined : request.seed + position },
+        )
+      : [],
+  );
+
+  // Dealt across the whole paper so the right answer is spread evenly over
+  // A–D. The per-question seed used to be the question's position, which put
+  // the answer in the same slots on every paper — mostly the bottom two.
+  const slots = dealPositions(
+    built.map((options) => options.length),
+    request.seed,
+  );
+
   db.transaction((tx) => {
     drafts.forEach((draft, position) => {
       const { card, format } = draft;
-
-      const options =
-        format === "mcq"
-          ? buildMcq(
-              {
-                id: card.id,
-                topic: card.topic,
-                question: card.question,
-                directAnswer: card.directAnswer,
-                misconceptions: card.misconceptions,
-              },
-              mcqDeck,
-              { seed: (request.seed ?? 1) + position },
-            )
-          : [];
+      const options = placeCorrect(built[position], slots[position]);
 
       tx.insert(practiceQuestions)
         .values({

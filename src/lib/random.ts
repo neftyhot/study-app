@@ -26,3 +26,35 @@ export function shuffle<T>(items: readonly T[], seed?: number): T[] {
 
   return result;
 }
+
+/**
+ * Where the correct option goes in each of a run of multiple-choice questions.
+ *
+ * Chance alone is not enough over a twenty-question paper: independent draws
+ * routinely leave one letter with seven answers and another with two, and a
+ * student notices. So positions are dealt like cards — each question takes a
+ * random slot among those used least so far — which keeps every slot within
+ * one of every other while no single answer's position can be predicted.
+ *
+ * `optionCounts[i]` is how many options question `i` has; the result gives,
+ * for each, an index below that count.
+ */
+export function dealPositions(
+  optionCounts: readonly number[],
+  seed?: number,
+): number[] {
+  const random = seed === undefined ? Math.random : mulberry32(seed);
+  const used: number[] = [];
+
+  return optionCounts.map((count) => {
+    if (count <= 1) return 0;
+    for (let slot = used.length; slot < count; slot += 1) used[slot] = 0;
+
+    const least = Math.min(...used.slice(0, count));
+    const open = [...Array(count).keys()].filter((slot) => used[slot] === least);
+    const slot = open[Math.floor(random() * open.length)];
+
+    used[slot] += 1;
+    return slot;
+  });
+}
