@@ -7,6 +7,7 @@ import { UploadPanel } from "@/components/ingest/upload-panel";
 import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { SourceFileActions } from "@/components/manage/source-file-actions";
 import { RenameSourceDialog } from "@/components/manage/edit-dialogs";
+import { ResplitButton } from "@/components/manage/resplit-button";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -125,6 +126,10 @@ export default async function SourcesPage(
                       ) : null}
                     </CardTitle>
                     <div className="flex shrink-0 gap-1">
+                      {["txt", "md", "pasted", "rtf", "docx"].includes(file.fileType) &&
+                      file.status === "ready" ? (
+                        <ResplitButton fileId={file.id} />
+                      ) : null}
                       <RenameSourceDialog
                         examId={examId}
                         fileId={file.id}

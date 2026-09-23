@@ -7,6 +7,7 @@
  * does not, so blank lines are used as paragraph breaks and paragraphs are
  * grouped into sections of a readable size.
  */
+import { splitLongUnits } from "./chunk";
 import {
   classifyLegibility,
   normalizeText,
@@ -130,7 +131,9 @@ function finish(units: ExtractedUnit[]): ExtractionResult {
 export function extractPlainText(content: string): ExtractionResult {
   const blocks = splitMarkdown(content);
   const hasHeadings = blocks.some((block) => block.heading !== null);
-  return finish(toUnits(blocks, hasHeadings));
+  // Headings and paragraphs give the first cut; a section still longer than a
+  // slide's worth — a transcript, usually — is then cut by length.
+  return finish(splitLongUnits(toUnits(blocks, hasHeadings)));
 }
 
 export async function extractText(buffer: Buffer): Promise<ExtractionResult> {

@@ -6,6 +6,11 @@ import { join } from "node:path";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
+import { eq } from "drizzle-orm";
+
+import { sourceFiles } from "@/db/schema";
+import { ingestSourceFile } from "@/lib/ingest";
+import { relinkCards } from "@/lib/ingest/relink";
 import { absolutePathFor, uploadsRoot } from "@/lib/ingest/storage";
 
 import {
@@ -85,6 +90,26 @@ export async function renameSourceFileAction(
 ) {
   renameSourceFile(db, fileId, filename);
   revalidatePath("/exams/[examId]", "layout");
+}
+
+/**
+ * Reads a file again with the current splitting rules, then moves each card
+ * to the section its quote is now in. For transcripts and notes uploaded
+ * before long sections were split (see lib/ingest/chunk.ts).
+ */
+export async function resplitSourceFileAction(fileId: string) {
+  const file = db.select().from(sourceFiles).where(eq(sourceFiles.id, fileId)).get();
+  if (!file) return { ok: false as const, error: "That file no longer exists." };
+
+  const before = file.unitCount ?? 0;
+  try {
+    const outcome = await ingestSourceFile(db, file, absolutePathFor(file.rawPath));
+    const moved = relinkCards(db, file.id);
+    revalidatePath("/exams/[examId]", "layout");
+    return { ok: true as const, before, after: outcome.unitCount, moved };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Could not re-read the file." };
+  }
 }
 
 export async function sourceFileImpact(fileId: string) {

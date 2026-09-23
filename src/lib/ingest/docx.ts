@@ -13,6 +13,7 @@
  */
 import mammoth from "mammoth";
 
+import { splitLongUnits } from "./chunk";
 import {
   classifyLegibility,
   normalizeText,
@@ -224,7 +225,8 @@ export async function extractDocx(buffer: Buffer): Promise<ExtractionResult> {
   }
 
   const imageCount = (html.match(/<img\b/gi) ?? []).length;
-  const units = sectionize(parseBlocks(html), imageCount);
+  // A transcript saved as Word is one heading-less wall of text; see chunk.ts.
+  const units = splitLongUnits(sectionize(parseBlocks(html), imageCount));
 
   if (units.length === 0) {
     warnings.push({
