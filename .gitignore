@@ -72,3 +72,6 @@ workers/licensing/.dev.vars
 workers/licensing/.wrangler/
 workers/licensing/node_modules/
 .env
+
+# Feature suggestions pulled from the Worker (npm run feedback:pull)
+feedback.txt

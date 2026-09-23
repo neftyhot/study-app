@@ -3,6 +3,7 @@ import { GraduationCap, Search, Settings } from "lucide-react";
 
 import { CardBuilder } from "@/components/cards/card-builder";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { UpdateNotice } from "@/components/layout/update-notice";
 import { Button } from "@/components/ui/button";
 import { DeckSwitcher } from "@/components/manage/deck-switcher";
 import { DownloadChip } from "@/components/settings/download-chip";
@@ -24,6 +25,7 @@ export async function SiteHeader() {
         </Link>
 
         <div className="ml-auto flex items-center gap-2">
+          <UpdateNotice />
           {courses.some((course) => course.exams.length > 0) ? (
             <CardBuilder
               decks={courses.flatMap((course) =>

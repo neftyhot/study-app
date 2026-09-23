@@ -1,6 +1,11 @@
 import Link from "next/link";
 
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
+import { FeedbackCard } from "@/components/settings/feedback-card";
+import { StatsCard } from "@/components/settings/stats-card";
+import { APP_VERSION } from "@/lib/app-info";
+import { CHANGELOG } from "@/lib/changelog";
+import { loadStats } from "@/lib/stats";
 import { GradingSettings } from "@/components/settings/grading-settings";
 import { ProviderSettings } from "@/components/settings/provider-settings";
 import { PurchaseLicense } from "@/components/settings/purchase-license";
@@ -35,8 +40,15 @@ export default async function SettingsPage() {
         >
           ← Subjects
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight">
+          Settings
+          <Badge variant="outline" className="font-normal">
+            v{APP_VERSION}
+          </Badge>
+        </h1>
       </div>
+
+      <StatsCard stats={loadStats(db)} />
 
       {license ? (
         <Card>
@@ -76,6 +88,32 @@ export default async function SettingsPage() {
         </CardHeader>
         <CardContent>
           <UsageLoggingToggle initial={snapshot.usageLogging} />
+        </CardContent>
+      </Card>
+
+      <FeedbackCard />
+
+      <Card id="whats-new" className="scroll-mt-20">
+        <CardHeader>
+          <CardTitle className="text-base">What&apos;s new</CardTitle>
+          <CardDescription>You&apos;re on version {APP_VERSION}.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {CHANGELOG.map((entry) => (
+            <section key={entry.version} className="space-y-1">
+              <h3 className="flex items-center gap-2 text-sm font-medium">
+                v{entry.version}
+                <span className="text-muted-foreground text-xs font-normal">
+                  {entry.date}
+                </span>
+              </h3>
+              <ul className="text-muted-foreground list-disc space-y-0.5 pl-5 text-sm">
+                {entry.notes.map((note) => (
+                  <li key={note}>{note}</li>
+                ))}
+              </ul>
+            </section>
+          ))}
         </CardContent>
       </Card>
 

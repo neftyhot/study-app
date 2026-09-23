@@ -121,6 +121,10 @@ async function startServer() {
 
   process.env.PORT = String(port);
   process.env.HOSTNAME = "127.0.0.1";
+  // The Worker URL is compiled into this file (scripts/compile-main.mjs); hand
+  // it to the Next server, which sends feature suggestions there. Bracket
+  // form on the left so the compile-time define leaves the name alone.
+  process.env["STUDY_APP_SERVER_URL"] = process.env.LICENSE_SERVER_URL ?? "";
   process.env.NODE_ENV = "production";
 
   const entry = resourcePath(".next", "standalone", "server.js");

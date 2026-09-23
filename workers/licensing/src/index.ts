@@ -9,6 +9,9 @@
  *                          the signature itself, like any pasted key.
  *   GET  /success          Where the Payment Link redirects after paying:
  *                          shows the key, as a fallback to automatic delivery.
+ *   POST /feedback         A feature suggestion from the app's settings.
+ *                          Stored under `feedback:`; `npm run feedback:pull`
+ *                          collects them into feedback.txt.
  *
  * The key is minted in exactly the format scripts/license-store.mjs produces
  * and electron/license/verify.cjs accepts: base64 of { payload, signature },
@@ -65,6 +68,10 @@ const worker = {
       );
     }
 
+    if (request.method === "POST" && url.pathname === "/feedback") {
+      return handleFeedback(request, env);
+    }
+
     if (request.method === "GET" && url.pathname === "/success") {
       return handleSuccess(url.searchParams.get("session_id") ?? "", env);
     }
@@ -74,6 +81,47 @@ const worker = {
 };
 
 export default worker;
+
+/* --------------------------------------------------------------- Feedback */
+
+export const FEEDBACK_MAX_CHARS = 5000;
+
+export type Feedback = {
+  text: string;
+  contact: string | null;
+  version: string | null;
+  receivedAt: string;
+};
+
+/**
+ * Keeps a suggestion. Anyone can post one — it is a suggestion box — so the
+ * only defences are size limits; nothing here is ever executed or shown to
+ * another user.
+ */
+async function handleFeedback(request: Request, env: Env): Promise<Response> {
+  let body: { text?: unknown; contact?: unknown; version?: unknown };
+  try {
+    body = JSON.parse((await request.text()).slice(0, 20_000));
+  } catch {
+    return new Response("Bad payload", { status: 400 });
+  }
+
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return new Response("Empty suggestion", { status: 400 });
+  const short = (value: unknown, max: number) =>
+    typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
+
+  const entry: Feedback = {
+    text: text.slice(0, FEEDBACK_MAX_CHARS),
+    contact: short(body.contact, 200),
+    version: short(body.version, 40),
+    receivedAt: new Date().toISOString(),
+  };
+
+  // Time first, so a key listing comes back in the order they arrived.
+  await env.LICENSES.put(`feedback:${entry.receivedAt}:${crypto.randomUUID()}`, JSON.stringify(entry));
+  return Response.json({ ok: true }, { status: 201 });
+}
 
 /* ---------------------------------------------------------------- Webhook */
 

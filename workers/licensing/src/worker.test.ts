@@ -203,3 +203,42 @@ describe("Stripe's signature format", () => {
     expect(await verifyStripeSignature(body, "garbage", SECRET, now)).toBe(false);
   });
 });
+
+describe("feedback", () => {
+  function post(body: unknown) {
+    return worker.fetch(
+      new Request("https://licensing.example/feedback", {
+        method: "POST",
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      }),
+      env,
+    );
+  }
+
+  it("keeps a suggestion under a feedback: key", async () => {
+    const response = await post({ text: "  Dark mode for diagrams  ", contact: "me@x.com", version: "0.2.0" });
+    expect(response.status).toBe(201);
+
+    const [[key, value]] = [...kv.data.entries()];
+    expect(key.startsWith("feedback:")).toBe(true);
+    expect(JSON.parse(value)).toMatchObject({ text: "Dark mode for diagrams", contact: "me@x.com", version: "0.2.0" });
+  });
+
+  it("refuses an empty or malformed suggestion", async () => {
+    expect((await post({ text: "   " })).status).toBe(400);
+    expect((await post("not json")).status).toBe(400);
+    expect(kv.data.size).toBe(0);
+  });
+
+  it("caps the length", async () => {
+    await post({ text: "x".repeat(20_000) });
+    // A body past the read limit is not valid JSON once cut, so either it is
+    // refused or stored short — never stored whole.
+    for (const value of kv.data.values()) {
+      expect(JSON.parse(value).text.length).toBeLessThanOrEqual(5000);
+    }
+    await post({ text: "y".repeat(9_000) });
+    const stored = [...kv.data.values()].map((value) => JSON.parse(value).text as string);
+    expect(stored.some((text) => text.startsWith("y") && text.length === 5000)).toBe(true);
+  });
+});

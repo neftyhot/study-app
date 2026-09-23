@@ -2,10 +2,14 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
 import { SiteHeader } from "@/components/layout/site-header";
+import { TimeTracker } from "@/components/layout/time-tracker";
+import { WhatsNew } from "@/components/layout/whats-new";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { db } from "@/db";
+import { APP_VERSION } from "@/lib/app-info";
 import { appearanceCss, THEME_IDS } from "@/lib/appearance";
+import { CHANGELOG } from "@/lib/changelog";
 import { readAppearance } from "@/lib/settings";
 
 import "./globals.css";
@@ -68,6 +72,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           disableTransitionOnChange
         >
           <SiteHeader />
+          <WhatsNew
+            version={APP_VERSION}
+            notes={CHANGELOG.find((entry) => entry.version === APP_VERSION)?.notes ?? []}
+          />
+          <TimeTracker />
           <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
             {children}
           </main>
