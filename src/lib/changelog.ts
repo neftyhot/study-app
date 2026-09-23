@@ -6,6 +6,15 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.2.2",
+    date: "2026-09-23",
+    notes: [
+      "Lecture transcripts and long notes now get plenty of cards: long stretches of text are split into slide-sized sections instead of counting as one.",
+      "Already added a transcript? Press “Re-split” next to it on the Sources page, then generate again.",
+      "Signing in with Google now checks that Gemini permission was granted, and tells you how to fix it if not (tick every box on Google's screen).",
+    ],
+  },
+  {
     version: "0.2.1",
     date: "2026-09-23",
     notes: [
