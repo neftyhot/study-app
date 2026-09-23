@@ -93,6 +93,65 @@ export function renameExam(db: Db, examId: string, title: string) {
   db.update(exams).set({ title: trimmed }).where(eq(exams.id, examId)).run();
 }
 
+export function updateCourse(
+  db: Db,
+  courseId: string,
+  input: { title: string; term?: string | null },
+) {
+  const title = input.title.trim();
+  if (!title) throw new Error("A subject needs a name.");
+
+  db.update(courses)
+    .set({ title, term: input.term?.trim() || null })
+    .where(eq(courses.id, courseId))
+    .run();
+}
+
+/**
+ * Edits a deck's name, date and subject.
+ *
+ * Moving a deck to another subject moves everything in it: sources, cards and
+ * history all hang off the deck, not the subject.
+ */
+export function updateExam(
+  db: Db,
+  examId: string,
+  input: { title: string; date?: string | null; courseId?: string },
+) {
+  const title = input.title.trim();
+  if (!title) throw new Error("A deck needs a name.");
+
+  const date = input.date?.trim() || null;
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error("The exam date should look like 2026-10-14.");
+  }
+
+  if (input.courseId) {
+    const course = db
+      .select({ id: courses.id })
+      .from(courses)
+      .where(eq(courses.id, input.courseId))
+      .get();
+    if (!course) throw new Error("That subject no longer exists.");
+  }
+
+  db.update(exams)
+    .set({ title, date, ...(input.courseId ? { courseId: input.courseId } : {}) })
+    .where(eq(exams.id, examId))
+    .run();
+}
+
+/** The name a file is shown under. The stored file on disk is untouched. */
+export function renameSourceFile(db: Db, fileId: string, filename: string) {
+  const trimmed = filename.trim();
+  if (!trimmed) throw new Error("A file needs a name.");
+
+  db.update(sourceFiles)
+    .set({ filename: trimmed })
+    .where(eq(sourceFiles.id, fileId))
+    .run();
+}
+
 /**
  * Copies a deck's sources into a new deck, ready to generate into.
  *

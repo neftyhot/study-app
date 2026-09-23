@@ -1,9 +1,11 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { Pencil, Sparkles } from "lucide-react";
 
 import { BulkBar, type DeckTarget } from "@/components/cards/bulk-bar";
+import { CardEditor } from "@/components/cards/card-editor";
 import { DeckSearch } from "@/components/search/deck-search";
 import { Highlighted } from "@/components/search/highlighted";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +58,8 @@ export function DeckCardList({
   const [matches, setMatches] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState<string | null>(null);
+  const router = useRouter();
 
   const toggle = useCallback((id: string) => {
     setSelected((current) => {
@@ -152,6 +156,18 @@ export function DeckCardList({
                         <Highlighted text={card.question} query={query} />
                       )}
                     </span>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="shrink-0"
+                      aria-label="Edit card"
+                      aria-pressed={editing === card.id}
+                      onClick={() =>
+                        setEditing((current) => (current === card.id ? null : card.id))
+                      }
+                    >
+                      <Pencil />
+                    </Button>
                   </CardTitle>
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     <Badge variant="outline">{card.cardType}</Badge>
@@ -167,41 +183,61 @@ export function DeckCardList({
                   </div>
                 </CardHeader>
 
-                <CardContent className="space-y-3 text-sm">
-                  <p className="break-words">
-                    <Highlighted text={card.directAnswer} query={query} />
-                  </p>
+                {editing === card.id ? (
+                  <CardContent>
+                    <CardEditor
+                      cardId={card.id}
+                      card={{
+                        question: card.question,
+                        directAnswer: card.directAnswer,
+                        fullExplanation: card.fullExplanation,
+                      }}
+                      onSaved={() => undefined}
+                      onClose={() => {
+                        setEditing(null);
+                        router.refresh();
+                      }}
+                    />
+                  </CardContent>
+                ) : (
+                  <CardContent className="space-y-3 text-sm">
+                    <p className="break-words">
+                      <Highlighted text={card.directAnswer} query={query} />
+                    </p>
 
-                  <Explanation
-                    examId={examId}
-                    card={card}
-                    query={query}
-                  />
+                    <Explanation
+                      // Re-read when an edit changes it; the state is only a seed.
+                      key={card.fullExplanation ?? ""}
+                      examId={examId}
+                      card={card}
+                      query={query}
+                    />
 
-                  {card.essentialPoints.length > 0 ? (
-                    <div>
-                      <p className="text-xs font-medium">Must include</p>
-                      <ul className="text-muted-foreground list-disc pl-5 text-xs">
-                        {card.essentialPoints.map((point) => (
-                          <li key={point}>{point}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
+                    {card.essentialPoints.length > 0 ? (
+                      <div>
+                        <p className="text-xs font-medium">Must include</p>
+                        <ul className="text-muted-foreground list-disc pl-5 text-xs">
+                          {card.essentialPoints.map((point) => (
+                            <li key={point}>{point}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
 
-                  {card.source ? (
-                    <details className="bg-muted/50 rounded p-2">
-                      <summary className="cursor-pointer text-xs font-medium">
-                        Source: {card.source.label}
-                      </summary>
-                      {card.source.excerpt ? (
-                        <blockquote className="text-muted-foreground mt-2 border-l-2 pl-2 text-xs italic break-words">
-                          <Highlighted text={card.source.excerpt} query={query} />
-                        </blockquote>
-                      ) : null}
-                    </details>
-                  ) : null}
-                </CardContent>
+                    {card.source ? (
+                      <details className="bg-muted/50 rounded p-2">
+                        <summary className="cursor-pointer text-xs font-medium">
+                          Source: {card.source.label}
+                        </summary>
+                        {card.source.excerpt ? (
+                          <blockquote className="text-muted-foreground mt-2 border-l-2 pl-2 text-xs italic break-words">
+                            <Highlighted text={card.source.excerpt} query={query} />
+                          </blockquote>
+                        ) : null}
+                      </details>
+                    ) : null}
+                  </CardContent>
+                )}
               </Card>
             ))}
           </div>

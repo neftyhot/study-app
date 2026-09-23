@@ -6,6 +6,7 @@ import { CreateDrillDialog } from "@/components/diagrams/create-drill-dialog";
 import { UploadPanel } from "@/components/ingest/upload-panel";
 import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { SourceFileActions } from "@/components/manage/source-file-actions";
+import { RenameSourceDialog } from "@/components/manage/edit-dialogs";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -123,11 +124,18 @@ export default async function SourcesPage(
                         <Badge variant="destructive">{file.status}</Badge>
                       ) : null}
                     </CardTitle>
-                    <SourceFileActions
-                      examId={examId}
-                      fileId={file.id}
-                      filename={file.filename}
-                    />
+                    <div className="flex shrink-0 gap-1">
+                      <RenameSourceDialog
+                        examId={examId}
+                        fileId={file.id}
+                        filename={file.filename}
+                      />
+                      <SourceFileActions
+                        examId={examId}
+                        fileId={file.id}
+                        filename={file.filename}
+                      />
+                    </div>
                   </div>
                   <CardDescription>
                     {file.unitCount} {UNIT_NOUN[file.fileType] ?? "sections"}

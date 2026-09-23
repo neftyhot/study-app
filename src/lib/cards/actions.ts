@@ -8,6 +8,7 @@ import { createExam } from "@/lib/manage";
 import {
   CardInputError,
   createManualCard,
+  createManualCards,
   deleteCards,
   duplicateCards,
   moveCards,
@@ -34,6 +35,17 @@ export async function createCardAction(
     }
     throw error;
   }
+}
+
+export type SetCardInput = Omit<ManualCardInput, "examId">;
+
+/** Saves a whole set of cards at once — the "type a deck in" editor. */
+export async function createCardSetAction(examId: string, cards: SetCardInput[]) {
+  const result = createManualCards(db, examId, cards);
+  if ("problems" in result) return { ok: false as const, problems: result.problems };
+
+  revalidatePath("/exams/[examId]", "layout");
+  return { ok: true as const, created: result.created };
 }
 
 /** A deck with no uploaded material behind it — a student's own set. */

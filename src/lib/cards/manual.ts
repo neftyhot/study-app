@@ -128,6 +128,39 @@ export function createManualCard(db: Db, input: ManualCardInput) {
   });
 }
 
+/** Problems with one card of a set, by its position in the set. */
+export type SetProblem = { index: number; problems: string[] };
+
+/**
+ * Writes a whole set of cards, or none of them.
+ *
+ * Every card is checked before any is written, so a set with one bad row
+ * comes back with that row named rather than half-saved. Blank rows — the
+ * empty card left at the bottom after "add another" — are skipped.
+ */
+export function createManualCards(
+  db: Db,
+  examId: string,
+  inputs: Omit<ManualCardInput, "examId">[],
+): { created: number } | { problems: SetProblem[] } {
+  const rows = inputs
+    .map((input, index) => ({ input: { ...input, examId }, index }))
+    .filter(
+      ({ input }) => input.question?.trim() || input.directAnswer?.trim(),
+    );
+
+  const problems = rows
+    .map(({ input, index }) => ({ index, problems: validateManualCard(input) }))
+    .filter((row) => row.problems.length > 0);
+  if (problems.length > 0) return { problems };
+
+  db.transaction(() => {
+    for (const { input } of rows) createManualCard(db, input);
+  });
+
+  return { created: rows.length };
+}
+
 /** What study shows on the front of a card, cloze or not. */
 export function frontOf(card: {
   cardType: string;

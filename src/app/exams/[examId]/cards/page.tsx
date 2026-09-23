@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ListPlus, Plus } from "lucide-react";
 
 import { CardBuilder } from "@/components/cards/card-builder";
 import { DeckCardList, type DeckCardView } from "@/components/search/deck-card-list";
@@ -72,7 +73,22 @@ export default async function CardsPage(
             </Badge>
           </h1>
           <div className="flex flex-wrap gap-2">
-            <CardBuilder decks={decks} defaultExamId={examId} />
+            <Button asChild size="sm">
+              <Link href={`/exams/${examId}/cards/new`}>
+                <ListPlus className="size-4" />
+                Add cards
+              </Link>
+            </Button>
+            <CardBuilder
+              decks={decks}
+              defaultExamId={examId}
+              trigger={
+                <Button size="sm" variant="outline">
+                  <Plus className="size-4" />
+                  One card
+                </Button>
+              }
+            />
             {cards.length > 0 ? (
               <Button asChild size="sm" variant="outline">
                 <Link href={`/exams/${examId}/study`}>Study these</Link>
@@ -83,10 +99,18 @@ export default async function CardsPage(
       </div>
 
       {cards.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No cards yet. Generate them from the exam overview, or write one
-          yourself.
-        </p>
+        <div className="space-y-3 rounded-xl border border-dashed p-6 text-center">
+          <p className="text-muted-foreground text-sm">
+            No cards yet. Generate them from the deck overview, or type them in
+            yourself.
+          </p>
+          <Button asChild>
+            <Link href={`/exams/${examId}/cards/new`}>
+              <ListPlus className="size-4" />
+              Type in cards
+            </Link>
+          </Button>
+        </div>
       ) : (
         <DeckCardList
           examId={examId}

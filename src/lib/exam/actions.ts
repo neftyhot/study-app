@@ -143,7 +143,7 @@ export async function loadDiagnostic(paperId: string) {
 export async function regroupTopicsAction(examId: string, force = false) {
   try {
     const result = await regroupTopics(db, getProvider(), examId, { force });
-    revalidatePath(`/exams/${examId}`, "layout");
+    revalidatePath("/exams/[examId]", "layout");
     return { ok: true as const, ...result };
   } catch (error) {
     return {

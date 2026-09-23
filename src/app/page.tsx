@@ -1,6 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, FileStack, Layers, ListChecks } from "lucide-react";
+import {
+  CalendarDays,
+  FileStack,
+  Layers,
+  ListChecks,
+  ListPlus,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +18,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CourseActions } from "@/components/manage/course-actions";
+import {
+  EditCourseDialog,
+  EditExamDialog,
+} from "@/components/manage/edit-dialogs";
 import {
   CreateCourseDialog,
   CreateExamDialog,
@@ -40,6 +50,12 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/decks/new">
+              <ListPlus className="size-4" />
+              Type in a deck
+            </Link>
+          </Button>
           <CreateExamDialog courses={courseOptions} />
           <CreateCourseDialog />
         </div>
@@ -79,6 +95,11 @@ export default async function DashboardPage() {
                     label="Add deck"
                     variant="ghost"
                   />
+                  <EditCourseDialog
+                    courseId={course.id}
+                    title={course.title}
+                    term={course.term}
+                  />
                   <CourseActions
                     courseId={course.id}
                     title={course.title}
@@ -97,7 +118,19 @@ export default async function DashboardPage() {
                 {course.exams.map((exam) => (
                   <Card key={exam.id} className="flex flex-col">
                     <CardHeader>
-                      <CardTitle className="text-base">{exam.title}</CardTitle>
+                      <div className="flex items-start justify-between gap-2">
+                        <CardTitle className="text-base">{exam.title}</CardTitle>
+                        <EditExamDialog
+                          exam={{
+                            id: exam.id,
+                            title: exam.title,
+                            date: exam.date,
+                            courseId: course.id,
+                          }}
+                          courses={courseOptions}
+                          size="icon-sm"
+                        />
+                      </div>
                       {exam.date ? (
                         <CardDescription className="flex items-center gap-1.5">
                           <CalendarDays className="size-3.5" />

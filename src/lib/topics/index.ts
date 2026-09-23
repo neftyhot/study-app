@@ -205,7 +205,7 @@ export async function regroupTopics(
       const { data } = await llm.generateStructured<RegroupResponse>({
         feature: "topics",
         system: REGROUP_SYSTEM,
-        prompt: `FILE: ${decodeURIComponent(file.filename)}\n\nTOPICS\n${list}`,
+        prompt: `FILE: ${file.filename}\n\nTOPICS\n${list}`,
         schema: REGROUP_SCHEMA,
         temperature: 0,
         thinking: "minimal",

@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import { Eye, ImagePlus, Loader2, Plus, Star, X } from "lucide-react";
 import { toast } from "sonner";
 
+import { DetailToggle, useDetailMode } from "@/components/cards/detail-toggle";
 import { Markdown } from "@/components/tutor/markdown";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,6 +55,8 @@ const CARD_TYPES = [
 type CardType = (typeof CARD_TYPES)[number]["id"];
 
 const NEW_DECK = "__new__";
+
+export { ImageField, type Attachment };
 
 export function CardBuilder({
   decks,
@@ -121,9 +124,11 @@ function BuilderForm({
   const [front, setFront] = useState<Attachment | null>(null);
   const [back, setBack] = useState<Attachment | null>(null);
   const [saving, setSaving] = useState(false);
+  const [mode, setMode] = useDetailMode();
 
+  const detailed = mode === "detailed";
   const creatingDeck = examId === NEW_DECK;
-  const cloze = cardType === "cloze";
+  const cloze = detailed && cardType === "cloze";
 
   async function save() {
     setSaving(true);
@@ -148,21 +153,27 @@ function BuilderForm({
         targetId = created.id;
       }
 
-      const result = await createCardAction({
-        examId: targetId,
-        topic,
-        question,
-        directAnswer: answer,
-        fullExplanation: explanation,
-        cardType,
-        professorEmphasis: emphasis,
-        starred: emphasis,
-        frontImagePath: front?.path ?? null,
-        backImagePath: back?.path ?? null,
-        essentialPoints: lines(essential),
-        optionalPoints: lines(optional),
-        commonMisconceptions: lines(misconceptions),
-      });
+      // Simple sends only what it shows, so a field filled in detailed mode
+      // and then hidden does not ride along unseen.
+      const result = await createCardAction(
+        detailed
+          ? {
+              examId: targetId,
+              topic,
+              question,
+              directAnswer: answer,
+              fullExplanation: explanation,
+              cardType,
+              professorEmphasis: emphasis,
+              starred: emphasis,
+              frontImagePath: front?.path ?? null,
+              backImagePath: back?.path ?? null,
+              essentialPoints: lines(essential),
+              optionalPoints: lines(optional),
+              commonMisconceptions: lines(misconceptions),
+            }
+          : { examId: targetId, question, directAnswer: answer },
+      );
 
       if (!result.ok) {
         for (const problem of result.problems) toast.error(problem);
@@ -179,7 +190,10 @@ function BuilderForm({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>New card</DialogTitle>
+        <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
+          <DialogTitle>New card</DialogTitle>
+          <DetailToggle value={mode} onChange={setMode} />
+        </div>
         <DialogDescription>
           Yours, not the model&apos;s — so regenerating this deck will leave it
           alone.
@@ -187,7 +201,7 @@ function BuilderForm({
       </DialogHeader>
 
       <div className="space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className={detailed ? "grid gap-3 sm:grid-cols-2" : "grid gap-3"}>
           <div className="space-y-1">
             <Label htmlFor="deck">Deck</Label>
             <Select value={examId} onValueChange={setExamId}>
@@ -205,15 +219,17 @@ function BuilderForm({
             </Select>
           </div>
 
-          <div className="space-y-1">
-            <Label htmlFor="topic">Topic</Label>
-            <Input
-              id="topic"
-              value={topic}
-              placeholder="e.g. ADH"
-              onChange={(event) => setTopic(event.target.value)}
-            />
-          </div>
+          {detailed ? (
+            <div className="space-y-1">
+              <Label htmlFor="topic">Topic</Label>
+              <Input
+                id="topic"
+                value={topic}
+                placeholder="e.g. Posterior pituitary"
+                onChange={(event) => setTopic(event.target.value)}
+              />
+            </div>
+          ) : null}
         </div>
 
         {creatingDeck ? (
@@ -228,43 +244,51 @@ function BuilderForm({
           </div>
         ) : null}
 
-        <div className="space-y-1">
-          <Label htmlFor="card-type">Card type</Label>
-          <Select
-            value={cardType}
-            onValueChange={(value) => setCardType(value as CardType)}
-          >
-            <SelectTrigger id="card-type">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {CARD_TYPES.map((type) => (
-                <SelectItem key={type.id} value={type.id}>
-                  {type.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {detailed ? (
+          <div className="space-y-1">
+            <Label htmlFor="card-type">Card type</Label>
+            <Select
+              value={cardType}
+              onValueChange={(value) => setCardType(value as CardType)}
+            >
+              <SelectTrigger id="card-type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CARD_TYPES.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>
+                    {type.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
 
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <Label htmlFor="question">
-              {cloze ? "Sentence, with {{the answer}} in braces" : "Question"}
+              {cloze
+                ? "Sentence, with {{the answer}} in braces"
+                : detailed
+                  ? "Question"
+                  : "Front"}
             </Label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => setPreview((current) => !current)}
-            >
-              <Eye className="size-3.5" />
-              {preview ? "Edit" : "Preview"}
-            </Button>
+            {detailed ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setPreview((current) => !current)}
+              >
+                <Eye className="size-3.5" />
+                {preview ? "Edit" : "Preview"}
+              </Button>
+            ) : null}
           </div>
 
-          {preview ? (
+          {detailed && preview ? (
             <div className="min-h-20 rounded-md border p-3">
               <Markdown>
                 {cloze ? clozeQuestion(question) : question || "_Nothing yet._"}
@@ -283,21 +307,26 @@ function BuilderForm({
               onChange={(event) => setQuestion(event.target.value)}
             />
           )}
-          <p className="text-muted-foreground text-xs">
-            Markdown works here, and $x$ for maths.
-          </p>
+          {detailed ? (
+            <p className="text-muted-foreground text-xs">
+              Markdown works here, and $x$ for maths.
+            </p>
+          ) : null}
         </div>
 
-        <ImageField
-          label="Image on the front"
-          examId={creatingDeck ? decks[0]?.id : examId}
-          value={front}
-          onChange={setFront}
-        />
+        {detailed ? (
+          <ImageField
+            label="Image on the front"
+            examId={creatingDeck ? decks[0]?.id : examId}
+            value={front}
+            onChange={setFront}
+          />
+        ) : null}
 
         <div className="space-y-1">
           <Label htmlFor="answer">
-            Answer{cloze ? " (optional — the braces already say it)" : ""}
+            {detailed ? "Answer" : "Back"}
+            {cloze ? " (optional — the braces already say it)" : ""}
           </Label>
           <Textarea
             id="answer"
@@ -308,72 +337,76 @@ function BuilderForm({
           />
         </div>
 
-        <div className="space-y-1">
-          <Label htmlFor="explanation">Explanation (optional)</Label>
-          <Textarea
-            id="explanation"
-            value={explanation}
-            rows={2}
-            placeholder="Why it works this way."
-            onChange={(event) => setExplanation(event.target.value)}
-          />
-        </div>
-
-        <ImageField
-          label="Image on the back"
-          examId={creatingDeck ? decks[0]?.id : examId}
-          value={back}
-          onChange={setBack}
-        />
-
-        <Button
-          type="button"
-          variant={emphasis ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setEmphasis((current) => !current)}
-        >
-          <Star className={emphasis ? "size-4 fill-current" : "size-4"} />
-          {emphasis ? "Professor emphasised" : "Mark professor emphasis"}
-        </Button>
-
-        <div className="space-y-2 rounded-md border p-3">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => setShowRubric((current) => !current)}
-          >
-            {showRubric ? "Hide rubric" : "Add a rubric (optional)"}
-          </Button>
-
-          {showRubric ? (
-            <div className="space-y-3">
-              <p className="text-muted-foreground text-xs">
-                One per line. Without a rubric, the answer itself is the
-                standard a typed answer is checked against.
-              </p>
-              <RubricField
-                id="essential"
-                label="Must include"
-                value={essential}
-                onChange={setEssential}
-              />
-              <RubricField
-                id="optional"
-                label="Worth credit, not required"
-                value={optional}
-                onChange={setOptional}
-              />
-              <RubricField
-                id="misconceptions"
-                label="Common wrong answers"
-                value={misconceptions}
-                onChange={setMisconceptions}
+        {detailed ? (
+          <>
+            <div className="space-y-1">
+              <Label htmlFor="explanation">Explanation (optional)</Label>
+              <Textarea
+                id="explanation"
+                value={explanation}
+                rows={2}
+                placeholder="Why it works this way."
+                onChange={(event) => setExplanation(event.target.value)}
               />
             </div>
-          ) : null}
-        </div>
+
+            <ImageField
+              label="Image on the back"
+              examId={creatingDeck ? decks[0]?.id : examId}
+              value={back}
+              onChange={setBack}
+            />
+
+            <Button
+              type="button"
+              variant={emphasis ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setEmphasis((current) => !current)}
+            >
+              <Star className={emphasis ? "size-4 fill-current" : "size-4"} />
+              {emphasis ? "Professor emphasised" : "Mark professor emphasis"}
+            </Button>
+
+            <div className="space-y-2 rounded-md border p-3">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={() => setShowRubric((current) => !current)}
+              >
+                {showRubric ? "Hide rubric" : "Add a rubric (optional)"}
+              </Button>
+
+              {showRubric ? (
+                <div className="space-y-3">
+                  <p className="text-muted-foreground text-xs">
+                    One per line. Without a rubric, the answer itself is the
+                    standard a typed answer is checked against.
+                  </p>
+                  <RubricField
+                    id="essential"
+                    label="Must include"
+                    value={essential}
+                    onChange={setEssential}
+                  />
+                  <RubricField
+                    id="optional"
+                    label="Worth credit, not required"
+                    value={optional}
+                    onChange={setOptional}
+                  />
+                  <RubricField
+                    id="misconceptions"
+                    label="Common wrong answers"
+                    value={misconceptions}
+                    onChange={setMisconceptions}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -390,18 +423,22 @@ type Attachment = { path: string; preview: string };
 
 function ImageField({
   label,
-  examId,
+  examId: knownExamId,
+  resolveExamId,
   value,
   onChange,
 }: {
   label: string;
   examId?: string;
+  /** For a deck that does not exist yet: creates it and returns its id. */
+  resolveExamId?: () => Promise<string | undefined>;
   value: Attachment | null;
   onChange: (value: Attachment | null) => void;
 }) {
   const [busy, setBusy] = useState(false);
 
   async function upload(file: File) {
+    const examId = knownExamId ?? (await resolveExamId?.());
     if (!examId) {
       toast.error("Choose a deck first, so the image has somewhere to live.");
       return;

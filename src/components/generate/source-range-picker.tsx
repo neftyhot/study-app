@@ -74,7 +74,7 @@ export function SourceRangePicker({
                   htmlFor={`include-${source.id}`}
                   className="block truncate text-sm font-normal"
                 >
-                  {decodeURIComponent(source.filename)}
+                  {displayName(source.filename)}
                 </Label>
                 {source.lastIndex > 0 ? (
                   <p className="text-muted-foreground text-xs tabular-nums">
@@ -161,6 +161,15 @@ export function SourceRangePicker({
       })}
     </div>
   );
+}
+
+/** Upload names arrive URL-encoded; a renamed file may hold a bare "%". */
+function displayName(filename: string): string {
+  try {
+    return decodeURIComponent(filename);
+  } catch {
+    return filename;
+  }
 }
 
 function clamp(value: string, source: SourceOption): number {

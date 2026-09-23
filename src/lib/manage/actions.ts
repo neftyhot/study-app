@@ -18,7 +18,10 @@ import {
   previewSourceFileDeletion,
   renameCourse,
   renameExam,
+  renameSourceFile,
   resetProgress,
+  updateCourse,
+  updateExam,
 } from "./index";
 
 /** Uploads live outside the database, so deletions have to reach the disk too. */
@@ -57,6 +60,31 @@ export async function renameExamAction(examId: string, title: string) {
   renameExam(db, examId, title);
   revalidatePath("/");
   revalidatePath(`/exams/${examId}`);
+}
+
+export async function updateCourseAction(
+  courseId: string,
+  input: { title: string; term: string },
+) {
+  updateCourse(db, courseId, input);
+  revalidatePath("/", "layout");
+}
+
+export async function updateExamAction(
+  examId: string,
+  input: { title: string; date: string; courseId: string },
+) {
+  updateExam(db, examId, input);
+  revalidatePath("/", "layout");
+}
+
+export async function renameSourceFileAction(
+  examId: string,
+  fileId: string,
+  filename: string,
+) {
+  renameSourceFile(db, fileId, filename);
+  revalidatePath("/exams/[examId]", "layout");
 }
 
 export async function sourceFileImpact(fileId: string) {

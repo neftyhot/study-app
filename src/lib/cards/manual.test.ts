@@ -24,6 +24,7 @@ import { clearGeneratedCards } from "@/lib/generate";
 import {
   CardInputError,
   createManualCard,
+  createManualCards,
   deleteCards,
   duplicateCards,
   frontOf,
@@ -280,5 +281,28 @@ describe("bulk actions", () => {
     expect(moveCards(db, [], otherExamId)).toEqual({ affected: 0 });
     expect(duplicateCards(db, [], otherExamId)).toEqual({ affected: 0 });
     expect(db.select().from(flashcards).all()).toHaveLength(2);
+  });
+});
+
+describe("createManualCards", () => {
+  it("writes a whole set and skips the blank row at the end", () => {
+    const result = createManualCards(db, examId, [
+      { question: "Mitral valve", directAnswer: "Left AV valve" },
+      { question: "Tricuspid valve", directAnswer: "Right AV valve" },
+      { question: "  ", directAnswer: "" },
+    ]);
+
+    expect(result).toEqual({ created: 2 });
+    expect(db.select().from(flashcards).where(eq(flashcards.examId, examId)).all()).toHaveLength(2);
+  });
+
+  it("writes nothing when any row is incomplete, and says which", () => {
+    const result = createManualCards(db, examId, [
+      { question: "Mitral valve", directAnswer: "Left AV valve" },
+      { question: "Tricuspid valve", directAnswer: "" },
+    ]);
+
+    expect("problems" in result && result.problems.map((p) => p.index)).toEqual([1]);
+    expect(db.select().from(flashcards).all()).toHaveLength(0);
   });
 });

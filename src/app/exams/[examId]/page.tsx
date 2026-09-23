@@ -14,6 +14,7 @@ import {
 import { GeneratePanel } from "@/components/generate/generate-panel";
 import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { ExamSettings } from "@/components/manage/exam-settings";
+import { EditExamDialog } from "@/components/manage/edit-dialogs";
 import { db } from "@/db";
 import { listDrills } from "@/lib/diagrams";
 import { latestJob } from "@/lib/generate/jobs";
@@ -26,6 +27,7 @@ import {
   getExam,
   getExamStats,
   getMasteryBreakdown,
+  listCoursesWithExams,
   listDiagnosedCards,
   loadPlanCards,
 } from "@/lib/queries";
@@ -56,6 +58,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
     diagnoses,
     planData,
     sources,
+    courses,
   ] = await Promise.all([
       getExamStats(examId),
       countAnswerSlides(examId),
@@ -65,6 +68,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       listDiagnosedCards(examId),
       loadPlanCards(examId),
       listAnswerSources(examId),
+      listCoursesWithExams(),
     ]);
 
   // What this deck has actually produced per slide so far, which is a better
@@ -94,6 +98,16 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
           <h1 className="text-2xl font-semibold tracking-tight">
             {exam.title}
           </h1>
+          <EditExamDialog
+            exam={{
+              id: exam.id,
+              title: exam.title,
+              date: exam.date,
+              courseId: exam.courseId,
+            }}
+            courses={courses.map((course) => ({ id: course.id, title: course.title }))}
+            size="icon-sm"
+          />
           <Badge variant="secondary">
             {exam.scopeMode === "objectives"
               ? "Study-guide focus"
