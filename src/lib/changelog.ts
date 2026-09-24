@@ -6,6 +6,15 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.2.3",
+    date: "2026-09-24",
+    notes: [
+      "Study plans pace themselves: pick your exam date and the days you'll study, and the plan works out how long each study day needs. Days off are respected, and if the deck won't fit it suggests what to skip.",
+      "Buying a licence opens checkout right from the app.",
+      "An updated privacy policy: sharing usage statistics is now required, and you'll be asked to agree once before continuing. Your study material still never leaves this computer.",
+    ],
+  },
+  {
     version: "0.2.2",
     date: "2026-09-23",
     notes: [
