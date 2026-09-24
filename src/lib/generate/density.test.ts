@@ -9,7 +9,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ADMIN_MAX_RATIO,
+  batchSizeFor,
+  blendYield,
   DENSITY_PRESETS,
+  isHighDensity,
+  MAX_CARDS_PER_BATCH,
   estimateCards,
   expectedFor,
   formatEstimate,
@@ -53,16 +58,33 @@ describe("ratioFor", () => {
 
 describe("expectedFor", () => {
   it("estimates from what a preset produces, not what it asks for", () => {
-    // Told one card a page, the model produced 1.4 on real lecture material;
-    // an estimate built on the request would be wrong before the run started.
+    // Real decks land below what the setting asks for; an estimate built on
+    // the request would be high before the run started.
     expect(expectedFor("standard")).toBe(DENSITY_PRESETS.standard.expectedPerUnit);
-    expect(expectedFor("standard")).toBeGreaterThan(
+    expect(expectedFor("standard")).toBeLessThan(
       DENSITY_PRESETS.standard.cardsPerUnit,
     );
   });
 
-  it("takes a custom ratio at its word", () => {
-    expect(expectedFor("custom", 2.2)).toBe(2.2);
+  it("scales a custom ratio by what the standard preset delivers", () => {
+    const delivered =
+      DENSITY_PRESETS.standard.expectedPerUnit /
+      DENSITY_PRESETS.standard.cardsPerUnit;
+    expect(expectedFor("custom", 2.2)).toBeCloseTo(2.2 * delivered);
+    expect(expectedFor("custom", 2.2)).toBeLessThan(2.2);
+  });
+
+  it("assumes about two-thirds of a high-density request arrives", () => {
+    expect(expectedFor("custom", 30)).toBeCloseTo(20);
+    // Ignores history: custom runs each ask for a different ratio.
+    expect(expectedFor("custom", 30, null, { cards: 100, units: 100 })).toBeCloseTo(20);
+  });
+
+  it("pulls toward this install's measured history", () => {
+    const measured = { cards: 100, units: 100 };
+    expect(expectedFor("standard", null, null, measured)).toBeCloseTo(
+      (DENSITY_PRESETS.standard.expectedPerUnit + 1) / 2,
+    );
   });
 
   it("keeps the presets in order, leanest first", () => {
@@ -163,5 +185,44 @@ describe("isDensityMode", () => {
     expect(isDensityMode("standard")).toBe(true);
     expect(isDensityMode("EXHAUSTIVE")).toBe(false);
     expect(isDensityMode(undefined)).toBe(false);
+  });
+});
+
+describe("blendYield", () => {
+  it("ignores missing or too-small history", () => {
+    expect(blendYield(0.7)).toBe(0.7);
+    expect(blendYield(0.7, { cards: 50, units: 19 })).toBe(0.7);
+  });
+
+  it("gives history half the weight at 100 units, more as it grows", () => {
+    expect(blendYield(0.5, { cards: 150, units: 100 })).toBeCloseTo(1);
+    const heavy = blendYield(0.5, { cards: 900, units: 600 });
+    expect(heavy).toBeGreaterThan(1.3);
+    expect(heavy).toBeLessThan(1.5);
+  });
+});
+
+describe("high density", () => {
+  it("is only a custom ratio above the basic ceiling", () => {
+    expect(isHighDensity("custom", MAX_RATIO)).toBe(false);
+    expect(isHighDensity("custom", MAX_RATIO + 0.1)).toBe(true);
+    expect(isHighDensity("custom", null)).toBe(false);
+    expect(isHighDensity("exhaustive", 30)).toBe(false);
+  });
+
+  it("clamps to whichever ceiling the server allows", () => {
+    expect(ratioFor("custom", 30)).toBe(MAX_RATIO);
+    expect(ratioFor("custom", 30, ADMIN_MAX_RATIO)).toBe(30);
+    expect(ratioFor("custom", 500, ADMIN_MAX_RATIO)).toBe(ADMIN_MAX_RATIO);
+  });
+
+  it("cuts batches so one reply never asks for more than it can hold", () => {
+    expect(batchSizeFor(30, 8)).toBe(1);
+    expect(batchSizeFor(10, 8)).toBe(4);
+    expect(batchSizeFor(5, 8)).toBe(8);
+    expect(batchSizeFor(1, 8)).toBe(8);
+    expect(batchSizeFor(ADMIN_MAX_RATIO, 8) * ADMIN_MAX_RATIO).toBeLessThanOrEqual(
+      MAX_CARDS_PER_BATCH,
+    );
   });
 });

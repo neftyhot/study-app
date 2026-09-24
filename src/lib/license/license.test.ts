@@ -451,7 +451,7 @@ describe("buying a license", () => {
 
   it("opens the Payment Link with this machine as the reference", () => {
     expect(purchase.purchaseUrl("8C1A2B3D-4E5F-6071-8293-A4B5C6D7E8F9")).toBe(
-      "https://buy.stripe.com/test_eVqbIU35hbtp0Kk0CB14400?client_reference_id=8C1A2B3D-4E5F-6071-8293-A4B5C6D7E8F9",
+      "https://buy.stripe.com/00w8wIeNXe89dCcfZraEE00?client_reference_id=8C1A2B3D-4E5F-6071-8293-A4B5C6D7E8F9",
     );
   });
 

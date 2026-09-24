@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
 import { SiteHeader } from "@/components/layout/site-header";
+import { PrivacyGate } from "@/components/privacy/privacy-gate";
 import { TimeTracker } from "@/components/layout/time-tracker";
 import { WhatsNew } from "@/components/layout/whats-new";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -10,7 +11,7 @@ import { db } from "@/db";
 import { APP_VERSION } from "@/lib/app-info";
 import { appearanceCss, THEME_IDS } from "@/lib/appearance";
 import { CHANGELOG } from "@/lib/changelog";
-import { readAppearance } from "@/lib/settings";
+import { hasAcceptedPrivacy, readAppearance } from "@/lib/settings";
 
 import "./globals.css";
 
@@ -71,15 +72,23 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           enableSystem
           disableTransitionOnChange
         >
-          <SiteHeader />
-          <WhatsNew
-            version={APP_VERSION}
-            notes={CHANGELOG.find((entry) => entry.version === APP_VERSION)?.notes ?? []}
-          />
-          <TimeTracker />
-          <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
-            {children}
-          </main>
+          {/* Nothing else — header, pages, time tracking — until the privacy
+              policy is agreed to; see privacy-policy.ts. */}
+          {hasAcceptedPrivacy(db) ? (
+            <>
+              <SiteHeader />
+              <WhatsNew
+                version={APP_VERSION}
+                notes={CHANGELOG.find((entry) => entry.version === APP_VERSION)?.notes ?? []}
+              />
+              <TimeTracker />
+              <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
+                {children}
+              </main>
+            </>
+          ) : (
+            <PrivacyGate />
+          )}
           <Toaster />
         </ThemeProvider>
       </body>

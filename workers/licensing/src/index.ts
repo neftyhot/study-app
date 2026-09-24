@@ -9,7 +9,7 @@
  *                          the signature itself, like any pasted key.
  *   GET  /success          Where the Payment Link redirects after paying:
  *                          shows the key, as a fallback to automatic delivery.
- *   POST /telemetry, /admin/*  Opted-in usage totals and the developer's
+ *   POST /telemetry, /admin/*  Usage totals (every install) and the developer's
  *                          view of them and of suggestions (insights.ts).
  *   POST /feedback         A feature suggestion from the app's settings.
  *                          Stored under `feedback:`; read in the License

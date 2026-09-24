@@ -22,7 +22,14 @@ import {
 import type { LlmProvider } from "@/lib/llm";
 import { estimateCost, formatCost } from "@/lib/llm/pricing";
 
-import { calibrationFor, type DensityMode } from "./density";
+import {
+  ADMIN_MAX_RATIO,
+  batchSizeFor,
+  calibrationFor,
+  isHighDensity,
+  ratioFor,
+  type DensityMode,
+} from "./density";
 import {
   fullCoveragePrompt,
   generationSystem,
@@ -141,6 +148,13 @@ export type GenerateOptions = {
   onProgress?: (progress: GenerationProgress) => void;
 };
 
+/**
+ * How alike two questions may be before a high-density run treats the second
+ * as a repeat. Stricter than the default because thirty cards a page is where
+ * rewordings creep in.
+ */
+const HIGH_DENSITY_SIMILARITY = 0.75;
+
 export async function generateCardsForExam(
   db: Db,
   llm: LlmProvider,
@@ -162,10 +176,12 @@ export async function generateCardsForExam(
   // The exam remembers its density, so a run started from anywhere behaves
   // the way the deck was last set up to behave.
   const density = options.density ?? exam.extractionDensity;
+  const densityRatio = options.densityRatio ?? exam.extractionRatio;
+  const highDensity = isHighDensity(density, densityRatio);
   const detail: GenerationDetail = options.detail ?? "lean";
   const system = generationSystem(
     density,
-    options.densityRatio ?? exam.extractionRatio,
+    densityRatio,
     detail,
     calibrationFor(llm.model).overshoot,
   );
@@ -181,8 +197,12 @@ export async function generateCardsForExam(
     );
   }
 
-  const batchSize =
+  const baseBatchSize =
     options.batchSize ?? calibrationFor(llm.model).batchSize ?? DEFAULT_BATCH_SIZE;
+  // An admin asking for thirty a page needs a reply that can hold them.
+  const batchSize = highDensity
+    ? batchSizeFor(ratioFor(density, densityRatio, ADMIN_MAX_RATIO), baseBatchSize)
+    : baseBatchSize;
   const allBatches = batchSlides(slides, batchSize);
 
   // Study-guide runs show each batch only the objectives its pages are likely
@@ -209,14 +229,23 @@ export async function generateCardsForExam(
 
   // Deduplicate against what is already stored, so re-running generation adds
   // to the deck instead of duplicating it.
-  const existingQuestions = new Set(
-    db
-      .select({ question: flashcards.question })
-      .from(flashcards)
-      .where(eq(flashcards.examId, examId))
-      .all()
-      .map((row) => row.question),
-  );
+  const existingRows = db
+    .select({ question: flashcards.question, slideId: flashcards.sourceSlideId })
+    .from(flashcards)
+    .where(eq(flashcards.examId, examId))
+    .all();
+  const existingQuestions = new Set(existingRows.map((row) => row.question));
+
+  // The same, by slide, for the prompt's "already covered" list: a re-run or
+  // a high-density run is told what the deck has so it adds rather than
+  // rephrases.
+  const coveredBySlide = new Map<string, string[]>();
+  for (const row of existingRows) {
+    if (!row.slideId) continue;
+    const list = coveredBySlide.get(row.slideId) ?? [];
+    list.push(row.question);
+    coveredBySlide.set(row.slideId, list);
+  }
 
   const rejections: Rejection[] = [];
   const failedBatches: { batch: number; error: string }[] = [];
@@ -249,7 +278,10 @@ export async function generateCardsForExam(
   await Promise.all(
     work.map(({ batch, objectives: batchObjectives }, batchIndex) =>
       limit(async () => {
-        const promptOptions = { includeApplication: exam.includeApplication };
+        const promptOptions = {
+          includeApplication: exam.includeApplication,
+          covered: batch.flatMap((slide) => coveredBySlide.get(slide.id) ?? []),
+        };
         const prompt =
           exam.scopeMode === "objectives"
             ? objectiveFocusPrompt(batch, batchObjectives, promptOptions)
@@ -269,6 +301,8 @@ export async function generateCardsForExam(
 
           const result = validateCards(data.cards ?? [], batch, {
             existingQuestions,
+            // Near-duplicates are the failure mode of asking for many cards.
+            similarity: highDensity ? HIGH_DENSITY_SIMILARITY : undefined,
           });
 
           // Safe without a lock: JavaScript runs one of these at a time, and

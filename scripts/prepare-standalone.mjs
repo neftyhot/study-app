@@ -28,6 +28,12 @@ async function main() {
     );
   }
 
+  // `next build` copies .env files into the standalone output, and anything in
+  // there ships inside the app. Secrets (like a Stripe key) must never do that.
+  for (const name of [".env", ".env.local", ".env.production", ".env.production.local"]) {
+    await rm(join(standalone, name), { force: true });
+  }
+
   await mkdir(join(standalone, ".next"), { recursive: true });
   await cp(join(root, ".next", "static"), join(standalone, ".next", "static"), {
     recursive: true,

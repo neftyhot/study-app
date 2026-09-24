@@ -17,7 +17,8 @@ import { ExamSettings } from "@/components/manage/exam-settings";
 import { EditExamDialog } from "@/components/manage/edit-dialogs";
 import { db } from "@/db";
 import { listDrills } from "@/lib/diagrams";
-import { latestJob } from "@/lib/generate/jobs";
+import { latestJob, measuredYields } from "@/lib/generate/jobs";
+import { readLicenseStatus } from "@/lib/license/status";
 import { bulkModelName } from "@/lib/llm";
 import {
   countAnswerSlides,
@@ -81,7 +82,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   const plan = buildPlan({
     cards: planData.cards,
     examDate: exam.date,
-    dailyMinutes: exam.dailyMinutes,
+    studyDays: exam.studyDays,
     hasCoverage: planData.hasCoverage,
   });
 
@@ -173,16 +174,18 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
             <CardTitle className="flex flex-wrap items-center gap-2 text-base">
               Today
               <Badge variant="secondary">
-                about {formatMinutes(plan.today.minutes)}
+                {plan.today.studyDay
+                  ? `about ${formatMinutes(plan.today.minutes)}`
+                  : "Day off"}
               </Badge>
-              {plan.daysLeft !== null ? (
+              {plan.daysLeft !== null && plan.studyDaysLeft !== null ? (
                 <Badge variant="outline">
                   {plan.daysLeft === 0
                     ? "Exam today"
-                    : `${plan.daysLeft} day${plan.daysLeft === 1 ? "" : "s"} to go`}
+                    : `${plan.studyDaysLeft} study day${plan.studyDaysLeft === 1 ? "" : "s"} left`}
                 </Badge>
               ) : null}
-              {plan.workload.deficitMinutes ? (
+              {plan.overloaded ? (
                 <Badge variant="destructive">More material than time</Badge>
               ) : null}
             </CardTitle>
@@ -194,7 +197,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
                 ? ` · ${plan.today.fresh} new concept${plan.today.fresh === 1 ? "" : "s"}`
                 : ""}
               {plan.today.struggling > 0
-                ? ` · ${plan.today.struggling} stuck`
+                ? ` · ${plan.today.struggling} keep going wrong`
                 : ""}
               {mastery.studied > 0
                 ? ` · ${mastery.retained} retained across days`
@@ -236,6 +239,8 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         densityRatio={exam.extractionRatio}
         observedRatio={observedRatio}
         bulkModel={bulkModelName()}
+        measured={measuredYields(db, bulkModelName())}
+        isAdmin={readLicenseStatus()?.type === "admin"}
         initialJob={
           job
             ? {

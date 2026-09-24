@@ -35,7 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ratioFor, type DensityMode } from "@/lib/generate/density";
+import {
+  ratioFor,
+  type DensityMode,
+  type MeasuredYield,
+} from "@/lib/generate/density";
 import {
   defaultChoices,
   selectedUnits,
@@ -109,6 +113,8 @@ export function GeneratePanel({
   densityRatio,
   observedRatio,
   bulkModel = null,
+  measured,
+  isAdmin = false,
 }: {
   examId: string;
   scopeMode: "files" | "objectives";
@@ -122,6 +128,10 @@ export function GeneratePanel({
   observedRatio: number | null;
   /** The model bulk generation runs on, for a calibrated estimate. */
   bulkModel?: string | null;
+  /** This install's finished runs on that model, per density. */
+  measured?: Partial<Record<DensityMode, MeasuredYield>>;
+  /** An admin licence gets exact number inputs and a higher ceiling. */
+  isAdmin?: boolean;
   /** A run already in flight, so the panel comes back mid-generation. */
   initialJob: GenerationJobView | null;
   /** PRD §9 higher-order questions, persisted on the exam. */
@@ -360,6 +370,8 @@ export function GeneratePanel({
               disabled={disabled}
               observedRatio={observedRatio}
               model={bulkModel}
+              measured={measured}
+              isAdmin={isAdmin}
             />
             <p className="text-muted-foreground text-xs">
               {chosenUnits === 0

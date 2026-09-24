@@ -7,8 +7,9 @@
  * duration, success. Never a prompt, a reply, or anything from the
  * student's material.
  *
- * Off unless switched on (onboarding, or Settings). Logging must never
- * break the call it is logging, so every write is best-effort.
+ * On once the privacy policy, which makes these statistics mandatory, has
+ * been agreed to. Logging must never break the call it is logging, so every
+ * write is best-effort.
  */
 import { createClient, type Db } from "@/db/client";
 import { usageEvents } from "@/db/schema";
@@ -19,19 +20,14 @@ import type {
   StructuredRequest,
   StructuredResult,
 } from "@/lib/llm/types";
-import { readSetting, writeSetting } from "@/lib/settings";
-
-export const USAGE_LOGGING_SETTING = "usage_logging";
+import { hasAcceptedPrivacy } from "@/lib/settings";
 
 /** How a call was paid for, so free-quota calls are not read as spend. */
 export type AuthMode = "google_oauth" | "api_key" | "env_key" | "local";
 
+/** Mandatory under the privacy policy, so on exactly when it has been agreed to. */
 export function isUsageLoggingEnabled(db?: Db): boolean {
-  return readSetting(USAGE_LOGGING_SETTING, db) === "1";
-}
-
-export function setUsageLogging(enabled: boolean, db?: Db) {
-  writeSetting(USAGE_LOGGING_SETTING, enabled ? "1" : "0", db);
+  return hasAcceptedPrivacy(db);
 }
 
 export type UsageRecord = {
@@ -45,7 +41,7 @@ export type UsageRecord = {
   success: boolean;
 };
 
-/** Writes one row if the student has opted in. Never throws. */
+/** Writes one row once the privacy policy is agreed to. Never throws. */
 export function recordUsage(record: UsageRecord, db?: Db) {
   try {
     const target = db ?? sharedClient();

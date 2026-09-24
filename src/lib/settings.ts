@@ -26,6 +26,7 @@ import {
   isStrictness,
   type Strictness,
 } from "@/lib/grade/strictness";
+import { PRIVACY_POLICY_VERSION } from "@/lib/privacy-policy";
 import {
   PROVIDERS,
   type DownloadState,
@@ -41,6 +42,7 @@ export const SETTING = {
   localModelId: "local_model_id",
   localModelPath: "local_model_path",
   download: "model_download",
+  privacyAccepted: "privacy_policy_accepted",
 } as const;
 
 const KEY_SETTING: Record<Exclude<ProviderId, "local">, string> = {
@@ -224,6 +226,17 @@ export function isSetupComplete(db?: Db): boolean {
 
 export function markSetupComplete(db?: Db) {
   writeSetting(SETTING.setupComplete, "1", db);
+}
+
+/* ---------------------------------------------------------------- Privacy */
+
+/** Whether the current privacy policy has been agreed to; the app waits until it is. */
+export function hasAcceptedPrivacy(db?: Db): boolean {
+  return readSetting(SETTING.privacyAccepted, db) === PRIVACY_POLICY_VERSION;
+}
+
+export function acceptPrivacy(db?: Db) {
+  writeSetting(SETTING.privacyAccepted, PRIVACY_POLICY_VERSION, db);
 }
 
 /**

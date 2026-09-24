@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { CalendarClock, Scissors, TriangleAlert } from "lucide-react";
+import { CalendarClock, Coffee, Scissors, TriangleAlert } from "lucide-react";
 
 import { ScheduleForm } from "@/components/plan/schedule-form";
 import { StartToday } from "@/components/plan/start-today";
@@ -14,7 +14,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { buildPlan, formatMinutes } from "@/lib/plan";
+import { Separator } from "@/components/ui/separator";
+import {
+  buildPlan,
+  describeStudyDays,
+  formatMinutes,
+  MAX_DAILY_MINUTES,
+  type StudyPlan,
+} from "@/lib/plan";
 import { getExam, loadPlanCards } from "@/lib/queries";
 
 export default async function PlanPage(
@@ -28,7 +35,7 @@ export default async function PlanPage(
   const plan = buildPlan({
     cards,
     examDate: exam.date,
-    dailyMinutes: exam.dailyMinutes,
+    studyDays: exam.studyDays,
     hasCoverage,
   });
 
@@ -47,170 +54,235 @@ export default async function PlanPage(
           ← {exam.title}
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">Study plan</h1>
-        <p className="text-muted-foreground text-sm">
-          What today should hold, and whether the days left are enough for
-          what is left.
-        </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Your schedule</CardTitle>
+          <CardTitle className="text-lg leading-snug font-normal">
+            <Headline plan={plan} />
+          </CardTitle>
+          <CardDescription>
+            {plan.totals.learned} of {plan.totals.cards} cards started
+            {plan.studyDaysLeft !== null && plan.studyDaysLeft > 0
+              ? ` · ${plural(plan.studyDaysLeft, "study day")} left`
+              : ""}
+          </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-5">
+          <Progress value={learnedShare} />
+          <Separator />
           <ScheduleForm
             examId={examId}
             date={exam.date}
-            dailyMinutes={exam.dailyMinutes}
+            studyDays={exam.studyDays}
           />
+          <p className="text-muted-foreground text-xs">
+            Pick the days you&apos;ll study. The time each day needs is worked
+            out from how much of the deck is left and how many study days there
+            are before the exam.
+          </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            <CalendarClock className="size-4" />
+            {plan.today.studyDay ? (
+              <CalendarClock className="size-4" />
+            ) : (
+              <Coffee className="size-4" />
+            )}
             Today
-            <Badge variant="secondary">
-              about {formatMinutes(plan.today.minutes)}
-            </Badge>
-            {plan.daysLeft !== null ? (
-              <Badge variant="outline">
-                {plan.daysLeft === 0
-                  ? "Exam today"
-                  : `${plan.daysLeft} day${plan.daysLeft === 1 ? "" : "s"} to go`}
+            {plan.today.minutes > 0 ? (
+              <Badge variant="secondary">
+                about {formatMinutes(plan.today.minutes)}
               </Badge>
             ) : null}
           </CardTitle>
-          <CardDescription>
-            Reviews come first — a review skipped today costs more than a card
-            not started today.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Slice label="Reviews due" value={plan.today.due} href={`/exams/${examId}/study`} />
-            <Slice label="Stuck cards" value={plan.today.struggling} href={`/exams/${examId}/learn`} />
-            <Slice label="New concepts" value={plan.today.fresh} href={`/exams/${examId}/learn`} />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <StartToday examId={examId} due={plan.today.due} />
-            {plan.today.fresh > 0 ? (
-              <Button asChild variant={plan.today.due > 0 ? "outline" : "default"}>
-                <Link href={`/exams/${examId}/learn`}>
-                  Learn {plan.today.fresh} new concept
-                  {plan.today.fresh === 1 ? "" : "s"}
-                </Link>
-              </Button>
-            ) : null}
-          </div>
-
-          {plan.today.reviewsFillTheDay ? (
-            <p className="text-muted-foreground text-sm">
-              Reviews alone use today&apos;s time, so nothing new is scheduled.
-              That is the right call — but if this keeps happening, the deck is
-              growing faster than it is being learned.
-            </p>
+          {!plan.today.studyDay ? (
+            <CardDescription>
+              Day off. Nothing new is scheduled
+              {plan.today.due > 0
+                ? `, though ${plural(plan.today.due, "review")} ${plan.today.due === 1 ? "is" : "are"} due if you want to get ahead.`
+                : "."}
+            </CardDescription>
+          ) : plan.today.due === 0 && plan.today.fresh === 0 ? (
+            <CardDescription>Nothing to do today. You&apos;re caught up.</CardDescription>
           ) : null}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Where the deck stands</CardTitle>
-          <CardDescription>
-            {plan.totals.learned} of {plan.totals.cards} cards started ·{" "}
-            {plan.totals.unstudied} not yet seen ·{" "}
-            {plan.totals.struggling} keep going wrong
-          </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <Progress value={learnedShare} />
-
-          {plan.workload.capacity === null ? (
-            <p className="text-muted-foreground text-sm">
-              Set an exam date above and this will tell you whether the time
-              left is enough.
-            </p>
-          ) : (
-            <p className="text-sm">
-              About <strong>{formatMinutes(plan.workload.minutes)}</strong> of
-              work remains, including the reviews it will generate. You have{" "}
-              <strong>{formatMinutes(plan.workload.capacity)}</strong> before
-              the exam.
-            </p>
-          )}
-        </CardContent>
+        {plan.today.due > 0 || plan.today.fresh > 0 ? (
+          <CardContent className="space-y-3">
+            <ol className="space-y-2 text-sm">
+              {plan.today.due > 0 ? (
+                <li>
+                  <strong>1.</strong> Review {plural(plan.today.due, "card")}
+                  {plan.today.struggling > 0
+                    ? ` (${plan.today.struggling} you keep missing)`
+                    : ""}
+                </li>
+              ) : null}
+              {plan.today.fresh > 0 ? (
+                <li>
+                  <strong>{plan.today.due > 0 ? "2." : "1."}</strong> Learn{" "}
+                  {plural(plan.today.fresh, "new card")}
+                </li>
+              ) : null}
+            </ol>
+            <div className="flex flex-wrap gap-2">
+              <StartToday examId={examId} due={plan.today.due} />
+              {plan.today.fresh > 0 ? (
+                <Button
+                  asChild
+                  variant={plan.today.due > 0 ? "outline" : "default"}
+                >
+                  <Link href={`/exams/${examId}/learn`}>
+                    Learn {plan.today.fresh} new
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        ) : null}
       </Card>
 
-      {plan.workload.deficitMinutes !== null &&
-      plan.workload.deficitMinutes > 0 ? (
+      {plan.overloaded && plan.cuts.length > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <TriangleAlert className="size-4" />
-              There is more material than time
+              What to skip
             </CardTitle>
             <CardDescription>
-              Short by about {formatMinutes(plan.workload.deficitMinutes)}.
-              Finishing everything would take{" "}
-              {plan.workload.requiredDailyMinutes === null
-                ? "more time than remains"
-                : `${formatMinutes(plan.workload.requiredDailyMinutes)} a day`}
-              . Better to choose what to drop than to run out of days with the
-              last topic untouched.
+              {plan.workload.unreachedByExam
+                ? `${plural(plan.workload.unreachedByExam, "card")} won't be reached in time. `
+                : ""}
+              Choosing what to drop now beats running out of days with the last
+              topic untouched. Nothing is deleted.
             </CardDescription>
           </CardHeader>
+          <CardContent className="space-y-3">
+            {plan.cuts.map((cut) => (
+              <div key={cut.id} className="rounded-md border p-3">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                  <Scissors className="size-3.5" />
+                  {cut.label}
+                  <Badge variant="outline">
+                    saves about {formatMinutes(cut.minutesSaved)}
+                  </Badge>
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs">
+                  {cut.detail} ({plural(cut.cards, "card")})
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
-          {plan.cuts.length > 0 ? (
-            <CardContent className="space-y-3">
-              {plan.cuts.map((cut) => (
-                <div key={cut.id} className="rounded-md border p-3">
-                  <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                    <Scissors className="size-3.5" />
-                    {cut.label}
-                    <Badge variant="outline">
-                      saves about {formatMinutes(cut.minutesSaved)}
-                    </Badge>
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {cut.detail} ({cut.cards} card
-                    {cut.cards === 1 ? "" : "s"})
-                  </p>
-                </div>
+      {plan.days.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">The days ahead</CardTitle>
+            <CardDescription>
+              Later days get lighter as cards stick. The last study day is kept
+              for review.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="max-h-96 divide-y overflow-auto rounded-md border text-sm">
+              {plan.days.map((day, index) => (
+                <li
+                  key={day.date}
+                  className={
+                    day.off
+                      ? "text-muted-foreground flex justify-between gap-3 px-3 py-2"
+                      : "flex justify-between gap-3 px-3 py-2"
+                  }
+                >
+                  <span className="w-24 shrink-0 font-medium">
+                    {index === 0 ? "Today" : formatDate(day.date)}
+                  </span>
+                  <span className="flex-1">{describeDay(day)}</span>
+                  <span className="tabular-nums">
+                    {day.off || day.minutes === 0 ? "" : formatMinutes(day.minutes)}
+                  </span>
+                </li>
               ))}
-              <p className="text-muted-foreground text-xs">
-                Nothing is deleted by choosing one of these — exclude those
-                cards from the deck when you are ready, or simply study the
-                rest first.
-              </p>
-            </CardContent>
-          ) : null}
+              {plan.examDate !== null ? (
+                <li className="flex gap-3 px-3 py-2 font-medium">
+                  <span className="w-24 shrink-0">{formatDate(plan.examDate)}</span>
+                  <span>Exam</span>
+                </li>
+              ) : null}
+            </ul>
+          </CardContent>
         </Card>
       ) : null}
     </div>
   );
 }
 
-function Slice({
-  label,
-  value,
-  href,
-}: {
-  label: string;
-  value: number;
-  href: string;
-}) {
+/** The one sentence the page exists to say. */
+function Headline({ plan }: { plan: StudyPlan }) {
+  const days = describeStudyDays(plan.studyDays);
+
+  if (plan.examDate === null || plan.daysLeft === null) {
+    return (
+      <>
+        Set your exam date and the days you&apos;ll study, and the plan will
+        work out how long each day needs.
+      </>
+    );
+  }
+  if (plan.daysLeft === 0) {
+    return <>Exam day. Just go over anything that&apos;s due. Good luck!</>;
+  }
+  if (plan.totals.unstudied === 0 && plan.totals.due === 0 && plan.dailyMinutes === 0) {
+    return <>You&apos;ve started every card. Keep up with reviews as they come due.</>;
+  }
+  if (plan.studyDaysLeft === 0) {
+    return (
+      <>
+        None of your study days ({days}) fall before the exam on{" "}
+        {formatDate(plan.examDate)}. Turn on another day below.
+      </>
+    );
+  }
+  if (plan.overloaded) {
+    return (
+      <>
+        Even <strong>{formatMinutes(MAX_DAILY_MINUTES)}</strong> a day won&apos;t
+        cover the whole deck by {formatDate(plan.examDate)}. Add study days or
+        choose what to skip.
+      </>
+    );
+  }
   return (
-    <div className="rounded-md border p-3">
-      <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="text-2xl font-semibold tabular-nums">{value}</p>
-      {value > 0 ? (
-        <Button asChild variant="ghost" size="sm" className="mt-1 h-7 px-2 text-xs">
-          <Link href={href}>Start</Link>
-        </Button>
-      ) : null}
-    </div>
+    <>
+      Study about <strong>{formatMinutes(plan.dailyMinutes)}</strong> on each
+      study day ({days}) to be ready by {formatDate(plan.examDate)}.
+    </>
   );
+}
+
+function describeDay(day: StudyPlan["days"][number]): string {
+  if (day.off) return "Day off";
+  const parts = [];
+  if (day.reviews > 0) parts.push(plural(day.reviews, "review"));
+  if (day.fresh > 0) parts.push(`${day.fresh} new`);
+  return parts.length > 0 ? parts.join(" · ") : "Nothing due";
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** A YYYY-MM-DD date as "Thu, Oct 1", read as a calendar day (never UTC-shifted). */
+function formatDate(iso: string): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
 }

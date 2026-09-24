@@ -58,8 +58,16 @@ export const exams = sqliteTable(
     scopeMode: text("scope_mode", { enum: ["files", "objectives"] })
       .notNull()
       .default("files"),
-    /** Minutes the student can give this deck on an ordinary day (PRD §12). */
+    /**
+     * Legacy: minutes a day the student used to pick. The plan now works the
+     * daily time out itself, so this is cleared and no longer written.
+     */
     dailyMinutes: integer("daily_minutes"),
+    /**
+     * The weekdays the student will study this deck, as a bitmask with bit 0
+     * for Sunday. 127 is every day.
+     */
+    studyDays: integer("study_days").notNull().default(127),
     /**
      * Whether generation also produces higher-order application cards
      * (PRD §9). Off by default: they are worth more once the underlying

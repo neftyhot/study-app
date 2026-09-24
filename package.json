@@ -99,6 +99,8 @@
       "!licenses.json",
       "!revocations.json",
       "!.license-private-key.pem",
+      "!**/.env",
+      "!**/.env.*",
       "package.json"
     ],
     "extraMetadata": {

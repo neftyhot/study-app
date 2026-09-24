@@ -12,7 +12,16 @@
 
 /* ------------------------------------------------------------------ Styles */
 
-export const THEME_IDS = ["light", "dark", "bubble", "midnight", "sepia"] as const;
+export const THEME_IDS = [
+  "light",
+  "dark",
+  "bubble",
+  "midnight",
+  "sepia",
+  "mint",
+  "sage",
+  "forest",
+] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
 export type Palette = {
@@ -91,6 +100,36 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     font: "serif",
     cardStyle: "outline",
     palette: { background: "#f4ecd8", foreground: "#3b2f1e", card: "#fbf6ea", primary: "#8a5a2b" },
+  },
+  mint: {
+    id: "mint",
+    label: "Mint",
+    blurb: "Fresh and green, with soft rounded cards.",
+    dark: false,
+    radius: 1,
+    font: "rounded",
+    cardStyle: "shadow",
+    palette: { background: "#effaf4", foreground: "#12352a", card: "#ffffff", primary: "#0d8a5c" },
+  },
+  sage: {
+    id: "sage",
+    label: "Sage",
+    blurb: "Muted herb green, calm for long sessions.",
+    dark: false,
+    radius: 0.75,
+    font: "sans",
+    cardStyle: "outline",
+    palette: { background: "#eef1e8", foreground: "#26352a", card: "#f8faf4", primary: "#4f6e44" },
+  },
+  forest: {
+    id: "forest",
+    label: "Forest",
+    blurb: "Deep evergreen for studying at night.",
+    dark: true,
+    radius: 1,
+    font: "rounded",
+    cardStyle: "shadow",
+    palette: { background: "#0b1f16", foreground: "#e9f6ee", card: "#173528", primary: "#4fd18b" },
   },
 };
 

@@ -40,24 +40,24 @@ export const DENSITY_PRESETS: Record<
   high_yield: {
     label: "High-yield cram",
     cardsPerUnit: 0.3,
-    // Endocrine chapter, 96 pages: 64 cards.
-    expectedPerUnit: 0.6,
+    // Bench: 64 cards on a 96-page chapter; real decks land at about half.
+    expectedPerUnit: 0.3,
     blurb:
       "Objectives, bolded emphasis and summary tables only. Related sub-points are folded into one synthesis card.",
   },
   standard: {
     label: "Standard",
     cardsPerUnit: 1,
-    // Endocrine chapter, 96 pages: 138 cards.
-    expectedPerUnit: 1.4,
+    // Bench: 138 cards on a 96-page chapter; real decks land at about half.
+    expectedPerUnit: 0.7,
     blurb:
       "Core definitions, mechanisms and relationships. Conversational and repeated bullets are skipped.",
   },
   exhaustive: {
     label: "Exhaustive",
     cardsPerUnit: 2.5,
-    // Endocrine chapter: 321 cards; whole 314-page deck: 867.
-    expectedPerUnit: 3,
+    // Bench: 321 cards on a 96-page chapter; real decks land at about half.
+    expectedPerUnit: 1.5,
     blurb:
       "Every testable detail, every sub-bullet, every step of every pathway. This is what the deck did before this setting existed.",
   },
@@ -103,13 +103,28 @@ export const MODEL_CALIBRATION: Record<string, ModelCalibration> = {
     // lands on it.
     overshoot: 0.5,
     batchSize: 8,
-    // 56, 91 and 200 cards, each in 5-8 seconds.
-    expectedPerUnit: { high_yield: 0.6, standard: 0.95, exhaustive: 2.1 },
+    // The bench (one dense 96-page chapter) measured 0.6, 0.95 and 2.1 a
+    // page, and the estimate built on it ran about twice what arrived. Real
+    // decks (632 units of lecture slides and objectives, exhaustive) produced
+    // 1.0 accepted cards a unit, so these are the field numbers, scaled down
+    // from the bench in the same proportion.
+    expectedPerUnit: { high_yield: 0.3, standard: 0.5, exhaustive: 1 },
   },
 };
 
-/** The calibration measured first, used for any model not yet measured. */
-const FALLBACK_CALIBRATION = MODEL_CALIBRATION["gemini-2.5-flash"];
+/**
+ * For any model not yet measured: gemini-2.5-flash's overshoot, since that is
+ * the model most prompts were tuned against, but yields halved, because every
+ * bench figure has come in at about twice what real decks produce.
+ */
+const FALLBACK_CALIBRATION: ModelCalibration = {
+  overshoot: MODEL_CALIBRATION["gemini-2.5-flash"].overshoot,
+  expectedPerUnit: {
+    high_yield: DENSITY_PRESETS.high_yield.expectedPerUnit,
+    standard: DENSITY_PRESETS.standard.expectedPerUnit,
+    exhaustive: DENSITY_PRESETS.exhaustive.expectedPerUnit,
+  },
+};
 
 export function calibrationFor(model?: string | null): ModelCalibration {
   return (model && MODEL_CALIBRATION[model]) || FALLBACK_CALIBRATION;
@@ -119,6 +134,30 @@ export function calibrationFor(model?: string | null): ModelCalibration {
 export const MIN_RATIO = 0.1;
 export const MAX_RATIO = 4;
 
+/**
+ * The ceiling on an admin licence. Above `MAX_RATIO` a run changes character
+ * (see `isHighDensity`): it asks for an exact count, cuts batches small enough
+ * for the model to write that many, and lists what is already covered so the
+ * extra cards come from new angles instead of rephrasing.
+ */
+export const ADMIN_MAX_RATIO = 40;
+
+/** A custom ratio only an admin licence can ask for. */
+export function isHighDensity(mode: DensityMode, ratio?: number | null): boolean {
+  return mode === "custom" && typeof ratio === "number" && ratio > MAX_RATIO;
+}
+
+/**
+ * Cards one request is asked to write, at most. A lean card is roughly 150
+ * output tokens, and 8,192 is the smallest output limit among the providers.
+ */
+export const MAX_CARDS_PER_BATCH = 40;
+
+/** Pages per request for a ratio, so a high ratio stays within one reply. */
+export function batchSizeFor(ratio: number, base: number): number {
+  return Math.max(1, Math.min(base, Math.floor(MAX_CARDS_PER_BATCH / ratio)));
+}
+
 export function isDensityMode(value: unknown): value is DensityMode {
   return (
     typeof value === "string" &&
@@ -127,10 +166,15 @@ export function isDensityMode(value: unknown): value is DensityMode {
 }
 
 /** The cards-per-unit a mode implies, with `custom` supplying its own. */
-export function ratioFor(mode: DensityMode, custom?: number | null): number {
+export function ratioFor(
+  mode: DensityMode,
+  custom?: number | null,
+  /** `ADMIN_MAX_RATIO` for an admin licence; the server decides which. */
+  max: number = MAX_RATIO,
+): number {
   if (mode === "custom") {
     const ratio = typeof custom === "number" ? custom : DENSITY_PRESETS.standard.cardsPerUnit;
-    return Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio));
+    return Math.min(max, Math.max(MIN_RATIO, ratio));
   }
   return DENSITY_PRESETS[mode].cardsPerUnit;
 }
@@ -138,27 +182,71 @@ export function ratioFor(mode: DensityMode, custom?: number | null): number {
 /**
  * What a setting is expected to produce per unit, for the estimate.
  *
- * A custom ratio is the student's own statement of what they want, so it is
- * taken at its word; the observed average shown beside the estimate is what
- * corrects it after the first run.
+ * A custom ratio is what the student asked for, and models deliver a steady
+ * fraction of what they are asked: the fraction the standard preset gets
+ * (asked 1 a page, flash-lite delivers about 0.5). Taking the request at its
+ * word is what made the custom estimate run about double.
+ *
+ * An admin ratio above `MAX_RATIO` is stated to the model as an exact count
+ * rather than scaled by its overshoot, so the delivered fraction above does
+ * not apply; runs like that are unmeasured, and dense slides tend to run out
+ * of distinct facts first, so the estimate assumes about two-thirds arrive.
+ *
+ * `measured` is this install's own history for the setting, which corrects
+ * the calibration as runs accumulate. It is per preset only: custom runs ask
+ * for different ratios, so their history does not describe the next one.
  */
 export function expectedFor(
   mode: DensityMode,
   custom?: number | null,
   model?: string | null,
+  measured?: MeasuredYield | null,
 ): number {
-  if (mode === "custom") return ratioFor(mode, custom);
-  return model
-    ? calibrationFor(model).expectedPerUnit[mode]
-    : DENSITY_PRESETS[mode].expectedPerUnit;
+  const calibration = model ? calibrationFor(model).expectedPerUnit : null;
+  if (isHighDensity(mode, custom)) {
+    return ratioFor(mode, custom, ADMIN_MAX_RATIO) * HIGH_DENSITY_DELIVERED;
+  }
+  if (mode === "custom") {
+    const standardYield =
+      calibration?.standard ?? DENSITY_PRESETS.standard.expectedPerUnit;
+    const delivered = standardYield / DENSITY_PRESETS.standard.cardsPerUnit;
+    return blendYield(ratioFor(mode, custom) * delivered, measured);
+  }
+  return blendYield(
+    calibration ? calibration[mode] : DENSITY_PRESETS[mode].expectedPerUnit,
+    measured,
+  );
+}
+
+const HIGH_DENSITY_DELIVERED = 2 / 3;
+
+/** What finished runs on this install actually produced, per setting. */
+export type MeasuredYield = { cards: number; units: number };
+
+/** Below this many units, a run says more about the file than the setting. */
+export const MIN_MEASURED_UNITS = 20;
+
+/**
+ * Pull a calibrated yield toward what this install has really produced.
+ *
+ * The calibration comes from one bench chapter; the history comes from the
+ * student's own decks, so it wins as it grows: at 100 units it carries half
+ * the weight, at 600 about six-sevenths.
+ */
+export function blendYield(
+  calibrated: number,
+  measured?: MeasuredYield | null,
+): number {
+  if (!measured || measured.units < MIN_MEASURED_UNITS) return calibrated;
+  const weight = measured.units / (measured.units + 100);
+  return calibrated * (1 - weight) + (measured.cards / measured.units) * weight;
 }
 
 /**
  * A range, not a number.
  *
- * The spread is deliberately wide and asymmetric: material varies far more
- * than the setting does, and a dense slide produces several cards whatever it
- * is set to.
+ * Centred on what arrives rather than skewed high: an estimate that is always
+ * above the result reads as a broken promise. Rejected cards never count.
  */
 export function estimateCards(
   units: number,
@@ -166,8 +254,8 @@ export function estimateCards(
 ): { low: number; high: number } {
   const middle = units * ratio;
   return {
-    low: Math.max(units > 0 ? 1 : 0, Math.round(middle * 0.75)),
-    high: Math.round(middle * 1.35),
+    low: Math.max(units > 0 ? 1 : 0, Math.round(middle * 0.8)),
+    high: Math.max(units > 0 ? 1 : 0, Math.round(middle * 1.15)),
   };
 }
 

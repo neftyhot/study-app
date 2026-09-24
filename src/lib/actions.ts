@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import { contentConflicts, exams } from "@/db/schema";
+import { normaliseStudyDays } from "@/lib/plan/days";
 
 /** Toggles an exam between full coverage and study-guide focus (PRD §1). */
 export async function setScopeMode(examId: string, mode: "files" | "objectives") {
@@ -26,15 +27,15 @@ export async function setScopeMode(examId: string, mode: "files" | "objectives")
 export async function setExamSchedule(
   examId: string,
   date: string | null,
-  dailyMinutes: number | null,
+  studyDays: number,
 ) {
-  const minutes =
-    dailyMinutes === null || !Number.isFinite(dailyMinutes)
-      ? null
-      : Math.min(Math.max(Math.round(dailyMinutes), 5), 600);
-
   db.update(exams)
-    .set({ date: date?.trim() || null, dailyMinutes: minutes })
+    .set({
+      date: date?.trim() || null,
+      studyDays: normaliseStudyDays(studyDays),
+      // The plan works out the daily time; a stale figure would cap reviews.
+      dailyMinutes: null,
+    })
     .where(eq(exams.id, examId))
     .run();
 

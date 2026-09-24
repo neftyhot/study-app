@@ -1,9 +1,9 @@
 /**
- * Usage reports from opted-in installs, and the developer's view of them.
+ * Usage reports from every install, and the developer's view of them.
  *
  *   POST /telemetry          An install's running totals (see the app's
- *                            src/lib/telemetry.ts). Only sent when the student
- *                            has ticked "Share usage statistics".
+ *                            src/lib/telemetry.ts). Required by the app's privacy
+ *                            policy; sent every 15 min and on count changes.
  *   GET  /admin/stats        Everything summed across installs.
  *   GET  /admin/feedback     Every feature suggestion, oldest first.
  *   DELETE /admin/feedback/… One suggestion, by key.

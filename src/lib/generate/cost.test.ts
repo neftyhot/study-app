@@ -21,11 +21,11 @@ import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 import { isModelUnavailable } from "@/lib/llm/gemini";
 import { estimateCost, formatCost } from "@/lib/llm/pricing";
 
-import { calibrationFor, expectedFor } from "./density";
+import { calibrationFor, DENSITY_PRESETS, expectedFor } from "./density";
 
 import { explainCard, explainPrompt } from "./enrich";
 import { generateCardsForExam } from "./index";
-import { generationSystem } from "./prompts";
+import { fullCoveragePrompt, generationSystem } from "./prompts";
 import { generatedCardSchema } from "./schemas";
 
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -276,8 +276,13 @@ describe("per-model calibration", () => {
     expect(expectedFor("standard", null, "gemini-3.1-flash-lite")).toBe(
       calibrationFor("gemini-3.1-flash-lite").expectedPerUnit.standard,
     );
-    // A model nobody has measured falls back to the first calibration.
-    expect(calibrationFor("some-new-model")).toBe(calibrationFor("gemini-2.5-flash"));
+    // A model nobody has measured keeps the first model's overshoot, but the
+    // field yields rather than that model's bench numbers.
+    const fallback = calibrationFor("some-new-model");
+    expect(fallback.overshoot).toBe(calibrationFor("gemini-2.5-flash").overshoot);
+    expect(fallback.expectedPerUnit.standard).toBe(
+      DENSITY_PRESETS.standard.expectedPerUnit,
+    );
   });
 });
 
@@ -293,5 +298,30 @@ describe("model fallback", () => {
     expect(
       isModelUnavailable(new Error('{"error":{"code":429,"status":"RESOURCE_EXHAUSTED"}}')),
     ).toBe(false);
+  });
+});
+
+describe("high-density prompts", () => {
+  it("states an admin's count exactly and warns against repeats", () => {
+    const system = generationSystem("custom", 30, "lean");
+    expect(system).toContain("The student has asked for about 30 cards per slide");
+    expect(system).toContain("EVERY CARD MUST TEST SOMETHING NO OTHER CARD TESTS");
+    // Not divided by the model's overshoot, as the ordinary target is.
+    expect(generationSystem("custom", 30, "lean", 2)).toContain("about 30 cards");
+  });
+
+  it("keeps the ordinary target for a basic custom ratio", () => {
+    const system = generationSystem("custom", 2, "lean");
+    expect(system).not.toContain("REQUESTED EXPLICITLY");
+    expect(system).toContain("TARGET DENSITY");
+  });
+
+  it("lists the questions the deck already has", () => {
+    const prompt = fullCoveragePrompt([], {
+      covered: ["What is  a debit?", "What is a credit?"],
+    });
+    expect(prompt).toContain("ALREADY COVERED");
+    expect(prompt).toContain("- What is a debit?");
+    expect(fullCoveragePrompt([])).not.toContain("ALREADY COVERED");
   });
 });

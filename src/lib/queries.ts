@@ -410,6 +410,8 @@ export async function loadPlanCards(examId: string) {
       state: studyProgress.state,
       lapses: studyProgress.lapses,
       nextReviewDue: studyProgress.nextReviewDue,
+      intervalDays: studyProgress.intervalDays,
+      ease: studyProgress.ease,
     })
     .from(flashcards)
     .leftJoin(studyProgress, eq(studyProgress.flashcardId, flashcards.id))

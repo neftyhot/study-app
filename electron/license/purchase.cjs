@@ -13,7 +13,7 @@
  */
 
 /** The Payment Link: $24.95, one-time, lifetime. */
-const PURCHASE_URL = "https://buy.stripe.com/test_eVqbIU35hbtp0Kk0CB14400";
+const PURCHASE_URL = "https://buy.stripe.com/00w8wIeNXe89dCcfZraEE00";
 
 /**
  * Where the licensing Worker lives. Compiled into packaged builds by

@@ -10,7 +10,6 @@ import {
   ResourceWarning,
 } from "@/components/settings/experimental-local";
 import { GoogleSignIn } from "@/components/settings/google-sign-in";
-import { UsageLoggingToggle } from "@/components/settings/usage-logging";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,10 +159,6 @@ export function SetupWizard({
           setBusy={setBusy}
         />
       ) : null}
-
-      <div className="rounded-lg border p-4">
-        <UsageLoggingToggle initial={snapshot.usageLogging} />
-      </div>
 
       <p className="text-muted-foreground text-center text-xs">
         <button

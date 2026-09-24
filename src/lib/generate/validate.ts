@@ -157,7 +157,14 @@ function resolveCitation(
 export function validateCards(
   cards: GeneratedCard[],
   slides: SourceSlide[],
-  options?: { existingQuestions?: Iterable<string> },
+  options?: {
+    existingQuestions?: Iterable<string>;
+    /**
+     * Also reject a question whose words overlap an earlier one's by at least
+     * this share (0–1). Off unless given: exact matching is the default.
+     */
+    similarity?: number;
+  },
 ): ValidationResult {
   const byToken = new Map(
     slides.map((slide) => [citationToken(slide).toLowerCase(), slide]),
@@ -166,6 +173,8 @@ export function validateCards(
   const seen = new Set(
     [...(options?.existingQuestions ?? [])].map(normalizeForMatch),
   );
+  const threshold = options?.similarity;
+  const seenWords = threshold ? [...seen].map(questionWords) : [];
 
   const accepted: ValidatedCard[] = [];
   const rejected: Rejection[] = [];
@@ -223,10 +232,39 @@ export function validateCards(
       });
       continue;
     }
+    if (threshold) {
+      const words = questionWords(key);
+      if (seenWords.some((other) => similarity(words, other) >= threshold)) {
+        rejected.push({
+          card,
+          reason: "duplicate",
+          detail: "Asks nearly the same thing as a card that already exists.",
+        });
+        continue;
+      }
+      seenWords.push(words);
+    }
     seen.add(key);
 
     accepted.push({ card, slide, repairedFrom });
   }
 
   return { accepted, rejected };
+}
+
+/** The distinct words of a normalized question, for `similarity`. */
+export function questionWords(normalized: string): Set<string> {
+  return new Set(normalized.split(/[^a-z0-9]+/).filter(Boolean));
+}
+
+/**
+ * Word overlap between two questions (Jaccard). Short questions never count
+ * as similar: "What is TSH?" and "What is ACTH?" share most of their words
+ * and are still different cards.
+ */
+export function similarity(a: Set<string>, b: Set<string>): number {
+  if (a.size < 5 || b.size < 5) return 0;
+  let shared = 0;
+  for (const word of a) if (b.has(word)) shared += 1;
+  return shared / (a.size + b.size - shared);
 }

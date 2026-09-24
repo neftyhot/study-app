@@ -20,6 +20,7 @@ import {
   allKeyStatuses,
   apiKeyStatus,
   isAnswerable,
+  acceptPrivacy,
   markSetupComplete,
   readDownload,
   readLocalModel,
@@ -31,15 +32,12 @@ import {
   type ProviderId,
 } from "@/lib/settings";
 import { isStrictness } from "@/lib/grade/strictness";
-import { isUsageLoggingEnabled, setUsageLogging } from "@/lib/usage";
 
 export type SetupSnapshot = {
   provider: ProviderId;
   keys: ReturnType<typeof allKeyStatuses>;
   /** Signed in with Google for Gemini, and as whom. Never a token. */
   google: GoogleSessionSummary | null;
-  /** Whether the student opted in to usage statistics. */
-  usageLogging: boolean;
   download: ReturnType<typeof readDownload>;
   localModelId: string | null;
   answerable: boolean;
@@ -55,7 +53,6 @@ export async function getSetupSnapshot(): Promise<SetupSnapshot> {
     provider: readProvider(db),
     keys: allKeyStatuses(db),
     google: readGoogleSession(db),
-    usageLogging: isUsageLoggingEnabled(db),
     download: readDownload(db),
     localModelId: readLocalModel(db).id,
     answerable: isAnswerable(db),
@@ -125,11 +122,14 @@ export async function setGradingStrictness(value: string) {
   return { ok: true as const };
 }
 
-/** The usage-statistics opt-in; applies from the next model call. */
-export async function setUsageLoggingAction(enabled: boolean) {
-  setUsageLogging(enabled, db);
-  if (enabled) void maybeSendReport(db, { force: true });
-  revalidatePath("/settings");
+/**
+ * Agreeing to the privacy policy, which unlocks the app. Usage statistics
+ * start from here, so the first report goes straight away.
+ */
+export async function acceptPrivacyAction() {
+  acceptPrivacy(db);
+  void maybeSendReport(db, { force: true });
+  revalidatePath("/", "layout");
   return { ok: true as const };
 }
 

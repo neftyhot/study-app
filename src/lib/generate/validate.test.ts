@@ -211,6 +211,36 @@ describe("validateCards", () => {
     expect(againstExisting.rejected[0].reason).toBe("duplicate");
   });
 
+  it("rejects a near-rephrase only when a similarity threshold is set", () => {
+    const cards = [
+      card({ question: "Which hormone released from the posterior pituitary controls water retention?" }),
+      card({ question: "Which hormone released by the posterior pituitary controls water retention?" }),
+    ];
+    expect(validateCards(cards, slides).accepted).toHaveLength(2);
+
+    const strict = validateCards(cards, slides, { similarity: 0.75 });
+    expect(strict.accepted).toHaveLength(1);
+    expect(strict.rejected[0].reason).toBe("duplicate");
+
+    const againstExisting = validateCards([cards[1]], slides, {
+      existingQuestions: [cards[0].question],
+      similarity: 0.75,
+    });
+    expect(againstExisting.accepted).toHaveLength(0);
+  });
+
+  it("never calls short questions near-duplicates", () => {
+    const { accepted } = validateCards(
+      [
+        card({ facet: "origin", question: "Where is ADH produced?" }),
+        card({ facet: "target", question: "Where is ADH released?" }),
+      ],
+      slides,
+      { similarity: 0.75 },
+    );
+    expect(accepted).toHaveLength(2);
+  });
+
   it("treats distinct facets of one concept as distinct cards", () => {
     const { accepted } = validateCards(
       [

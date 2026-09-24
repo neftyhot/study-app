@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 
 /* Midnight is a dark style too, so every dark: variant applies to it. */
-@custom-variant dark (&:is(.dark *, .midnight *));
+@custom-variant dark (&:is(.dark *, .midnight *, .forest *));
 
 @theme inline {
   --color-background: var(--background);
@@ -210,16 +210,103 @@
   --chart-5: #6b5a40;
 }
 
+.mint {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #effaf4;
+  --foreground: #12352a;
+  --card: #ffffff;
+  --card-foreground: #12352a;
+  --popover: #ffffff;
+  --popover-foreground: #12352a;
+  --primary: #0d8a5c;
+  --primary-foreground: #ffffff;
+  --secondary: #dcf2e6;
+  --secondary-foreground: #12352a;
+  --muted: #dcf2e6;
+  --muted-foreground: #4a6b5d;
+  --accent: #cdeedd;
+  --accent-foreground: #12352a;
+  --destructive: #c62f2a;
+  --border: #c4e4d3;
+  --input: #c4e4d3;
+  --ring: #0d8a5c;
+  --chart-1: #0d8a5c;
+  --chart-2: #3fb8a0;
+  --chart-3: #e0a82e;
+  --chart-4: #e5675f;
+  --chart-5: #7fd6a8;
+}
+
+.sage {
+  --radius: 0.75rem;
+  --background: #eef1e8;
+  --foreground: #26352a;
+  --card: #f8faf4;
+  --card-foreground: #26352a;
+  --popover: #f8faf4;
+  --popover-foreground: #26352a;
+  --primary: #4f6e44;
+  --primary-foreground: #ffffff;
+  --secondary: #e0e6d6;
+  --secondary-foreground: #26352a;
+  --muted: #e0e6d6;
+  --muted-foreground: #5a6a58;
+  --accent: #d6dfc9;
+  --accent-foreground: #26352a;
+  --destructive: #b3261e;
+  --border: #d2dac5;
+  --input: #d2dac5;
+  --ring: #4f6e44;
+  --chart-1: #4f6e44;
+  --chart-2: #8aa66f;
+  --chart-3: #c2a25a;
+  --chart-4: #b0624a;
+  --chart-5: #6f8f86;
+}
+
+.forest {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #0b1f16;
+  --foreground: #e9f6ee;
+  --card: #173528;
+  --card-foreground: #e9f6ee;
+  --popover: #173528;
+  --popover-foreground: #e9f6ee;
+  --primary: #4fd18b;
+  --primary-foreground: #0b1f16;
+  --secondary: #1d3a2d;
+  --secondary-foreground: #e9f6ee;
+  --muted: #13291f;
+  --muted-foreground: #9fc2ae;
+  --accent: #214434;
+  --accent-foreground: #e9f6ee;
+  --destructive: #ff7873;
+  --border: #2a4a3b;
+  --input: #2a4a3b;
+  --ring: #4fd18b;
+  --chart-1: #4fd18b;
+  --chart-2: #3fb8a0;
+  --chart-3: #ffcd1f;
+  --chart-4: #ff7873;
+  --chart-5: #a7e8c4;
+}
+
 /* Bubble styles float their cards on a soft shadow instead of an outline. */
 .bubble [data-slot="card"],
-.midnight [data-slot="card"] {
+.midnight [data-slot="card"],
+.mint [data-slot="card"],
+.forest [data-slot="card"] {
   box-shadow:
     0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent),
     0 6px 20px color-mix(in oklab, var(--foreground) 9%, transparent);
 }
 
 .bubble h1,
-.midnight h1 {
+.midnight h1,
+.mint h1,
+.forest h1 {
   font-weight: 800;
 }
 

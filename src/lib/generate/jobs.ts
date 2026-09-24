@@ -18,6 +18,13 @@ import type { LlmProvider } from "@/lib/llm";
 
 import { regroupTopics } from "@/lib/topics";
 
+import {
+  isDensityMode,
+  MIN_MEASURED_UNITS,
+  type DensityMode,
+  type MeasuredYield,
+} from "./density";
+
 import { generateCardsForExam, type GenerateOptions } from "./index";
 
 export type JobMode = "append" | "replace" | "separate";
@@ -80,6 +87,40 @@ export function latestJob(db: Db, examId: string): GenerationJob | undefined {
       .orderBy(desc(generationJobs.startedAt))
       .get()
   );
+}
+
+/**
+ * What finished runs on this install produced per unit, by density, for one
+ * model — across every deck, since the setting and the model matter more than
+ * the subject. Runs too small to say anything about the setting are skipped,
+ * and only accepted cards count: rejected ones never reached the deck.
+ */
+export function measuredYields(
+  db: Db,
+  model: string | null,
+): Partial<Record<DensityMode, MeasuredYield>> {
+  const totals: Partial<Record<DensityMode, MeasuredYield>> = {};
+  if (!model) return totals;
+  const rows = db
+    .select({ summary: generationJobs.summary })
+    .from(generationJobs)
+    .where(eq(generationJobs.status, "done"))
+    .all();
+  for (const { summary } of rows) {
+    if (!summary || typeof summary !== "object") continue;
+    const run = summary as Record<string, unknown>;
+    const units = Number(run.unitsUsed);
+    const cards = Number(run.cardsCreated);
+    if (run.model !== model || !isDensityMode(run.density)) continue;
+    // Custom runs each ask for their own ratio; see `expectedFor`.
+    if (run.density === "custom") continue;
+    if (!Number.isFinite(units) || !Number.isFinite(cards)) continue;
+    if (units < MIN_MEASURED_UNITS) continue;
+    const total = (totals[run.density] ??= { cards: 0, units: 0 });
+    total.cards += cards;
+    total.units += units;
+  }
+  return totals;
 }
 
 function touch(db: Db, jobId: string, patch: Partial<GenerationJob>) {

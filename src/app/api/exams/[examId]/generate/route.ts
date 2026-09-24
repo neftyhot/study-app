@@ -11,6 +11,7 @@ import { db } from "@/db";
 import { exams } from "@/db/schema";
 import { clearGeneratedCards, type UnitRange } from "@/lib/generate";
 import {
+  ADMIN_MAX_RATIO,
   isDensityMode,
   MAX_RATIO,
   MIN_RATIO,
@@ -21,6 +22,7 @@ import {
   latestJob,
   startGenerationJob,
 } from "@/lib/generate/jobs";
+import { readLicenseStatus } from "@/lib/license/status";
 import { getProvider, LlmError } from "@/lib/llm";
 import { duplicateExamSources } from "@/lib/manage";
 
@@ -78,10 +80,18 @@ export async function POST(
   const density: DensityMode = isDensityMode(body?.density)
     ? body.density
     : exam.extractionDensity;
-  const densityRatio =
+  // Only an admin licence may ask for more than `MAX_RATIO`; checked here,
+  // where the client cannot reach, and applied to a stored ratio as well.
+  const maxRatio =
+    readLicenseStatus()?.type === "admin" ? ADMIN_MAX_RATIO : MAX_RATIO;
+  const requestedRatio =
     typeof body?.densityRatio === "number" && Number.isFinite(body.densityRatio)
-      ? Math.min(MAX_RATIO, Math.max(MIN_RATIO, body.densityRatio))
+      ? body.densityRatio
       : exam.extractionRatio;
+  const densityRatio =
+    requestedRatio === null
+      ? null
+      : Math.min(maxRatio, Math.max(MIN_RATIO, requestedRatio));
 
   const ranges = parseRanges(body?.ranges);
   const sourceFileIds = Array.isArray(body?.sourceFileIds)

@@ -9,7 +9,9 @@
 import type { SourceSlide, StudyGuideObjective } from "@/db/schema";
 
 import {
+  ADMIN_MAX_RATIO,
   DENSITY_PRESETS,
+  isHighDensity,
   ratioFor,
   type DensityMode,
 } from "./density";
@@ -197,7 +199,8 @@ export function generationSystem(
   /** The running model's measured overshoot; see `MODEL_CALIBRATION`. */
   overshoot: number = MODEL_OVERSHOOT,
 ): string {
-  const ratio = ratioFor(density, customRatio);
+  // The route has already held the ratio to what the licence allows.
+  const ratio = ratioFor(density, customRatio, ADMIN_MAX_RATIO);
   const selection = SELECTION[density === "custom" ? nearestPreset(ratio) : density];
 
   // Exhaustive is the one setting with no number. Prose alone was measured
@@ -208,11 +211,45 @@ export function generationSystem(
   const target =
     density === "exhaustive"
       ? ""
-      : `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio / overshoot)} per slide on average across this batch.\nThis is a ceiling on how finely to cut, not a quota: fewer is right when a\nslide is thin, and you must never invent a card or pad with trivia to reach it.`;
+      : isHighDensity(density, customRatio)
+        ? highDensityTarget(ratio)
+        : `\n\nTARGET DENSITY\nAim for roughly ${formatRatio(ratio / overshoot)} per slide on average across this batch.\nThis is a ceiling on how finely to cut, not a quota: fewer is right when a\nslide is thin, and you must never invent a card or pad with trivia to reach it.`;
 
   const rubrics = detail === "lean" ? RUBRICS_LEAN : RUBRICS_FULL;
 
   return `${GENERATION_PREAMBLE}\n\n${selection}\n\n${PROVENANCE_AND_RUBRICS}\n\n${rubrics}${target}`;
+}
+
+/**
+ * An admin's explicit count, far above what any preset asks for.
+ *
+ * Stated as the number itself, not scaled by overshoot: the student has
+ * chosen it knowingly, and the risk at this density is not too many cards but
+ * the same card several times over. So the model is told how to find more
+ * distinct cards on one slide, and that repeating one is worse than stopping.
+ */
+function highDensityTarget(ratio: number): string {
+  return `
+
+TARGET DENSITY (REQUESTED EXPLICITLY)
+The student has asked for about ${formatRatio(ratio)} per slide. Produce that
+many for every slide whose material supports it.
+
+To reach it without repeating yourself, work through each slide from several
+angles, one card per distinct angle:
+- every term, value, list item, exception and qualifier stated, each on its own;
+- the reverse direction of a definition (given the description, name the term);
+- cause and effect, and what changes if a step or input changes;
+- how two items on the slide or in this batch differ or relate;
+- the order of steps in a process, one step per card;
+- a worked example or calculation using the slide's own figures.
+
+EVERY CARD MUST TEST SOMETHING NO OTHER CARD TESTS. Before writing a card,
+check it against the cards you have already written in this reply and the
+ALREADY COVERED list, if there is one. A card that asks the same thing in
+different words, or swaps only the wording of the answer, is a duplicate. When a
+slide has no distinct fact left, stop there and move on: fewer cards is correct
+then, and a repeated or invented card is always wrong.`;
 }
 
 function formatRatio(ratio: number): string {
@@ -268,10 +305,30 @@ Set hasAiSupplement to true when the reasoning goes beyond what is stated.`;
 export type PromptOptions = {
   /** PRD §9 higher-order questions, off unless the student asked. */
   includeApplication?: boolean;
+  /**
+   * Questions the deck already has for these slides. Shown so the model can
+   * add to them instead of rewriting them; the validator still rejects any
+   * repeat that gets through.
+   */
+  covered?: string[];
 };
+
+/** How many existing questions a prompt lists, at most. */
+export const MAX_COVERED = 200;
 
 function applicationSection(options?: PromptOptions): string {
   return options?.includeApplication ? `\n${APPLICATION_RULES}\n` : "";
+}
+
+function coveredSection(options?: PromptOptions): string {
+  const covered = options?.covered?.slice(0, MAX_COVERED) ?? [];
+  if (covered.length === 0) return "";
+  return `
+ALREADY COVERED
+The deck already has these questions for these slides. Do not repeat any of
+them, even reworded; write only cards that test something they do not.
+${covered.map((question) => `- ${question.replace(/\s+/g, " ").trim()}`).join("\n")}
+`;
 }
 
 export function fullCoveragePrompt(
@@ -283,7 +340,7 @@ export function fullCoveragePrompt(
 Work concept by concept. For each concept, produce the full set of atomic
 cards its facets call for, then any integration cards that connect it to other
 concepts in this material.
-${applicationSection(options)}
+${applicationSection(options)}${coveredSection(options)}
 SLIDES
 ${renderSlides(slides)}`;
 }
@@ -325,7 +382,7 @@ Set each card's objective to the token of the objective it answers, e.g. "O2".
 These are only the objectives these slides are likely to answer, and other
 slides will be asked about the rest. If the slides do not contain what an
 objective asks for, do not invent it — make no card for it.
-${applicationSection(options)}
+${applicationSection(options)}${coveredSection(options)}
 
 STUDY-GUIDE OBJECTIVES
 ${list}

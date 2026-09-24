@@ -1,9 +1,9 @@
 /**
- * The usage report an opted-in install sends to the developer.
+ * The usage report every install sends to the developer.
  *
- * Only ever sent when "Share usage statistics" is ticked, and it says only
- * what that setting promises: counts, token totals and time — never a file,
- * card, question or answer. Totals since install, so a lost or repeated
+ * Sending is a condition of use (see src/lib/privacy-policy.ts), so it starts
+ * the moment the policy is agreed to and says only what the policy promises:
+ * counts, token totals and time — never a file, card, question or answer. Totals since install, so a lost or repeated
  * report changes nothing (see workers/licensing/src/insights.ts). The
  * install is identified by a random id made here, not the machine id the
  * licence uses.
@@ -19,7 +19,11 @@ import { isUsageLoggingEnabled } from "@/lib/usage";
 
 const INSTALL_ID_KEY = "install_id";
 const LAST_SENT_KEY = "telemetry_last_sent";
-export const REPORT_EVERY_MS = 6 * 60 * 60 * 1000;
+const LAST_COUNTS_KEY = "telemetry_last_counts";
+/** The regular heartbeat while the app is open. */
+export const REPORT_EVERY_MS = 15 * 60 * 1000;
+/** A change in subjects, decks or cards is reported sooner, but no more often than this. */
+export const CHANGE_MIN_GAP_MS = 60 * 1000;
 
 export function installId(db: Db): string {
   const existing = readSetting(INSTALL_ID_KEY, db);
@@ -61,9 +65,31 @@ export function buildReport(db: Db) {
   };
 }
 
+/** What the dashboard's headline tiles show; a change here is worth sending soon. */
+function countsKey(report: ReturnType<typeof buildReport>): string {
+  return `${report.subjects}/${report.decks}/${report.cards}`;
+}
+
 /**
- * Sends a report if the student opted in and one is due. Never throws, and
- * never holds anything up: a report that fails just goes next time.
+ * Whether a report is due: every 15 minutes, or a minute after the number of
+ * subjects, decks or cards last sent has changed.
+ */
+export function isReportDue(
+  lastSentIso: string | null,
+  lastCounts: string | null,
+  counts: string,
+  now = Date.now(),
+): boolean {
+  const last = Date.parse(lastSentIso ?? "");
+  if (!Number.isFinite(last)) return true;
+  const since = now - last;
+  if (since >= REPORT_EVERY_MS) return true;
+  return counts !== lastCounts && since >= CHANGE_MIN_GAP_MS;
+}
+
+/**
+ * Sends a report once the privacy policy is agreed to and one is due. Never
+ * throws, and never holds anything up: a report that fails just goes next time.
  */
 export async function maybeSendReport(db: Db, { force = false } = {}): Promise<boolean> {
   try {
@@ -71,18 +97,25 @@ export async function maybeSendReport(db: Db, { force = false } = {}): Promise<b
     const base = serverUrl();
     if (!base) return false;
 
-    const last = Date.parse(readSetting(LAST_SENT_KEY, db) ?? "");
-    if (!force && Number.isFinite(last) && Date.now() - last < REPORT_EVERY_MS) return false;
+    const report = buildReport(db);
+    const counts = countsKey(report);
+    if (
+      !force &&
+      !isReportDue(readSetting(LAST_SENT_KEY, db), readSetting(LAST_COUNTS_KEY, db), counts)
+    ) {
+      return false;
+    }
 
     const response = await fetch(`${base}/telemetry`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildReport(db)),
+      body: JSON.stringify(report),
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return false;
 
     writeSetting(LAST_SENT_KEY, new Date().toISOString(), db);
+    writeSetting(LAST_COUNTS_KEY, counts, db);
     return true;
   } catch {
     return false;

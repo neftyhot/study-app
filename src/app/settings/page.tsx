@@ -9,7 +9,7 @@ import { loadStats } from "@/lib/stats";
 import { GradingSettings } from "@/components/settings/grading-settings";
 import { ProviderSettings } from "@/components/settings/provider-settings";
 import { PurchaseLicense } from "@/components/settings/purchase-license";
-import { UsageLoggingToggle } from "@/components/settings/usage-logging";
+import { PrivacyPolicyText } from "@/components/privacy/privacy-policy";
 import { resolveDbPath } from "@/db/client";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -25,6 +25,7 @@ import { modelsRoot } from "@/lib/llm/download";
 import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/status";
 import { readAppearance, readGradingStrictness } from "@/lib/settings";
 import { db } from "@/db";
+import { installId } from "@/lib/telemetry";
 import { getSetupSnapshot } from "@/lib/settings-actions";
 
 export default async function SettingsPage() {
@@ -82,12 +83,31 @@ export default async function SettingsPage() {
 
       <GradingSettings initial={readGradingStrictness()} />
 
-      <Card>
+      <Card id="privacy" className="scroll-mt-20">
         <CardHeader>
-          <CardTitle className="text-base">Usage statistics</CardTitle>
+          <CardTitle className="text-base">Privacy</CardTitle>
+          <CardDescription>
+            Your cards, files and answers stay on this computer. Usage
+            statistics (counts, time in the app and AI usage — never content)
+            are sent to the developer every 15 minutes; this is required to use
+            Study App.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <UsageLoggingToggle initial={snapshot.usageLogging} />
+        <CardContent className="space-y-3">
+          <p className="text-sm">
+            Your install id:{" "}
+            <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs select-all">
+              {installId(db)}
+            </code>
+          </p>
+          <details className="group rounded-lg border p-4">
+            <summary className="cursor-pointer text-sm font-medium">
+              Read the full privacy policy
+            </summary>
+            <div className="mt-4">
+              <PrivacyPolicyText />
+            </div>
+          </details>
         </CardContent>
       </Card>
 

@@ -1,5 +1,5 @@
 /**
- * The usage log: opt-in, numbers only, and never in the way of the call.
+ * The usage log: on once the privacy policy is agreed to, numbers only, and never in the way of the call.
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -13,8 +13,8 @@ import {
   isUsageLoggingEnabled,
   meterProvider,
   recordUsage,
-  setUsageLogging,
 } from ".";
+import { acceptPrivacy } from "@/lib/settings";
 
 let db: ReturnType<typeof drizzle<typeof schema>>;
 
@@ -47,23 +47,21 @@ const request: StructuredRequest = {
   schema: {},
 };
 
-describe("the opt-in", () => {
-  it("is off until the student turns it on", () => {
+describe("the privacy policy", () => {
+  it("turns logging on once agreed to, with no way to opt out", () => {
     expect(isUsageLoggingEnabled(db)).toBe(false);
-    setUsageLogging(true, db);
+    acceptPrivacy(db);
     expect(isUsageLoggingEnabled(db)).toBe(true);
-    setUsageLogging(false, db);
-    expect(isUsageLoggingEnabled(db)).toBe(false);
   });
 
-  it("records nothing while off", async () => {
+  it("records nothing before it is agreed to", async () => {
     await meterProvider(stubProvider(), "api_key", db).generateStructured(request);
     expect(rows()).toHaveLength(0);
   });
 });
 
 describe("a metered call", () => {
-  beforeEach(() => setUsageLogging(true, db));
+  beforeEach(() => acceptPrivacy(db));
 
   it("records feature, model, tokens and list-price cost — and no content", async () => {
     const result = await meterProvider(stubProvider(), "api_key", db).generateStructured(

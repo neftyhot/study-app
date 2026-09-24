@@ -24,6 +24,7 @@ import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 import {
   activeJob,
   latestJob,
+  measuredYields,
   startGenerationJob,
   STALE_AFTER_MS,
 } from "./jobs";
@@ -247,5 +248,29 @@ describe("a job whose process died", () => {
     startGenerationJob(db, stubProvider(), examId);
 
     expect(activeJob(db, examId)).toBeDefined();
+  });
+});
+
+describe("measuredYields", () => {
+  function finished(summary: Record<string, unknown>, status: "done" | "failed" = "done") {
+    db.insert(generationJobs).values({ examId, status, summary }).run();
+  }
+
+  it("totals finished preset runs for one model, skipping what says nothing", () => {
+    const model = "gemini-3.1-flash-lite";
+    finished({ model, density: "standard", unitsUsed: 40, cardsCreated: 30 });
+    finished({ model, density: "standard", unitsUsed: 60, cardsCreated: 50 });
+    finished({ model, density: "exhaustive", unitsUsed: 100, cardsCreated: 120 });
+    // Too small, a custom ratio, another model, or not finished: all skipped.
+    finished({ model, density: "standard", unitsUsed: 5, cardsCreated: 40 });
+    finished({ model, density: "custom", unitsUsed: 100, cardsCreated: 900 });
+    finished({ model: "gemini-2.5-flash", density: "standard", unitsUsed: 100, cardsCreated: 300 });
+    finished({ model, density: "standard", unitsUsed: 100, cardsCreated: 300 }, "failed");
+
+    expect(measuredYields(db, model)).toEqual({
+      standard: { cards: 80, units: 100 },
+      exhaustive: { cards: 120, units: 100 },
+    });
+    expect(measuredYields(db, null)).toEqual({});
   });
 });
