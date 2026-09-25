@@ -21,7 +21,7 @@ export async function SiteHeader() {
       <div className="mx-auto flex h-14 w-full max-w-(--content-width) items-center gap-3 px-4">
         <Link href="/" className="flex items-center gap-2 font-semibold">
           <GraduationCap className="size-5" />
-          <span className="hidden sm:inline">Study App</span>
+          <span className="hidden sm:inline">Megan Study</span>
         </Link>
 
         <div className="ml-auto flex items-center gap-2">

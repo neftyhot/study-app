@@ -1,4 +1,4 @@
-# Study App Product Requirements Document (PRD)
+# Megan Study Product Requirements Document (PRD)
 
 ## Core Intent
 The primary goal is to allow uploading study guides, lecture slides, and notes to automatically generate accurate, thorough, and atomic study materials without spending hours manually creating flashcards.

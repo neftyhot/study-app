@@ -18,7 +18,10 @@
 /out/
 
 # production
-/build
+/build/*
+# …except the app icons electron-builder packages (build.win.icon) and their master.
+!/build/icon.ico
+!/build/icon.png
 
 # misc
 .DS_Store

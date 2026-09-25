@@ -135,7 +135,7 @@ describe("signing in", () => {
 
     await vi.waitFor(() => expect(pages).toHaveLength(1));
     expect(pages[0]).toContain(
-      "Signed in successfully! You can close this tab and return to Study App.",
+      "Signed in successfully! You can close this tab and return to Megan Study.",
     );
 
     // The listener is gone once it has its code.

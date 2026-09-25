@@ -90,7 +90,7 @@ export default async function SettingsPage() {
             Your cards, files and answers stay on this computer. Usage
             statistics (counts, time in the app and AI usage — never content)
             are sent to the developer every 15 minutes; this is required to use
-            Study App.
+            Megan Study.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

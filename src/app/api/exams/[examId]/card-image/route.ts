@@ -7,11 +7,11 @@
  */
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import type { NextRequest } from "next/server";
 
-import { absolutePathFor } from "@/lib/ingest/storage";
+import { absolutePathFor, isSafeStoredPath, storedPath } from "@/lib/ingest/storage";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 
@@ -27,6 +27,11 @@ export async function POST(
   ctx: RouteContext<"/api/exams/[examId]/card-image">,
 ) {
   const { examId } = await ctx.params;
+
+  // The exam id becomes a directory name.
+  if (!isSafeStoredPath(examId) || examId.includes("/") || examId.includes("\\")) {
+    return Response.json({ error: "That is not an exam." }, { status: 400 });
+  }
 
   const form = await request.formData();
   const file = form.get("file");
@@ -50,7 +55,7 @@ export async function POST(
     );
   }
 
-  const path = join("cards", examId, `${randomUUID()}.${extension}`);
+  const path = storedPath("cards", examId, `${randomUUID()}.${extension}`);
   const absolute = absolutePathFor(path);
   await mkdir(dirname(absolute), { recursive: true });
   await writeFile(absolute, Buffer.from(await file.arrayBuffer()));

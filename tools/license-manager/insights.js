@@ -53,7 +53,7 @@ function asText(entries) {
     return `#${i + 1} · ${meta.join(" · ")}\n${entry.text}`;
   });
   return (
-    `Study App feature suggestions — ${entries.length} as of ${new Date().toLocaleString()}\n\n` +
+    `Megan Study feature suggestions — ${entries.length} as of ${new Date().toLocaleString()}\n\n` +
     blocks.join(`\n\n${"-".repeat(60)}\n\n`) +
     "\n"
   );

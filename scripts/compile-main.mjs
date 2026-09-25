@@ -12,19 +12,35 @@
  *  2. **Compile with Electron's own Node.** V8 bytecode is only loadable by
  *     the V8 that produced it. Compiling with the system Node would produce a
  *     file the shipped app cannot read, and the failure would appear at
- *     launch, on someone else's machine. So this script is run by Electron
- *     itself, and refuses to run otherwise.
+ *     launch, on someone else's machine. So this script runs under Electron:
+ *     started with plain `node`, it starts itself again under Electron.
+ *
+ *     The same goes for the platform. Bytecode is only trusted on the OS and
+ *     architecture that made it, so `--platform=win32` on a Mac cannot produce
+ *     it. That build ships the minified bundle instead, with a warning; a
+ *     release for Windows is compiled on Windows.
  *
  * This raises the cost of reading the licensing logic. It does not make it
  * impossible — bytecode can be disassembled, and anyone determined enough will
  * get there. It is a lock on a door, not a vault.
  */
 import { build } from "esbuild";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 const require = createRequire(import.meta.url);
+
+const { values: args } = parseArgs({
+  options: {
+    platform: { type: "string", default: process.platform },
+    arch: { type: "string", default: process.arch },
+  },
+});
+const crossBuild = args.platform !== process.platform || args.arch !== process.arch;
 
 const ROOT = process.cwd();
 const OUT_DIR = join(ROOT, "electron", "build");
@@ -73,19 +89,26 @@ function oauthDefines() {
   return defines;
 }
 
-function assertRunningUnderElectron() {
-  if (!process.versions.electron) {
-    console.error(
-      "compile-main must run under Electron, so the bytecode matches the V8\n" +
-        "that will load it. Use:\n\n" +
-        "  npm run electron:compile\n",
-    );
-    process.exit(1);
-  }
+/**
+ * Runs this script again under Electron's Node, and exits with its status.
+ *
+ * Done here rather than as `ELECTRON_RUN_AS_NODE=1 electron …` in
+ * package.json, which is shell syntax Windows' cmd.exe does not understand.
+ */
+function rerunUnderElectron() {
+  // Outside Electron, the `electron` package exports the binary's path.
+  const electron = require("electron");
+  const result = spawnSync(
+    electron,
+    [fileURLToPath(import.meta.url), ...process.argv.slice(2)],
+    { stdio: "inherit", env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } },
+  );
+  if (result.error) throw result.error;
+  process.exit(result.status ?? 1);
 }
 
 async function main() {
-  assertRunningUnderElectron();
+  if (!process.versions.electron) return rerunUnderElectron();
 
   rmSync(OUT_DIR, { recursive: true, force: true });
   mkdirSync(OUT_DIR, { recursive: true });
@@ -113,6 +136,26 @@ async function main() {
   // process loads by path.
   for (const asset of ["preload.cjs", "app-preload.cjs", "activation.html"]) {
     copyFileSync(join(ROOT, "electron", asset), join(OUT_DIR, asset));
+  }
+
+  if (crossBuild) {
+    // No bytecode this V8 could make would load there; ship the source,
+    // minified. Readable with effort, which is why a release is not built so.
+    await build({
+      entryPoints: [BUNDLE],
+      outfile: LOADER,
+      minify: true,
+      platform: "node",
+      format: "cjs",
+      logLevel: "warning",
+    });
+    rmSync(BUNDLE, { force: true });
+    console.warn(
+      `Building for ${args.platform}-${args.arch} on ${process.platform}-${process.arch}: ` +
+        "the main process ships minified, NOT as bytecode.\n" +
+        `Compile on ${args.platform}-${args.arch} for a release build.`,
+    );
+    return;
   }
 
   const bytenode = require("bytenode");

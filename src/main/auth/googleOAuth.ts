@@ -56,7 +56,7 @@ export function missingGeminiScopes(granted: string | null | undefined): string[
 }
 
 export const MISSING_SCOPE_MESSAGE =
-  "Google didn't give Study App permission to use Gemini. Sign in again, and on Google's permissions screen tick every box (or \"Select all\") before pressing Continue.";
+  "Google didn't give Megan Study permission to use Gemini. Sign in again, and on Google's permissions screen tick every box (or \"Select all\") before pressing Continue.";
 
 /** How long the loopback server waits for the student to finish in the browser. */
 const SIGN_IN_TIMEOUT_MS = 5 * 60 * 1000;
@@ -270,10 +270,10 @@ export function listenForCallback(options: {
       }
 
       if ("error" in result) {
-        respond(response, 400, `Sign-in did not complete: ${result.error}. You can close this tab and try again from Study App.`);
+        respond(response, 400, `Sign-in did not complete: ${result.error}. You can close this tab and try again from Megan Study.`);
         finish({ error: new GoogleOAuthError(result.errorCode, result.error) });
       } else {
-        respond(response, 200, "Signed in successfully! You can close this tab and return to Study App.");
+        respond(response, 200, "Signed in successfully! You can close this tab and return to Megan Study.");
         finish({ code: result.code });
       }
     });
@@ -348,7 +348,7 @@ function respond(response: ServerResponse, status: number, message: string) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Study App</title>
+<title>Megan Study</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin: 0; min-height: 100vh; display: grid; place-items: center;

@@ -33,6 +33,66 @@ const updater = require("./updater.cjs");
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
 
+const APP_NAME = "Megan Study";
+/** Folders earlier versions kept their data in, under the OS's app-data dir. */
+const FORMER_NAMES = ["Study App"];
+
+app.setName(APP_NAME);
+
+/**
+ * Brings data across from a folder the app used under an earlier name.
+ *
+ * Moved, not copied: the downloaded models alone are gigabytes, and a rename
+ * on the same disk is instant and cannot run out of space half way. Entry by
+ * entry, and never over something already in the new folder, so a partial
+ * earlier attempt (or caches Electron made first) cannot cost any data. A
+ * move that fails leaves that entry where it was, and the app reads it from
+ * there instead: data that is found beats data that is tidy.
+ */
+function adoptFormerUserData(appData, target) {
+  for (const name of FORMER_NAMES) {
+    const former = path.join(appData, name);
+    if (former === target || !fs.existsSync(former)) continue;
+
+    try {
+      fs.mkdirSync(target, { recursive: true });
+      for (const entry of fs.readdirSync(former)) {
+        const destination = path.join(target, entry);
+        if (fs.existsSync(destination)) continue;
+        fs.renameSync(path.join(former, entry), destination);
+      }
+      // Only once it is empty: anything left behind is still being read.
+      if (fs.readdirSync(former).length === 0) fs.rmdirSync(former);
+    } catch (error) {
+      console.error(`Could not move ${former} to ${target}:`, error);
+    }
+
+    // The database is the one thing that must not be split from its
+    // uploads. If it did not come across, keep using the old folder whole.
+    const database = path.join("data", "study-app.db");
+    if (fs.existsSync(path.join(former, database)) && !fs.existsSync(path.join(target, database))) {
+      return former;
+    }
+  }
+  return target;
+}
+
+{
+  // %APPDATA%\Megan Study on Windows, ~/Library/Application Support/Megan
+  // Study on macOS. Set before `ready`, so Electron's own caches follow it.
+  // Only a packaged app moves anything: `electron:dev` would otherwise carry
+  // off the data of the copy installed in /Applications on the same Mac.
+  const appData = app.getPath("appData");
+  const target = path.join(appData, APP_NAME);
+  app.setPath("userData", app.isPackaged ? adoptFormerUserData(appData, target) : target);
+}
+
+if (process.platform === "win32") {
+  // Must match build.appId, or the taskbar will not group the window with the
+  // pinned shortcut the installer made.
+  app.setAppUserModelId("app.study.desktop");
+}
+
 /** Set before anything imports the database layer. */
 function configureDataDirectories() {
   // In development the web app is a separate `next dev`; both processes
@@ -115,7 +175,10 @@ function freePort() {
  *
  * Runs the standalone `server.js` in this process: it is the same server a
  * `next start` deployment runs, and keeping it in-process means one lifecycle
- * to manage rather than a child that can outlive the window.
+ * to manage rather than a child that can outlive the window. That matters most
+ * on Windows, which has no process groups to signal: a child server there
+ * outlives a closed app unless its whole tree is killed. In-process, quitting
+ * the app is quitting the server.
  */
 async function startServer() {
   const port = await freePort();
@@ -164,6 +227,7 @@ function createActivationWindow() {
     height: 720,
     resizable: false,
     show: false,
+    title: APP_NAME,
     backgroundColor: "#0a0a0a",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
@@ -190,6 +254,7 @@ function createWindow(url) {
     minWidth: 480,
     minHeight: 600,
     show: false,
+    title: APP_NAME,
     backgroundColor: "#0a0a0a",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
@@ -405,7 +470,7 @@ app.whenReady().then(async () => {
     // Logged as well as shown: a dialog is useless when the app is being run
     // from a terminal to find out why it will not start.
     console.error(detail);
-    dialog.showErrorBox("Study App could not start", detail);
+    dialog.showErrorBox(`${APP_NAME} could not start`, detail);
     app.quit();
   }
 });

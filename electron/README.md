@@ -53,10 +53,10 @@ and username to everyone who downloads it.
 
 Worth re-checking a `.dmg` before handing it out. Mount it and search:
 
-    hdiutil attach "release/Study App-0.1.0-arm64.dmg" -nobrowse -readonly
-    grep -ral "AIzaSy" "/Volumes/Study App 0.1.0-arm64"   # API keys
-    find "/Volumes/Study App 0.1.0-arm64" -name ".env*"   # env files
-    find "/Volumes/Study App 0.1.0-arm64" -name "*.db"    # someone's decks
+    hdiutil attach "release/Megan Study-0.1.0-arm64.dmg" -nobrowse -readonly
+    grep -ral "AIzaSy" "/Volumes/Megan Study 0.1.0-arm64"   # API keys
+    find "/Volumes/Megan Study 0.1.0-arm64" -name ".env*"   # env files
+    find "/Volumes/Megan Study 0.1.0-arm64" -name "*.db"    # someone's decks
 
 All three should come back empty. `data/` is outside the `files` globs and the
 settings database lives in the user-data directory, so none of it is packaged —

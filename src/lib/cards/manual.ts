@@ -13,6 +13,8 @@ import { cardRubrics, flashcards, type cardTypes } from "@/db/schema";
 
 type CardType = (typeof cardTypes)[number];
 
+import { isSafeStoredPath } from "@/lib/ingest/safe-path";
+
 import { clozeAnswers, clozeQuestion, hasCloze } from "./cloze";
 
 export type ManualCardInput = {
@@ -62,6 +64,12 @@ export function validateManualCard(input: ManualCardInput): string[] {
 
   if (!cloze && !answer) {
     problems.push("A card needs an answer.");
+  }
+
+  // Set by the card editor from the upload's reply, so only a forged request
+  // gets here — and the image route reads whatever is stored.
+  for (const image of [input.frontImagePath, input.backImagePath]) {
+    if (image && !isSafeStoredPath(image)) problems.push("That image is not one this app stored.");
   }
 
   return problems;

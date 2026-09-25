@@ -1,4 +1,4 @@
-# Study App — Task Tracker
+# Megan Study — Task Tracker
 
 Tracks MVP delivery against `docs/PRD.md` ("MVP Target Scope") and `docs/ARCHITECTURE.md`.
 

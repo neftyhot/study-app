@@ -67,6 +67,14 @@ describe("validateManualCard", () => {
     ]);
   });
 
+  it("refuses an image path outside the uploads", () => {
+    const card = { examId, question: "Q", directAnswer: "A" };
+    expect(validateManualCard({ ...card, frontImagePath: "cards/e/x.png" })).toEqual([]);
+    expect(validateManualCard({ ...card, backImagePath: "../../.ssh/id_rsa" })).toEqual([
+      "That image is not one this app stored.",
+    ]);
+  });
+
   it("lets a cloze card carry its answer inside the sentence", () => {
     expect(
       validateManualCard({

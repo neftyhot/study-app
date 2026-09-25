@@ -49,3 +49,41 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --mac --arm64 --publish always
+
+  build-windows:
+    runs-on: windows-latest
+    # After the mac job, so the two do not race to create the release draft:
+    # electron-builder makes one if none exists, and two at once make two.
+    needs: build-macos
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Inject OAuth Credentials and License Server
+        shell: bash
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
+        run: |
+          echo "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID" >> .env.local
+          echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
+          echo "LICENSE_SERVER_URL=$LICENSE_SERVER_URL" >> .env.local
+
+      # Builds the installer (MeganStudy-Setup-<version>.exe) and the portable
+      # exe (MeganStudy-Portable-<version>.exe) and uploads both to the draft.
+      - name: Build and Publish Installer and Portable
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win -- --publish always

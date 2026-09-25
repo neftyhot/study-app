@@ -10,14 +10,14 @@ import "server-only";
  * file read.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 
 import type { Db } from "@/db/client";
 import { sourceFiles, sourceSlides } from "@/db/schema";
-import { absolutePathFor } from "@/lib/ingest/storage";
+import { absolutePathFor, storedPath } from "@/lib/ingest/storage";
 
 /** Big enough to read a small label, small enough to send over localhost. */
 export const RENDER_SCALE = 1.6;
@@ -77,7 +77,7 @@ export async function slideImage(db: Db, slideId: string): Promise<SlideImage> {
       );
     }
 
-    const path = join("rendered", file.examId, `${slide.id}.png`);
+    const path = storedPath("rendered", file.examId, `${slide.id}.png`);
     const absolute = absolutePathFor(path);
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, image);

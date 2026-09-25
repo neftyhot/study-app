@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { flashcards } from "@/db/schema";
-import { absolutePathFor } from "@/lib/ingest/storage";
+import { absolutePathFor, isSafeStoredPath } from "@/lib/ingest/storage";
 
 const TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -37,6 +37,12 @@ export async function GET(
   const path = side === "back" ? card?.backImagePath : card?.frontImagePath;
   if (!path) {
     return Response.json({ error: "No image on that card." }, { status: 404 });
+  }
+
+  // A card's image path came from the card editor; one that leaves the
+  // uploads root is refused before it is anywhere near the disk.
+  if (!isSafeStoredPath(path)) {
+    return Response.json({ error: "That image path is not allowed." }, { status: 403 });
   }
 
   try {

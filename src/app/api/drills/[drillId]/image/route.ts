@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { diagramOcclusions } from "@/db/schema";
-import { absolutePathFor } from "@/lib/ingest/storage";
+import { absolutePathFor, isSafeStoredPath } from "@/lib/ingest/storage";
 
 export async function GET(
   _request: Request,
@@ -27,6 +27,10 @@ export async function GET(
 
   if (!drill) {
     return Response.json({ error: "No such drill" }, { status: 404 });
+  }
+
+  if (!isSafeStoredPath(drill.imagePath)) {
+    return Response.json({ error: "That image path is not allowed." }, { status: 403 });
   }
 
   try {

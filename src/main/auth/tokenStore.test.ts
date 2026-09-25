@@ -159,6 +159,23 @@ describe("the refresher", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  it("ends a session whose refresh token can no longer be decrypted", async () => {
+    signIn();
+    const refresh = vi.fn();
+    const lostKey: Cipher = {
+      ...cipher,
+      decryptString: () => {
+        throw new Error("Error while decrypting the ciphertext provided to safeStorage.decryptString.");
+      },
+    };
+
+    await expect(
+      createTokenRefresher({ db: sqlite, cipher: lostKey, refresh, now: () => NOW + 3_600_000 }).getAccessToken(),
+    ).rejects.toThrow("Sign in again in Settings.");
+    expect(readSession(sqlite)).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it("refreshes within 60 seconds of expiry, and saves the result", async () => {
     signIn();
     const later = NOW + 3_600_000 - 30_000;

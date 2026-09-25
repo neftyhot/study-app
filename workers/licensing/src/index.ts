@@ -1,5 +1,5 @@
 /**
- * The licensing Worker: turns a Stripe payment into a Study App license.
+ * The licensing Worker: turns a Stripe payment into a Megan Study license.
  *
  *   POST /stripe/webhook   Stripe → here. On a paid checkout, mint a
  *                          `lifetime` key for the machine id Stripe carried
@@ -356,7 +356,7 @@ async function handleLicenseLookup(machineId: string, env: Env): Promise<Respons
 
 async function handleSuccess(sessionId: string, env: Env): Promise<Response> {
   if (!SESSION_ID.test(sessionId)) {
-    return page("Study App", "<p>This page needs the link from your checkout.</p>", 400);
+    return page("Megan Study", "<p>This page needs the link from your checkout.</p>", 400);
   }
 
   const record = await env.LICENSES.get(`session:${sessionId}`);
@@ -372,8 +372,8 @@ async function handleSuccess(sessionId: string, env: Env): Promise<Response> {
 
   const { token } = JSON.parse(record) as IssuedLicense;
   return page(
-    "Thank you — Study App is yours",
-    `<p>Study App should unlock by itself within a few seconds. If it has not, click <b>Already have a license?</b> in the app and paste this key:</p>
+    "Thank you — Megan Study is yours",
+    `<p>Megan Study should unlock by itself within a few seconds. If it has not, click <b>Already have a license?</b> in the app and paste this key:</p>
 <textarea id="key" readonly rows="6">${escapeHtml(token)}</textarea>
 <p><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('key').value);this.textContent='Copied'">Copy key</button></p>
 <p class="muted">Keep a copy somewhere safe. It works on this computer only.</p>`,

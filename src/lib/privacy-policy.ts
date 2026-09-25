@@ -21,7 +21,7 @@ export const PRIVACY_POLICY: PolicySection[] = [
   {
     heading: "Usage statistics are required",
     body: [
-      "To use Study App you agree that it sends usage statistics to the developer. This cannot be turned off. The statistics are what keep the app working and paid for.",
+      "To use Megan Study you agree that it sends usage statistics to the developer. This cannot be turned off. The statistics are what keep the app working and paid for.",
       "What is sent: how many subjects, decks and cards you have; how many cards you have reviewed; how long the app has been open (focused and in the background); which features called an AI model, with the provider, model name, number of calls, token counts and estimated cost; the app version; and your operating system and processor type.",
       "It is sent under a random install id created on this computer. It does not include your name, email, licence key or machine id.",
       "It never includes the content of your files, cards, questions, answers or notes, or your API keys.",
@@ -45,7 +45,7 @@ export const PRIVACY_POLICY: PolicySection[] = [
   {
     heading: "Your choices",
     body: [
-      "To have your statistics deleted, send a suggestion from Settings that includes your install id (shown under Privacy in Settings). If you don't agree to this policy, don't use Study App: close it and uninstall it.",
+      "To have your statistics deleted, send a suggestion from Settings that includes your install id (shown under Privacy in Settings). If you don't agree to this policy, don't use Megan Study: close it and uninstall it.",
       "If this policy changes, the app will ask you to agree again before you can keep using it.",
     ],
   },

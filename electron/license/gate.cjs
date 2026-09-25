@@ -6,7 +6,7 @@
  * and so the pieces that touch the filesystem and the hardware id sit in front
  * of the pure verifier rather than inside it.
  */
-const { machineIdSync } = require("node-machine-id");
+const { readMachineId } = require("./machine-id.cjs");
 
 const store = require("./store.cjs");
 const {
@@ -33,7 +33,7 @@ function machineId() {
   if (cachedMachineId) return cachedMachineId;
 
   try {
-    cachedMachineId = machineIdSync({ original: true });
+    cachedMachineId = readMachineId();
   } catch {
     // Better to fail open on an unreadable id than to lock someone out of
     // software they paid for because of a platform quirk.

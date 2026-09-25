@@ -75,7 +75,7 @@ export function SetupWizard({
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Set up Study App
+          Set up Megan Study
         </h1>
         <p className="text-muted-foreground text-sm">
           One question, then you are done. You can change any of this later.

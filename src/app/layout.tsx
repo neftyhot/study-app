@@ -32,7 +32,7 @@ const nunito = Nunito({
 });
 
 export const metadata: Metadata = {
-  title: "Study App",
+  title: "Megan Study",
   description:
     "Turn lecture slides and study guides into sourced, atomic flashcards.",
 };

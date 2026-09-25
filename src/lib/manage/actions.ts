@@ -1,7 +1,6 @@
 "use server";
 
 import { rm } from "node:fs/promises";
-import { join } from "node:path";
 
 import { revalidatePath } from "next/cache";
 
@@ -11,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { sourceFiles } from "@/db/schema";
 import { ingestSourceFile } from "@/lib/ingest";
 import { relinkCards } from "@/lib/ingest/relink";
-import { absolutePathFor, uploadsRoot } from "@/lib/ingest/storage";
+import { absolutePathFor } from "@/lib/ingest/storage";
 
 import {
   createCourse,
@@ -31,7 +30,9 @@ import {
 
 /** Uploads live outside the database, so deletions have to reach the disk too. */
 async function removeExamUploads(examId: string) {
-  await rm(join(/* turbopackIgnore: true */ uploadsRoot(), examId), {
+  // Throws for an id that would leave the uploads root, rather than
+  // deleting whatever it names.
+  await rm(absolutePathFor(examId), {
     recursive: true,
     force: true,
   });

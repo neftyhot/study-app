@@ -1,7 +1,7 @@
 {
   "name": "study-app-licensing",
   "private": true,
-  "description": "Mints Study App licenses from Stripe checkouts.",
+  "description": "Mints Megan Study licenses from Stripe checkouts.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",

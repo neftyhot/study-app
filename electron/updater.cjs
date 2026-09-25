@@ -22,7 +22,8 @@ const { promisify } = require("node:util");
 const run = promisify(execFile);
 
 const REPO = "neftyhot/study-app";
-const APP_NAME = "Study App.app";
+/** The bundle a release's DMG holds; the first is the current name. */
+const APP_NAMES = ["Megan Study.app", "Study App.app"];
 
 function newer(a, b) {
   const parts = (v) => String(v).replace(/^v/, "").split(/[.-]/).map((p) => Number.parseInt(p, 10) || 0);
@@ -33,7 +34,7 @@ function newer(a, b) {
   return false;
 }
 
-/** The running app's bundle: …/Study App.app. */
+/** The running app's bundle: …/Megan Study.app, or its former name. */
 function bundlePath(app) {
   return path.resolve(app.getPath("exe"), "..", "..", "..");
 }
@@ -60,7 +61,7 @@ async function installUpdate(app) {
   }
 
   const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-    headers: { accept: "application/vnd.github+json", "user-agent": "StudyApp-Updater" },
+    headers: { accept: "application/vnd.github+json", "user-agent": "MeganStudy-Updater" },
   });
   if (!response.ok) return { ok: false, error: "Could not reach GitHub." };
   const release = await response.json();
@@ -73,12 +74,12 @@ async function installUpdate(app) {
     assets.find((asset) => /arm64\.dmg$/.test(asset.name)) ?? assets.find((asset) => asset.name.endsWith(".dmg"));
   if (!dmg) return { ok: false, error: "That release has no Mac download." };
 
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "study-app-update-"));
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "megan-study-update-"));
   const file = path.join(work, "update.dmg");
   let mount = null;
 
   try {
-    const download = await fetch(dmg.browser_download_url, { headers: { "user-agent": "StudyApp-Updater" } });
+    const download = await fetch(dmg.browser_download_url, { headers: { "user-agent": "MeganStudy-Updater" } });
     if (!download.ok || !download.body) throw new Error("The download failed.");
     await pipeline(Readable.fromWeb(download.body), fs.createWriteStream(file));
 
@@ -88,7 +89,11 @@ async function installUpdate(app) {
 
     const staged = `${bundle}.update`;
     fs.rmSync(staged, { recursive: true, force: true });
-    await run("ditto", [path.join(mount, APP_NAME), staged]);
+    // Swapped in at the running bundle's path, whatever it is called: the
+    // Dock, Launchpad and relaunch all point there.
+    const source = APP_NAMES.map((name) => path.join(mount, name)).find((candidate) => fs.existsSync(candidate));
+    if (!source) throw new Error("The downloaded update has no app in it.");
+    await run("ditto", [source, staged]);
     await run("xattr", ["-dr", "com.apple.quarantine", staged]).catch(() => undefined);
 
     const old = `${bundle}.old`;

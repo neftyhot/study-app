@@ -1,4 +1,4 @@
-# Study App licensing Worker. Secrets are NOT set here — see README.md:
+# Megan Study licensing Worker. Secrets are NOT set here — see README.md:
 #   wrangler secret put STRIPE_WEBHOOK_SECRET
 #   wrangler secret put LICENSE_PRIVATE_KEY < ../../.license-private-key.pem
 name = "study-app-licensing"

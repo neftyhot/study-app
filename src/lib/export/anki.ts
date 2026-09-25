@@ -181,7 +181,7 @@ function decks(deckId: number, name: string) {
       timeToday: [0, 0],
       collapsed: false,
       browserCollapsed: false,
-      desc: "Exported from Study App.",
+      desc: "Exported from Megan Study.",
       dyn: 0,
       conf: 1,
       extendNew: 10,
@@ -264,7 +264,7 @@ export async function buildApkg(
           curModel: String(modelId),
           collapseTime: 1200,
         }),
-        JSON.stringify(models(modelId, deckId, `${deck.title} — Study App`)),
+        JSON.stringify(models(modelId, deckId, `${deck.title} — Megan Study`)),
         JSON.stringify(decks(deckId, deck.title)),
         JSON.stringify(DCONF),
       );

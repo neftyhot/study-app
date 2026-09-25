@@ -1,11 +1,11 @@
 #!/bin/bash
-# Installs the latest Study App release on a Mac.
+# Installs the latest Megan Study release on a Mac.
 #
 #   curl -fsSL https://raw.githubusercontent.com/neftyhot/study-app/main/scripts/install.sh | bash
 #
 # Why this exists: the app is not yet signed with an Apple Developer ID, so
 # a DMG downloaded in a browser is tagged with com.apple.quarantine and
-# Gatekeeper refuses to open it ("Study App is damaged" / "cannot be
+# Gatekeeper refuses to open it ("Megan Study is damaged" / "cannot be
 # verified"). A file fetched with curl is never tagged, and the tag is also
 # removed from the installed copy below, so the app opens normally.
 #
@@ -14,10 +14,12 @@
 set -euo pipefail
 
 REPO="neftyhot/study-app"
-APP="Study App.app"
+APP="Megan Study.app"
+# The app's former name; replaced rather than left beside the new one.
+FORMER_APP="Study App.app"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
-  echo "Study App is a macOS app; this installer only runs on a Mac." >&2
+  echo "Megan Study is a macOS app; this installer only runs on a Mac." >&2
   exit 1
 fi
 
@@ -50,20 +52,24 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Downloading ${DMG_URL##*/}…"
-curl -fL --progress-bar -o "${WORK}/StudyApp.dmg" "${DMG_URL}"
+curl -fL --progress-bar -o "${WORK}/MeganStudy.dmg" "${DMG_URL}"
 
 echo "Installing to /Applications…"
-MOUNT="$(hdiutil attach "${WORK}/StudyApp.dmg" -nobrowse -readonly | grep -o '/Volumes/.*' | head -n 1)"
+MOUNT="$(hdiutil attach "${WORK}/MeganStudy.dmg" -nobrowse -readonly | grep -o '/Volumes/.*' | head -n 1)"
 
 # Quit a running copy first; replacing an app while it runs can corrupt it.
-if pgrep -f "/Applications/${APP}/" >/dev/null 2>&1; then
-  osascript -e 'tell application "Study App" to quit' >/dev/null 2>&1 || true
-  sleep 2
-fi
+for bundle in "${APP}" "${FORMER_APP}"; do
+  if pgrep -f "/Applications/${bundle}/" >/dev/null 2>&1; then
+    osascript -e "tell application \"${bundle%.app}\" to quit" >/dev/null 2>&1 || true
+    sleep 2
+  fi
+done
 
-rm -rf "/Applications/${APP}"
+# The student's data is in Application Support, not the bundle; the new app
+# moves it across from the old name's folder on first launch.
+rm -rf "/Applications/${APP}" "/Applications/${FORMER_APP}"
 ditto "${MOUNT}/${APP}" "/Applications/${APP}"
 xattr -dr com.apple.quarantine "/Applications/${APP}" 2>/dev/null || true
 
-echo "Installed. Opening Study App…"
+echo "Installed. Opening Megan Study…"
 open "/Applications/${APP}"

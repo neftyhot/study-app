@@ -190,7 +190,19 @@ export function createTokenRefresher(deps: {
   let inFlight: Promise<string | null> | null = null;
 
   async function refresh(): Promise<string | null> {
-    const refreshToken = readRefreshToken(deps.db, deps.cipher);
+    let refreshToken: string | null;
+    try {
+      refreshToken = readRefreshToken(deps.db, deps.cipher);
+    } catch (error) {
+      // The Keychain no longer has the key it was sealed with — reset, or
+      // the app was renamed, which changes the Keychain entry's name. The
+      // token is unrecoverable; failing the same way on every call helps
+      // nobody.
+      clearSession(deps.db);
+      throw new Error("Your Google sign-in could not be read. Sign in again in Settings.", {
+        cause: error,
+      });
+    }
     if (!refreshToken) return null;
 
     let tokens: TokenSet;

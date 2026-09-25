@@ -1,6 +1,6 @@
 # Licensing Worker
 
-Turns a Stripe payment into a Study App license. The app opens a Stripe
+Turns a Stripe payment into a Megan Study license. The app opens a Stripe
 Payment Link ($24.95, one-time) with this machine's id as
 `client_reference_id`. When the checkout is paid, Stripe calls this Worker,
 which mints a `lifetime` Ed25519 key bound to that machine and keeps it in KV.

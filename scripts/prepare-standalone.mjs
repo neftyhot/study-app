@@ -6,11 +6,36 @@
  * assets or `public/`, because a normal deployment serves those from a CDN —
  * a desktop app has no CDN, so they are copied in here.
  */
-import { cp, mkdir, access, rm, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, access, rm, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { parseArgs } from "node:util";
 
 const root = process.cwd();
 const standalone = join(root, ".next", "standalone");
+
+/**
+ * The platform the app is being packaged for, which is not necessarily this
+ * one: `--platform=win32 --arch=x64` prepares a Windows bundle on a Mac.
+ * Native binaries are chosen for the target, never for the build machine.
+ */
+const { values: args } = parseArgs({
+  options: {
+    platform: { type: "string", default: process.platform },
+    arch: { type: "string", default: process.arch },
+  },
+});
+const target = { platform: args.platform, arch: args.arch };
+const crossBuild =
+  target.platform !== process.platform || target.arch !== process.arch;
+
+/** `@napi-rs/canvas`'s per-platform package; Windows and Linux name the ABI. */
+function canvasBinding({ platform, arch }) {
+  const abi = { win32: "-msvc", linux: "-gnu" }[platform] ?? "";
+  return `@napi-rs/canvas-${platform}-${arch}${abi}`;
+}
+
+/** node-llama-cpp's binaries are `@node-llama-cpp/{mac,win,linux}-{arch}[-gpu]`. */
+const LLAMA_PLATFORM = { darwin: "mac", win32: "win", linux: "linux" };
 
 async function exists(path) {
   try {
@@ -77,7 +102,7 @@ async function main() {
     // Skia, used to rasterize a page for a diagram drill. Same problem: the
     // platform binding is resolved at runtime, so the tracer never sees it.
     "@napi-rs/canvas",
-    `@napi-rs/canvas-${process.platform}-${process.arch}`,
+    canvasBinding(target),
   ]) {
     const source = join(root, "node_modules", native);
     if (!(await exists(source))) continue;
@@ -93,9 +118,69 @@ async function main() {
     });
   }
 
+  await copySqliteBinary();
+  await assertNativeBindings();
+
   await scrubBuildPaths();
 
-  console.log("Standalone output prepared for packaging.");
+  console.log(
+    `Standalone output prepared for packaging (${target.platform}-${target.arch}).`,
+  );
+}
+
+/**
+ * better-sqlite3's binary for the target.
+ *
+ * It ships N-API prebuilds for every platform, and N-API is stable across
+ * Node and Electron, so nothing is compiled — the right file only has to be
+ * there. The tracer copies the build machine's alone, which on a Mac building
+ * for Windows is exactly the wrong one.
+ */
+async function copySqliteBinary() {
+  const name = `${target.platform}-${target.arch}.node`;
+  const source = join(root, "node_modules", "better-sqlite3", "prebuilds", name);
+  if (!(await exists(source))) {
+    throw new Error(`better-sqlite3 has no prebuilt binary for ${name}.`);
+  }
+
+  const prebuilds = join(standalone, "node_modules", "better-sqlite3", "prebuilds");
+  await mkdir(prebuilds, { recursive: true });
+  await cp(source, join(prebuilds, name));
+}
+
+/**
+ * Refuses to package a bundle whose native pieces are for another platform.
+ *
+ * npm installs only this machine's optional per-platform packages, so a cross
+ * build is missing the target's unless they were fetched on purpose. Better
+ * to stop here than ship an app whose diagram drills and offline model fail
+ * the first time a student tries them.
+ */
+async function assertNativeBindings() {
+  const missing = [];
+
+  if (!(await exists(join(standalone, "node_modules", canvasBinding(target))))) {
+    missing.push(canvasBinding(target));
+  }
+
+  const llamaDir = join(standalone, "node_modules", "@node-llama-cpp");
+  const prefix = `${LLAMA_PLATFORM[target.platform]}-${target.arch}`;
+  const llama = (await exists(llamaDir)) ? await readdir(llamaDir) : [];
+  if (!llama.some((name) => name === prefix || name.startsWith(`${prefix}-`))) {
+    missing.push(`@node-llama-cpp/${prefix}*`);
+  }
+
+  if (missing.length === 0) return;
+
+  const hint = crossBuild
+    ? `\nBuild on a ${target.platform}-${target.arch} machine (a CI runner will do), ` +
+      "where npm installs them."
+    : "\nRun `npm install` to fetch them.";
+  throw new Error(
+    `Native packages for ${target.platform}-${target.arch} are not installed:\n` +
+      missing.map((name) => `  ${name}`).join("\n") +
+      hint,
+  );
 }
 
 /**
@@ -116,8 +201,13 @@ async function scrubBuildPaths() {
   for (const file of files) {
     if (!(await exists(file))) continue;
 
+    // Windows paths appear JSON-escaped (`C:\\Users\\…`) as well as raw.
     const before = await readFile(file, "utf8");
-    const after = before.split(root).join("/app");
+    const after = before
+      .split(JSON.stringify(root).slice(1, -1))
+      .join("/app")
+      .split(root)
+      .join("/app");
     if (after !== before) await writeFile(file, after);
   }
 }

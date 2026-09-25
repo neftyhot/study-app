@@ -35,7 +35,7 @@ export function PrivacyGate() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold tracking-tight">Before you start</h1>
         <p className="text-muted-foreground text-sm">
-          Study App keeps your study material on this computer. It does send the
+          Megan Study keeps your study material on this computer. It does send the
           developer usage statistics — numbers only, never your cards or files —
           and that is required to use the app. Please read the policy below.
         </p>
@@ -64,7 +64,7 @@ export function PrivacyGate() {
           {pending ? "Saving…" : "Agree and continue"}
         </Button>
         <p className="text-muted-foreground text-xs">
-          Don&apos;t agree? Close Study App and uninstall it; nothing has been sent.
+          Don&apos;t agree? Close Megan Study and uninstall it; nothing has been sent.
         </p>
       </div>
     </main>
