@@ -9,7 +9,13 @@
 const { machineIdSync } = require("node-machine-id");
 
 const store = require("./store.cjs");
-const { verifyLicense, daysRemaining, messageFor, REASON } = require("./verify.cjs");
+const {
+  verifyLicense,
+  daysRemaining,
+  messageFor,
+  decode,
+  REASON,
+} = require("./verify.cjs");
 
 /** How long the app runs with no license before the gate locks. */
 const TRIAL_DAYS = 7;
@@ -37,6 +43,24 @@ function machineId() {
   return cachedMachineId;
 }
 
+/** The id inside a key, read without checking it; null if there is none. */
+function licenseId(token) {
+  const decoded = decode(token);
+  const id = decoded.ok ? decoded.payload?.id : null;
+  return typeof id === "string" && id !== "" ? id : null;
+}
+
+/**
+ * A key that verifies but that the licensing server has revoked. The list is
+ * filled in by main.cjs from the server; the verifier itself stays offline.
+ */
+function refuseRevoked(userDataDir, result) {
+  const id = result.payload?.id;
+  if (!result.valid || typeof id !== "string") return result;
+  if (!store.readRevoked(userDataDir).includes(id)) return result;
+  return { valid: false, reason: REASON.revoked, payload: result.payload };
+}
+
 /**
  * Evaluates the stored license for this launch.
  *
@@ -57,11 +81,10 @@ function evaluate(userDataDir, now = Date.now()) {
   const token = store.readToken(userDataDir);
   const lastLaunch = store.readLastLaunch(userDataDir);
 
-  const result = verifyLicense(token, {
-    machineId: machineId(),
-    now,
-    lastLaunch,
-  });
+  const result = refuseRevoked(
+    userDataDir,
+    verifyLicense(token, { machineId: machineId(), now, lastLaunch }),
+  );
 
   if (result.reason === REASON.clockRollback) {
     store.flagClockTamper(userDataDir, now);
@@ -113,11 +136,14 @@ function evaluate(userDataDir, now = Date.now()) {
 
 /** Checks a token the student just pasted, without storing it. */
 function validate(userDataDir, token, now = Date.now()) {
-  const result = verifyLicense(token, {
-    machineId: machineId(),
-    now,
-    lastLaunch: store.readLastLaunch(userDataDir),
-  });
+  const result = refuseRevoked(
+    userDataDir,
+    verifyLicense(token, {
+      machineId: machineId(),
+      now,
+      lastLaunch: store.readLastLaunch(userDataDir),
+    }),
+  );
 
   return {
     valid: result.valid,
@@ -141,6 +167,8 @@ function activate(userDataDir, token, now = Date.now()) {
 module.exports = {
   TRIAL_DAYS,
   machineId,
+  licenseId,
+  refuseRevoked,
   evaluate,
   validate,
   activate,

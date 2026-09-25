@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("authority", {
   importKey: (token) => ipcRenderer.invoke("import", token),
   setStatus: (id, status) => ipcRenderer.invoke("set-status", id, status),
   remove: (id) => ipcRenderer.invoke("delete", id),
+  syncRevocations: () => ipcRenderer.invoke("sync-revocations"),
   copy: (text) => ipcRenderer.invoke("copy", text),
   reveal: () => ipcRenderer.invoke("reveal"),
   chooseFolder: () => ipcRenderer.invoke("choose-folder"),

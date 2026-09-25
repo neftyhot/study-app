@@ -149,6 +149,10 @@
             </thead>
             <tbody id="rows"></tbody>
           </table>
+          <div class="empty" style="text-align: left">
+            <button id="sync-revocations" type="button">Push revocations to server</button>
+            <span id="sync-status" class="paths">Revoke, Restore and Delete send the list automatically.</span>
+          </div>
         </div>
       </section>
 
@@ -303,18 +307,30 @@
           actions.append(
             button("Copy", () => copy(record.token)),
             button(record.status === "revoked" ? "Restore" : "Revoke", async () => {
-              render(await window.authority.setStatus(
+              renderSynced(await window.authority.setStatus(
                 record.id,
                 record.status === "revoked" ? "active" : "revoked",
               ));
             }, record.status === "revoked" ? "" : "danger"),
             button("Delete", async () => {
-              if (!confirm(`Delete the record for ${record.name ?? "this key"}?\n\nThe key itself keeps working until it expires — deleting only forgets it here. Revoke instead if you want a record.`)) return;
-              render(await window.authority.remove(record.id));
+              if (!confirm(`Delete the record for ${record.name ?? "this key"}?\n\nIf it is revoked, deleting takes it off the server's revoked list and the key works again until it expires. Keep the record (revoked) to keep it blocked.`)) return;
+              renderSynced(await window.authority.remove(record.id));
             }, "danger"),
           );
 
           rows.append(tr);
+        }
+      }
+
+      /** Renders, then says whether the server heard about the change. */
+      function renderSynced(state) {
+        render(state);
+        const sync = state.sync;
+        if (!sync) return;
+        if (sync.ok) {
+          $("sync-status").textContent = `Server updated: ${sync.revoked} revoked key${sync.revoked === 1 ? "" : "s"}.`;
+        } else {
+          fail("Saved here, but the server was not updated, so revoked keys still work in the app: " + sync.error);
         }
       }
 
@@ -399,6 +415,9 @@
 
       $("copy-last").addEventListener("click", () => lastToken && copy(lastToken));
       $("reveal").addEventListener("click", () => window.authority.reveal());
+      $("sync-revocations").addEventListener("click", async () => {
+        renderSynced(await window.authority.syncRevocations());
+      });
       $("choose").addEventListener("click", async () => {
         clearAlert();
         render(await window.authority.chooseFolder());

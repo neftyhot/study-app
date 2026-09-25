@@ -132,6 +132,11 @@ async function main() {
   check("row marked revoked", await run(
     `document.querySelector("#rows tr").textContent.includes("revoked")`,
   ));
+  // No settings folder here, so the push to the Worker cannot happen — and
+  // the window has to say so rather than imply the key is now blocked.
+  check("failed server sync is shown", await run(
+    `!document.getElementById("alert").hidden && document.getElementById("alert").textContent.includes("server was not updated")`,
+  ));
 
   rmSync(root, { recursive: true, force: true });
 

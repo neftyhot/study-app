@@ -5,8 +5,10 @@
  * this machine's id as `client_reference_id`. When the payment completes,
  * Stripe tells the licensing Worker (workers/licensing), which mints a
  * `lifetime` key for exactly that machine and keeps it under the machine id.
- * This file asks the Worker for it — and that is the only network call the
- * license gate ever makes, and only while unlicensed.
+ * This file asks the Worker for it, while unlicensed.
+ *
+ * It also asks whether a key has been revoked (checkRevoked). That is the one
+ * other call, and it only ever takes access away; offline, nothing changes.
  *
  * Whatever comes back is verified here like any pasted key: the Worker is a
  * convenience for delivery, not a source of trust. Only the signature is.
@@ -58,8 +60,34 @@ async function fetchPurchasedLicense(machineId, fetchImpl = fetch) {
   }
 }
 
+/**
+ * Whether the Worker lists this key as revoked.
+ *
+ * @returns {Promise<boolean | null>} null when it could not be asked: no
+ *   server configured, offline, or an answer that did not make sense. A null
+ *   never locks anyone out.
+ */
+async function checkRevoked(licenseId, fetchImpl = fetch) {
+  const server = licenseServerUrl();
+  if (!server || typeof licenseId !== "string" || licenseId === "") return null;
+
+  try {
+    const response = await fetchImpl(
+      `${server}/revoked/${encodeURIComponent(licenseId)}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!response.ok) return null;
+
+    const body = await response.json();
+    return typeof body?.revoked === "boolean" ? body.revoked : null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   PURCHASE_URL,
+  checkRevoked,
   licenseServerUrl,
   purchaseUrl,
   fetchPurchasedLicense,

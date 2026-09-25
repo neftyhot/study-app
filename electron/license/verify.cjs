@@ -24,6 +24,8 @@ const REASON = {
   clockRollback: "clock_rollback",
   unknownType: "unknown_type",
   trialEnded: "trial_ended",
+  // Checked against the licensing server, not the signature: see gate.cjs.
+  revoked: "revoked",
 };
 
 /**
@@ -187,6 +189,8 @@ const MESSAGES = {
   [REASON.unknownType]: "That key is of a kind this version does not support.",
   [REASON.trialEnded]:
     "Your 7-day free trial has ended. Purchase a license to keep using Study App — everything you made is still here.",
+  [REASON.revoked]:
+    "This license key has been revoked. Purchase a license to keep using Study App — everything you made is still here.",
 };
 
 function messageFor(reason) {

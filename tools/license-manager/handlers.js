@@ -7,7 +7,7 @@
  */
 const path = require("node:path");
 
-const { registerInsights } = require("./insights.js");
+const { registerInsights, admin } = require("./insights.js");
 
 let storePromise = null;
 
@@ -34,6 +34,32 @@ async function snapshot(isDev) {
       daysLeft: api.daysLeft(record),
     })),
   };
+}
+
+/**
+ * Sends the Worker the whole list of revoked key ids.
+ *
+ * The app checks its key against that list, so a revoke here only reaches
+ * people once this succeeds. The list replaces the previous one, which is how
+ * Restore and Delete take a key back off it. Never throws: the ledger has
+ * already changed, and the window says what went wrong with the server.
+ */
+async function syncRevocations(api, configDir) {
+  const ids = api
+    .readLicenses()
+    .filter((record) => record.status === "revoked")
+    .map((record) => record.id);
+  try {
+    if (!configDir) throw new Error("No settings folder.");
+    await admin(configDir, "/admin/revocations", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    return { ok: true, revoked: ids.length };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /**
@@ -70,13 +96,18 @@ async function registerHandlers(ipcMain, context) {
 
   ipcMain.handle("set-status", async (_event, id, status) => {
     api.setStatus(id, status);
-    return snapshot(isDev);
+    return { ...(await snapshot(isDev)), sync: await syncRevocations(api, context.configDir) };
   });
 
   ipcMain.handle("delete", async (_event, id) => {
     api.deleteLicense(id);
-    return snapshot(isDev);
+    return { ...(await snapshot(isDev)), sync: await syncRevocations(api, context.configDir) };
   });
+
+  ipcMain.handle("sync-revocations", async () => ({
+    ...(await snapshot(isDev)),
+    sync: await syncRevocations(api, context.configDir),
+  }));
 
   ipcMain.handle("copy", (_event, text) => {
     electron.clipboard.writeText(String(text ?? ""));
@@ -106,4 +137,4 @@ async function registerHandlers(ipcMain, context) {
   });
 }
 
-module.exports = { registerHandlers, snapshot, loadStore };
+module.exports = { registerHandlers, snapshot, loadStore, syncRevocations };

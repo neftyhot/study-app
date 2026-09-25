@@ -436,9 +436,110 @@ describe("the gate", () => {
     expect(gate.evaluate(dir, now + DAY).reason).toBe(REASON.clockRollback);
   });
 
+  it("refuses a key the licensing server has revoked, and says so", () => {
+    const payload = { id: "key-1", type: "lifetime" };
+    const passed = { valid: true, payload };
+
+    expect(gate.refuseRevoked(dir, passed)).toBe(passed);
+
+    store.addRevoked(dir, "key-1");
+    const refused = gate.refuseRevoked(dir, passed);
+    expect(refused).toMatchObject({ valid: false, reason: REASON.revoked });
+    expect(messageFor(refused.reason)).toMatch(/revoked/);
+
+    store.removeRevoked(dir, "key-1");
+    expect(gate.refuseRevoked(dir, passed)).toBe(passed);
+  });
+
+  it("keeps a revoked key's reason once the trial is over", () => {
+    const first = Date.now();
+    gate.evaluate(dir, first);
+    const token = student();
+    store.saveToken(dir, token);
+    store.addRevoked(dir, gate.licenseId(token));
+
+    // Not signed by the shipped key, so the gate sees a bad signature; the
+    // point is that the revoked list and the trial leave everything else be.
+    expect(gate.evaluate(dir, first + DAY).trial).toBe(true);
+    expect(store.readToken(dir)).toBe(token);
+  });
+
+  it("reads a key's id without trusting it", () => {
+    expect(gate.licenseId(student({ id: "abc" }))).toBe("abc");
+    expect(gate.licenseId("obvious-nonsense")).toBeNull();
+    expect(gate.licenseId(null)).toBeNull();
+  });
+
   it("reports the machine id the activation screen shows", () => {
     expect(gate.machineId()).toBe(gate.evaluate(dir).machineId);
     expect(gate.machineId().length).toBeGreaterThan(8);
+  });
+});
+
+describe("the revoked list", () => {
+  let dir: string;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "revoked-"));
+  });
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("adds once, removes, and leaves the rest of the file alone", () => {
+    store.saveToken(dir, "t");
+    store.startTrial(dir, 5);
+
+    expect(store.readRevoked(dir)).toEqual([]);
+    store.addRevoked(dir, "a");
+    store.addRevoked(dir, "a");
+    store.addRevoked(dir, "b");
+    expect(store.readRevoked(dir)).toEqual(["a", "b"]);
+
+    store.removeRevoked(dir, "a");
+    expect(store.readRevoked(dir)).toEqual(["b"]);
+    expect(store.readToken(dir)).toBe("t");
+    expect(store.readTrialStart(dir)).toBe(5);
+  });
+});
+
+describe("asking whether a key is revoked", () => {
+  const saved = process.env.LICENSE_SERVER_URL;
+  afterEach(() => {
+    if (saved === undefined) delete process.env.LICENSE_SERVER_URL;
+    else process.env.LICENSE_SERVER_URL = saved;
+  });
+
+  it("asks nobody when no licensing server is configured", async () => {
+    delete process.env.LICENSE_SERVER_URL;
+    const fetchImpl = vi.fn();
+    expect(await purchase.checkRevoked("id", fetchImpl)).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("returns the server's answer", async () => {
+    process.env.LICENSE_SERVER_URL = "https://licensing.example/";
+    const fetchImpl = vi.fn<(url: string) => Promise<Response>>(async () =>
+      Response.json({ revoked: true }),
+    );
+    expect(await purchase.checkRevoked("a b", fetchImpl)).toBe(true);
+    expect(fetchImpl.mock.calls[0][0]).toBe("https://licensing.example/revoked/a%20b");
+
+    expect(
+      await purchase.checkRevoked("x", async () => Response.json({ revoked: false })),
+    ).toBe(false);
+  });
+
+  it("never locks anyone out when it cannot get an answer", async () => {
+    process.env.LICENSE_SERVER_URL = "https://licensing.example";
+    for (const fetchImpl of [
+      async () => new Response("oops", { status: 500 }),
+      async () => Response.json({ something: "else" }),
+      async () => {
+        throw new TypeError("fetch failed");
+      },
+    ]) {
+      expect(await purchase.checkRevoked("id", fetchImpl)).toBeNull();
+    }
   });
 });
 

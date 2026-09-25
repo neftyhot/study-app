@@ -327,4 +327,23 @@ describe("telemetry and admin", () => {
     await call(`/admin/feedback/${encodeURIComponent(list[0].key)}`, { method: "DELETE" });
     expect(await (await call("/admin/feedback")).json()).toHaveLength(0);
   });
+
+  it("keeps a revoked key from being checked in or handed back out", async () => {
+    await webhook(checkoutEvent());
+    const { token } = (await (await get(`/license/${MACHINE}`)).json()) as { token: string };
+    const { payload } = verifyLicense(token, { machineId: MACHINE, publicKeyPem: PUBLIC_PEM });
+    const id = payload!.id as string;
+
+    expect(await (await call(`/revoked/${id}`, {}, null)).json()).toEqual({ revoked: false });
+    expect((await call("/admin/revocations", { method: "PUT", body: JSON.stringify({ ids: [id] }) }, null)).status).toBe(401);
+
+    await call("/admin/revocations", { method: "PUT", body: JSON.stringify({ ids: [id, "../bad"] }) });
+    expect(await (await call(`/revoked/${id}`, {}, null)).json()).toEqual({ revoked: true });
+    expect((await call(`/license/${MACHINE}`, {}, null)).status).toBe(404);
+
+    // Restoring is the same list with the id left out.
+    await call("/admin/revocations", { method: "PUT", body: JSON.stringify({ ids: [] }) });
+    expect(await (await call(`/revoked/${id}`, {}, null)).json()).toEqual({ revoked: false });
+    expect((await call(`/license/${MACHINE}`, {}, null)).status).toBe(200);
+  });
 });

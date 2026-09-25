@@ -271,6 +271,15 @@ app.whenReady().then(async () => {
    * for the app itself rather than asking the student to quit and reopen.
    */
   async function activateAndLaunch(token) {
+    // Ask the server first, so a revoked key is refused here and one that was
+    // restored is accepted again. Offline, the local list decides.
+    const id = gate.licenseId(token);
+    if (id) {
+      const revoked = await purchase.checkRevoked(id);
+      if (revoked === true) gate.store.addRevoked(userData, id);
+      if (revoked === false) gate.store.removeRevoked(userData, id);
+    }
+
     const result = gate.activate(userData, token);
     if (!result.valid) return result;
 
@@ -299,6 +308,33 @@ app.whenReady().then(async () => {
   }
 
   ipcMain.handle("activate-license", (_event, token) => activateAndLaunch(token));
+
+  /**
+   * Whether the stored key has been revoked in the License Manager. If it
+   * has, the key is refused and the activation screen replaces the app. The
+   * database is never touched: buying or pasting a key picks up where the
+   * student left off.
+   */
+  async function enforceRevocation() {
+    const id = gate.licenseId(gate.store.readToken(userData));
+    if (!id) return;
+
+    const revoked = await purchase.checkRevoked(id);
+    if (revoked !== true) return;
+
+    // The key stays stored, refused by the list, so the activation screen
+    // can say it was revoked rather than that a trial ended.
+    gate.store.addRevoked(userData, id);
+
+    const license = gate.evaluate(userData);
+    publishLicense(license);
+    if (license.valid) return;
+
+    createActivationWindow();
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.webContents.getURL().startsWith("file://")) window.close();
+    }
+  }
 
   // Why the activation screen is showing: trial over, a bad key, a clock.
   ipcMain.handle("get-gate-status", () => {
@@ -358,6 +394,11 @@ app.whenReady().then(async () => {
     // Bought during the trial but not activated yet (the confirmation tab was
     // closed, say): pick the key up quietly. Only ever while on the trial.
     if (license.trial) void checkPurchase().catch(() => {});
+
+    // A key revoked since the last launch, now and every few hours after.
+    const checkRevocation = () => void enforceRevocation().catch(() => {});
+    checkRevocation();
+    setInterval(checkRevocation, 6 * 60 * 60 * 1000).unref?.();
   } catch (error) {
     const detail =
       error instanceof Error ? (error.stack ?? error.message) : String(error);

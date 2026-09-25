@@ -35,7 +35,7 @@ async function admin(dir, route, init = {}) {
   if (!token) throw new Error("Add the admin token under Connection first.");
   const response = await fetch(`${url.replace(/\/+$/, "")}${route}`, {
     ...init,
-    headers: { authorization: `Bearer ${token}` },
+    headers: { ...init.headers, authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(15000),
   });
   if (response.status === 401) throw new Error("The Worker refused the admin token.");
@@ -119,4 +119,4 @@ function registerInsights(ipcMain, context) {
   );
 }
 
-module.exports = { registerInsights, readConfig, writeConfig, asText, DEFAULT_URL };
+module.exports = { registerInsights, readConfig, writeConfig, asText, admin, DEFAULT_URL };

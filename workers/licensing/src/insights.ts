@@ -242,5 +242,44 @@ export async function handleAdmin(request: Request, env: InsightsEnv, path: stri
     return Response.json({ ok: true });
   }
 
+  if (request.method === "PUT" && path === "/admin/revocations") {
+    let body: { ids?: unknown };
+    try {
+      body = JSON.parse((await request.text()).slice(0, 200_000));
+    } catch {
+      return new Response("Bad payload", { status: 400 });
+    }
+    if (!Array.isArray(body.ids)) return new Response("Bad payload", { status: 400 });
+    const ids = [...new Set(body.ids.filter((id): id is string => typeof id === "string" && LICENSE_ID.test(id)))];
+    await env.LICENSES.put(REVOKED_KEY, JSON.stringify(ids));
+    return Response.json({ ok: true, revoked: ids.length });
+  }
+
   return new Response("Not found", { status: 404 });
+}
+
+/* ------------------------------------------------------------ Revocation */
+
+/**
+ * The License Manager keeps the ledger of every key it has issued; revoking
+ * one there sends the whole list of revoked ids here (replacing the last), so
+ * restoring a key is the same call with that id left out. The app asks about
+ * its own key by id, and never sees the list.
+ */
+const REVOKED_KEY = "revoked";
+export const LICENSE_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+export async function revokedIds(env: InsightsEnv): Promise<Set<string>> {
+  const raw = await env.LICENSES.get(REVOKED_KEY);
+  if (!raw) return new Set();
+  try {
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+export async function isRevoked(env: InsightsEnv, id: string): Promise<boolean> {
+  return (await revokedIds(env)).has(id);
 }

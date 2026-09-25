@@ -6,6 +6,14 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.2.4",
+    date: "2026-09-24",
+    notes: [
+      "Revoked licence keys now stop working: the app checks at launch and every few hours, and shows the activation screen if a key has been revoked. Your decks and cards are kept.",
+      "Checking for revocation never locks you out when you're offline.",
+    ],
+  },
+  {
     version: "0.2.3",
     date: "2026-09-24",
     notes: [

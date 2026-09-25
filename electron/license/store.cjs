@@ -103,7 +103,37 @@ function startTrial(userDataDir, now = Date.now()) {
   return now;
 }
 
+/**
+ * Keys the licensing server has said are revoked.
+ *
+ * A key's signature never stops verifying, so revocation is a list kept
+ * beside it. Remembered here so a revoked key stays refused offline, and so
+ * pasting it back in does not reopen the app until the server says otherwise.
+ */
+function readRevoked(userDataDir) {
+  const value = read(userDataDir).revokedIds;
+  return Array.isArray(value) ? value.filter((id) => typeof id === "string") : [];
+}
+
+function addRevoked(userDataDir, id) {
+  const ids = readRevoked(userDataDir);
+  if (ids.includes(id)) return;
+  write(userDataDir, { ...read(userDataDir), revokedIds: [...ids, id] });
+}
+
+function removeRevoked(userDataDir, id) {
+  const ids = readRevoked(userDataDir);
+  if (!ids.includes(id)) return;
+  write(userDataDir, {
+    ...read(userDataDir),
+    revokedIds: ids.filter((other) => other !== id),
+  });
+}
+
 module.exports = {
+  readRevoked,
+  addRevoked,
+  removeRevoked,
   readTrialStart,
   startTrial,
   filePath,

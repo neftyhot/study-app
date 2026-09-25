@@ -261,9 +261,9 @@ export function deleteLicense(id) {
 /**
  * Writes the revoked ids out on their own.
  *
- * Nothing consumes this yet — the app has no blacklist, because a blacklist
- * baked into a build only affects people who install that build. It exists so
- * the list is ready the day it is wanted.
+ * A record for the developer. What the app obeys is the list the License
+ * Manager pushes to the licensing Worker (PUT /admin/revocations), which the
+ * app asks about its own key.
  */
 export function exportRevocations(records = readLicenses()) {
   const revoked = records

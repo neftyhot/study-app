@@ -11,6 +11,8 @@
  *                          shows the key, as a fallback to automatic delivery.
  *   POST /telemetry, /admin/*  Usage totals (every install) and the developer's
  *                          view of them and of suggestions (insights.ts).
+ *   GET  /revoked/:id      Whether a key has been revoked in the License
+ *                          Manager (PUT /admin/revocations sets the list).
  *   POST /feedback         A feature suggestion from the app's settings.
  *                          Stored under `feedback:`; read in the License
  *                          Manager's Suggestions tab.
@@ -24,7 +26,7 @@
  * the tests run this same file.
  */
 
-import { handleAdmin, handleTelemetry, type ListResult } from "./insights";
+import { handleAdmin, handleTelemetry, isRevoked, LICENSE_ID, type ListResult } from "./insights";
 
 export type KVLike = {
   get(key: string): Promise<string | null>;
@@ -74,6 +76,12 @@ const worker = {
         decodeURIComponent(url.pathname.slice("/license/".length)),
         env,
       );
+    }
+
+    if (request.method === "GET" && url.pathname.startsWith("/revoked/")) {
+      const id = decodeURIComponent(url.pathname.slice("/revoked/".length));
+      if (!LICENSE_ID.test(id)) return new Response("Bad license id", { status: 400 });
+      return json({ revoked: await isRevoked(env, id) });
     }
 
     if (request.method === "POST" && url.pathname === "/telemetry") {
@@ -339,7 +347,10 @@ async function handleLicenseLookup(machineId: string, env: Env): Promise<Respons
 
   // A key bound to one machine is useless anywhere else, so handing it to
   // whoever asks with that id gives nothing away.
-  const { token } = JSON.parse(record) as IssuedLicense;
+  const { token, licenseId } = JSON.parse(record) as IssuedLicense;
+  // A revoked purchase is not handed back out, or the app would re-activate
+  // the key it has just been told to drop.
+  if (await isRevoked(env, licenseId)) return json({ token: null }, 404);
   return json({ token });
 }
 
