@@ -21,6 +21,7 @@ import { qualityForGrade, scheduleFor } from "@/lib/srs";
 
 import { applyFlashcardGrade, type Grade } from "./grade";
 import { buildQueue, type QueueCard, type QueueFilter } from "./queue";
+import { chronologicalCardOrder } from "@/lib/order";
 
 export function loadQueueCards(db: Db, examId: string): QueueCard[] {
   return db
@@ -36,7 +37,7 @@ export function loadQueueCards(db: Db, examId: string): QueueCard[] {
     .from(flashcards)
     .leftJoin(studyProgress, eq(studyProgress.flashcardId, flashcards.id))
     .where(eq(flashcards.examId, examId))
-    .orderBy(flashcards.topic, flashcards.createdAt)
+    .orderBy(...chronologicalCardOrder())
     .all();
 }
 

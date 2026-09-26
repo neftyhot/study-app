@@ -257,9 +257,6 @@ function formatRatio(ratio: number): string {
   return `${rounded} card${rounded === 1 ? "" : "s"}`;
 }
 
-/** The prompt generation used before density was configurable. */
-export const GENERATION_SYSTEM = generationSystem("exhaustive");
-
 /** Renders slides into the prompt body, tagged with citation tokens. */
 export function renderSlides(slides: SourceSlide[]): string {
   return slides

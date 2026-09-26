@@ -210,7 +210,7 @@ export function PracticeRunner({
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Set a paper</CardTitle>
+          <CardTitle className="text-base">Build a practice test</CardTitle>
           <CardDescription>
             Questions are drawn from this deck, weighted towards what you have
             not yet learned, and asked in different words from the cards.
@@ -327,7 +327,7 @@ export function PracticeRunner({
                 ) : (
                   <Layers className="size-3.5" />
                 )}
-                {regrouping ? "Merging…" : "Merge topics"}
+                {regrouping ? "Merging…" : "Combine topics"}
               </Button>
             </div>
           ) : null}
@@ -351,7 +351,7 @@ export function PracticeRunner({
 
           <Button disabled={busy || cardCount === 0} onClick={() => void handleStart()}>
             {busy ? <Loader2 className="size-4 animate-spin" /> : <FileText className="size-4" />}
-            {busy ? "Setting the paper…" : "Begin"}
+            {busy ? "Building your test…" : "Start Practice Exam"}
           </Button>
         </CardContent>
       </Card>

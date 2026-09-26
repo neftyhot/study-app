@@ -2,7 +2,8 @@
  * SQLite connection factory. Kept free of `server-only` so CLI scripts
  * (migrate, seed) can reuse it outside the Next bundler.
  */
-import { resolve } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -20,9 +21,7 @@ export function resolveDbPath() {
 
 export function createClient() {
   const dbPath = resolveDbPath();
-  const fs = require("node:fs");
-  const path = require("node:path");
-  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  mkdirSync(dirname(dbPath), { recursive: true });
   const sqlite = new Database(dbPath);
   // WAL keeps ingestion writes from blocking study-session reads.
   sqlite.pragma("journal_mode = WAL");

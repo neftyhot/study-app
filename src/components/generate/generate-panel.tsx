@@ -320,9 +320,9 @@ export function GeneratePanel({
               <Sparkles className="size-4" />
             )}
             {running && job?.batchCount
-              ? `Generating… ${job.batchIndex}/${job.batchCount}`
+              ? `Making cards… ${job.batchIndex} of ${job.batchCount}`
               : busy || running
-                ? "Generating…"
+                ? "Making cards…"
                 : "Generate"}
           </Button>
         </div>
@@ -346,7 +346,7 @@ export function GeneratePanel({
           />
           <div className="space-y-0.5">
             <Label htmlFor="application" className="text-sm font-normal">
-              Include application / higher-order questions
+              Add “what if” questions
             </Label>
             <p className="text-muted-foreground text-xs">
               Adds perturbation (&quot;what if this step is blocked?&quot;),
@@ -359,7 +359,7 @@ export function GeneratePanel({
 
         {slideCount === 0 ? (
           <p className="text-muted-foreground text-sm">
-            Upload and ingest slides first.
+            Add your slides first.
           </p>
         ) : (
           <>
@@ -376,7 +376,7 @@ export function GeneratePanel({
             <p className="text-muted-foreground text-xs">
               {chosenUnits === 0
                 ? "Nothing selected — choose at least one file or widen the range."
-                : "Generation runs in batches and may take a minute."}
+                : "This can take a minute. You can keep studying meanwhile."}
             </p>
           </>
         )}

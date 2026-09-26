@@ -11,6 +11,7 @@
 import { relations, sql } from "drizzle-orm";
 // Type-only: the Learn round engine owns the shape of its own saved state.
 import type { RoundState } from "@/lib/learn/ladder";
+import type { CitedSentence, CounterExample } from "@/lib/primer/types";
 import {
   index,
   integer,
@@ -265,10 +266,38 @@ export const flashcards = sqliteTable(
      * and because "never edited" is a fact worth being able to state.
      */
     updatedAt: text("updated_at"),
+    /**
+     * Where the card sits in the lecture, so a deck plays back in the order
+     * it was taught: Slideshow 1 before Slideshow 2, slide 3 before slide 4,
+     * and a slide's cards in the order they were extracted. Never sorted by
+     * topic — an alphabetised deck puts the conclusion before its premises.
+     *
+     * Maintained by triggers (migration 0021), not by the code that inserts
+     * cards: half a dozen paths write flashcards, a relink moves a card to
+     * another slide, and deleting a file renumbers the ones after it. A
+     * trigger is the one place that sees all of them.
+     *
+     *  - source_document_index: 1-based upload position of the card's file
+     *    among the exam's answer sources (study guides are not counted).
+     *  - source_page_number: the slide or page number printed on that file.
+     *  - document_order_index: 1-based extraction sequence within the slide;
+     *    for a card that cites nothing, within the exam's uncited cards.
+     *
+     * The first two are null for a card with no source; those sort last.
+     */
+    sourceDocumentIndex: integer("source_document_index"),
+    sourcePageNumber: integer("source_page_number"),
+    documentOrderIndex: integer("document_order_index").notNull().default(0),
   },
   (t) => [
     index("flashcards_exam_idx").on(t.examId),
     index("flashcards_source_idx").on(t.sourceSlideId),
+    index("flashcards_chronological_idx").on(
+      t.examId,
+      t.sourceDocumentIndex,
+      t.sourcePageNumber,
+      t.documentOrderIndex,
+    ),
   ],
 );
 
@@ -956,6 +985,65 @@ export const practiceQuestions = sqliteTable(
   ],
 );
 
+/* ------------------------------------------------------------------ Primer */
+
+/**
+ * How deep a primer goes. "summary" is the key takeaways; "balanced" reads
+ * like a textbook section; "foundational" starts from zero — every term
+ * defined in plain words, with an analogy — for a student with no background.
+ */
+export const primerDepths = ["summary", "balanced", "foundational"] as const;
+export type PrimerDepth = (typeof primerDepths)[number];
+
+/**
+ * A reading guide for an exam, to go through before drilling its cards.
+ * One per exam and depth: regenerating at a depth replaces that depth's guide
+ * and leaves the others alone.
+ */
+export const primerGuides = sqliteTable(
+  "primer_guides",
+  {
+    id: id(),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    depth: text("depth", { enum: primerDepths }).notNull(),
+    /** The model that wrote it, so a surprising guide can be traced. */
+    model: text("model"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("primer_guides_exam_depth_idx").on(t.examId, t.depth)],
+);
+
+/**
+ * One concept in a primer. Each part is a list of sentences, and every
+ * sentence carries the slide it came from, so any claim can be checked
+ * against the lecture in one click.
+ */
+export const primerSections = sqliteTable(
+  "primer_sections",
+  {
+    id: id(),
+    guideId: text("guide_id")
+      .notNull()
+      .references(() => primerGuides.id, { onDelete: "cascade" }),
+    /** Position in the guide; follows the lecture's own order. */
+    orderIndex: integer("order_index").notNull(),
+    conceptName: text("concept_name").notNull(),
+    definition: text("definition", { mode: "json" }).$type<CitedSentence[]>().notNull(),
+    breakdown: text("breakdown", { mode: "json" }).$type<CitedSentence[]>().notNull(),
+    example: text("example", { mode: "json" }).$type<CitedSentence[]>().notNull(),
+    /**
+     * "What this isn't", written only when the student asks for it and kept
+     * from then on. Null means nobody has asked yet — never generated upfront,
+     * because most sections are read without one.
+     */
+    counterExample: text("counter_example", { mode: "json" }).$type<CounterExample>(),
+    counterExampleAt: text("counter_example_at"),
+  },
+  (t) => [index("primer_sections_guide_idx").on(t.guideId, t.orderIndex)],
+);
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -1131,6 +1219,18 @@ export const studyProgressRelations = relations(studyProgress, ({ one }) => ({
   }),
 }));
 
+export const primerGuidesRelations = relations(primerGuides, ({ one, many }) => ({
+  exam: one(exams, { fields: [primerGuides.examId], references: [exams.id] }),
+  sections: many(primerSections),
+}));
+
+export const primerSectionsRelations = relations(primerSections, ({ one }) => ({
+  guide: one(primerGuides, {
+    fields: [primerSections.guideId],
+    references: [primerGuides.id],
+  }),
+}));
+
 /* ------------------------------------------------------------------- Types */
 
 export type Course = typeof courses.$inferSelect;
@@ -1142,6 +1242,8 @@ export type Flashcard = typeof flashcards.$inferSelect;
 export type CardRubric = typeof cardRubrics.$inferSelect;
 export type CardRevision = typeof cardRevisions.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
+export type PrimerGuide = typeof primerGuides.$inferSelect;
+export type PrimerSection = typeof primerSections.$inferSelect;
 export type GenerationJob = typeof generationJobs.$inferSelect;
 export type PracticeExam = typeof practiceExams.$inferSelect;
 export type PracticeQuestion = typeof practiceQuestions.$inferSelect;

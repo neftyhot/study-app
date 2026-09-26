@@ -213,12 +213,3 @@ export function drillCountsBySlide(
   }
   return counts;
 }
-
-/** The drills already built from one slide, so the viewer can say so. */
-export function drillsForSlide(db: Db, slideId: string) {
-  return db
-    .select()
-    .from(diagramOcclusions)
-    .where(eq(diagramOcclusions.sourceSlideId, slideId))
-    .all();
-}

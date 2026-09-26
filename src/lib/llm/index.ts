@@ -53,7 +53,14 @@ export {
  * currently has a cheaper tier worth routing to; other providers answer both
  * roles with the model the student configured.
  */
-export type ProviderRole = "bulk" | "interactive";
+export type ProviderRole = "bulk" | "interactive" | "primer";
+
+/**
+ * The Primer is one long read of the whole deck, so it goes to the cheapest
+ * model that follows a schema; the bulk model covers a key the lite tier
+ * refuses.
+ */
+export const DEFAULT_GEMINI_PRIMER_MODEL = "gemini-2.5-flash-lite";
 
 /**
  * The model a bulk run will use, without constructing a provider — so the
@@ -117,14 +124,7 @@ function resolveProvider(
       const credentials = geminiCredentials();
       const gemini = createGeminiProvider({
         ...credentials,
-        model:
-          role === "bulk"
-            ? (process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL)
-            : undefined,
-        fallbackModel:
-          role === "bulk"
-            ? (process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL)
-            : undefined,
+        ...geminiModels(role),
       });
       return {
         provider: gemini,
@@ -134,6 +134,26 @@ function resolveProvider(
             : keySource("GEMINI_API_KEY"),
       };
     }
+  }
+}
+
+function geminiModels(role: ProviderRole): {
+  model?: string;
+  fallbackModel?: string;
+} {
+  switch (role) {
+    case "bulk":
+      return {
+        model: process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL,
+        fallbackModel: process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL,
+      };
+    case "primer":
+      return {
+        model: process.env.GEMINI_PRIMER_MODEL ?? DEFAULT_GEMINI_PRIMER_MODEL,
+        fallbackModel: process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL,
+      };
+    default:
+      return {};
   }
 }
 

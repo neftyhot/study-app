@@ -14,6 +14,7 @@ import type { Db } from "@/db/client";
 import { absolutePathFor } from "@/lib/ingest/storage";
 
 import { buildApkg, type ApkgMedia } from "./anki";
+import { fileSlug } from "./slug";
 import { collectDeckCards, type CollectOptions, type DeckExport } from "./cards";
 import { toCsv, toQuizlet, toRemNote, type QuizletOptions } from "./text";
 
@@ -50,12 +51,7 @@ export function exportFilename(
   format: ExportFormat,
   date = new Date(),
 ): string {
-  const slug =
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "deck";
+  const slug = fileSlug(title, "deck");
 
   return `${slug}-${date.toISOString().slice(0, 10)}.${EXTENSIONS[format]}`;
 }

@@ -46,10 +46,10 @@ export type DeckOption = {
 };
 
 const CARD_TYPES = [
-  { id: "atomic", label: "Atomic — one fact" },
+  { id: "atomic", label: "One fact" },
   { id: "process", label: "Process — a step or a sequence" },
-  { id: "integration", label: "Integration — how two things relate" },
-  { id: "cloze", label: "Cloze — fill in the blank" },
+  { id: "integration", label: "How two things connect" },
+  { id: "cloze", label: "Fill in the blank" },
 ] as const;
 
 type CardType = (typeof CARD_TYPES)[number]["id"];

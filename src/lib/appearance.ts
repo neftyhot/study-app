@@ -21,6 +21,11 @@ export const THEME_IDS = [
   "mint",
   "sage",
   "forest",
+  "paper",
+  "slate",
+  "solarized",
+  "nord",
+  "contrast",
 ] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
 
@@ -131,10 +136,91 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     cardStyle: "shadow",
     palette: { background: "#0b1f16", foreground: "#e9f6ee", card: "#173528", primary: "#4fd18b" },
   },
+  paper: {
+    id: "paper",
+    label: "Paper Warm",
+    blurb: "Cream paper and charcoal ink, with terracotta.",
+    dark: false,
+    radius: 0.5,
+    font: "serif",
+    cardStyle: "outline",
+    palette: { background: "#f7f4eb", foreground: "#2c2a29", card: "#faf7f0", primary: "#8c3a1c" },
+  },
+  slate: {
+    id: "slate",
+    label: "Slate Focus",
+    blurb: "Dark slate with an electric-blue accent.",
+    dark: true,
+    radius: 0.625,
+    font: "sans",
+    cardStyle: "outline",
+    palette: { background: "#1a1e24", foreground: "#e2e8f0", card: "#242a33", primary: "#60a5fa" },
+  },
+  solarized: {
+    id: "solarized",
+    label: "Solarized Light",
+    blurb: "The classic cream, with its text darkened to read at AAA.",
+    dark: false,
+    radius: 0.375,
+    font: "sans",
+    cardStyle: "outline",
+    palette: { background: "#fdf6e3", foreground: "#073642", card: "#fffbef", primary: "#165580" },
+  },
+  nord: {
+    id: "nord",
+    label: "Nord Night",
+    blurb: "Arctic blue-grey with frost accents.",
+    dark: true,
+    radius: 0.625,
+    font: "sans",
+    cardStyle: "outline",
+    palette: { background: "#2e3440", foreground: "#eceff4", card: "#3b4252", primary: "#88c0d0" },
+  },
+  contrast: {
+    id: "contrast",
+    label: "High Contrast",
+    blurb: "Pure black and white: crisp borders, no colour.",
+    dark: true,
+    radius: 0.25,
+    font: "sans",
+    cardStyle: "outline",
+    palette: { background: "#000000", foreground: "#ffffff", card: "#000000", primary: "#ffffff" },
+  },
 };
+
+/** Themes held to WCAG AAA: 7:1 for every text colour, not just 4.5:1. */
+export const AAA_THEME_IDS = ["paper", "slate", "solarized", "nord", "contrast"] as const satisfies readonly ThemeId[];
+export const AAA_TEXT_CONTRAST = 7;
 
 export function isThemeId(value: unknown): value is ThemeId {
   return typeof value === "string" && (THEME_IDS as readonly string[]).includes(value);
+}
+
+/** What the student picked: a style, or "follow my computer". */
+export type ThemePreference = ThemeId | "system";
+
+export function isThemePreference(value: unknown): value is ThemePreference {
+  return value === "system" || isThemeId(value);
+}
+
+/** The localStorage key next-themes reads; the boot script writes it first. */
+export const THEME_STORAGE_KEY = "theme";
+
+/**
+ * The inline `<head>` script that puts the saved style on `<html>` before the
+ * first paint.
+ *
+ * The database is the source of truth — localStorage belongs to the page's
+ * origin, and the desktop app's origin changes with its port — so this also
+ * copies the saved choice into localStorage, where next-themes' own script,
+ * which runs just after, picks it up instead of falling back to its default.
+ * With nothing saved yet it returns "", leaving localStorage to decide.
+ */
+export function themeBootScript(saved: ThemePreference | null): string {
+  if (!saved) return "";
+  const dark = THEME_IDS.filter((id) => THEMES[id].dark);
+  // JSON.stringify of checked ids only: nothing here comes from free text.
+  return `(function(){try{var t=${JSON.stringify(saved)},ids=${JSON.stringify(THEME_IDS)},dark=${JSON.stringify(dark)},d=document.documentElement;try{localStorage.setItem(${JSON.stringify(THEME_STORAGE_KEY)},t)}catch(e){}var r=t==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):t;d.classList.remove.apply(d.classList,ids);d.classList.add(r);d.setAttribute("data-theme",r);d.style.colorScheme=dark.indexOf(r)>=0?"dark":"light"}catch(e){}})()`;
 }
 
 /* --------------------------------------------------------------- Settings */

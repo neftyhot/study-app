@@ -226,12 +226,3 @@ export function startGenerationJob(
 
   return job;
 }
-
-/** Marks a stuck job finished, so the UI is not pinned on a spinner forever. */
-export function abandonJob(db: Db, jobId: string) {
-  touch(db, jobId, {
-    status: "failed",
-    error: "Stopped.",
-    finishedAt: new Date().toISOString(),
-  });
-}

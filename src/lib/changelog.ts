@@ -6,6 +6,18 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.0.0",
+    date: "2026-09-26",
+    notes: [
+      "Megan Study 1.0, for Mac and Windows.",
+      "A simpler home screen: drag in your lecture slides (and study guide, if you have one) and press “Generate Study Set”.",
+      "Every deck now follows one path: read the Study Guide, practise with Flashcards, then take a Practice Exam.",
+      "Flashcards follow the order your course taught them, slide by slide.",
+      "Export, reset and other deck tools moved into the ••• menu, and licence details into Settings › Advanced.",
+      "Clearer wording throughout, like “Explain Answer” and “Show Counter-Example”, with hints on hover.",
+    ],
+  },
+  {
     version: "0.2.4",
     date: "2026-09-24",
     notes: [

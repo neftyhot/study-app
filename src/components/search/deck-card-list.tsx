@@ -41,7 +41,8 @@ export type DeckCardView = {
 /**
  * The deck's cards, with search over them.
  *
- * Grouping by topic makes atomization visible — one concept, many facets — so
+ * Cards are in lecture order (see lib/order.ts). Grouping consecutive cards
+ * by topic makes atomization visible — one concept, many facets — so
  * the grouping survives filtering: a search narrows what is shown without
  * flattening the structure that explains why there are so many cards.
  */
@@ -88,12 +89,17 @@ export function DeckCardList({
       .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }, [cards, matches]);
 
+  // Runs of consecutive cards, not one bucket per topic: the cards arrive in
+  // lecture order, and pulling a topic's later cards up to its first mention
+  // would reorder the lecture. A topic the slides return to appears twice.
   const byTopic = useMemo(() => {
-    const groups = new Map<string, DeckCardView[]>();
+    const runs: [string, DeckCardView[]][] = [];
     for (const card of visible) {
-      groups.set(card.topic, [...(groups.get(card.topic) ?? []), card]);
+      const last = runs.at(-1);
+      if (last && last[0] === card.topic) last[1].push(card);
+      else runs.push([card.topic, [card]]);
     }
-    return [...groups.entries()];
+    return runs;
   }, [visible]);
 
   return (
@@ -122,7 +128,7 @@ export function DeckCardList({
       )}
 
       {byTopic.map(([topic, topicCards]) => (
-        <section key={topic} className="space-y-3">
+        <section key={`${topic}:${topicCards[0].id}`} className="space-y-3">
           <h2 className="text-lg font-medium">
             {topic}
             <span className="text-muted-foreground ml-2 text-sm font-normal">

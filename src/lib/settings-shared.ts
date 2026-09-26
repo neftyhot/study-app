@@ -17,12 +17,6 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   openai: "OpenAI",
 };
 
-export const PROVIDER_KEY_SOURCE: Record<ApiProviderId, string> = {
-  gemini: "aistudio.google.com/apikey",
-  anthropic: "console.anthropic.com",
-  openai: "platform.openai.com/api-keys",
-};
-
 export type DownloadState = {
   modelId: string;
   status: "downloading" | "ready" | "failed";

@@ -24,7 +24,6 @@ import {
   objectiveCoverage,
   sourceFiles,
   sourceSlides,
-  studyGuideObjectives,
   type Flashcard,
   type StudyGuideObjective,
 } from "@/db/schema";
@@ -54,6 +53,7 @@ import {
   type ResolvedMapping,
   type ResolvedReview,
 } from "./validate";
+import { fileUploadOrder, loadObjectives } from "@/lib/order";
 
 export type CoverageProgress = {
   phase: "mapping" | "review" | "conflicts";
@@ -481,20 +481,6 @@ function mergePoints(...lists: string[][]): string[] {
 
 /* ------------------------------------------------------------------ Loading */
 
-function loadObjectives(db: Db, examId: string): StudyGuideObjective[] {
-  return db
-    .select()
-    .from(studyGuideObjectives)
-    .where(
-      and(
-        eq(studyGuideObjectives.examId, examId),
-        eq(studyGuideObjectives.excluded, false),
-      ),
-    )
-    .orderBy(studyGuideObjectives.orderIndex)
-    .all();
-}
-
 /** Every unit that can answer an objective, tagged with the file it came from. */
 function loadAnswerSlides(db: Db, examId: string): LabeledSlide[] {
   return db
@@ -508,7 +494,7 @@ function loadAnswerSlides(db: Db, examId: string): LabeledSlide[] {
         ne(sourceFiles.role, "study_guide"),
       ),
     )
-    .orderBy(sourceSlides.sourceFileId, sourceSlides.index)
+    .orderBy(...fileUploadOrder(sourceSlides.sourceFileId), sourceSlides.index)
     .all()
     .filter(({ slide }) => slide.legibilityFlag !== "empty");
 }

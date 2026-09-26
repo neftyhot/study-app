@@ -29,6 +29,7 @@ import {
   writeAppearance,
   writeGradingStrictness,
   writeProvider,
+  writeTheme,
   type ProviderId,
 } from "@/lib/settings";
 import { isStrictness } from "@/lib/grade/strictness";
@@ -138,4 +139,12 @@ export async function saveAppearanceAction(appearance: unknown) {
   const saved = writeAppearance(appearance, db);
   revalidatePath("/", "layout");
   return saved;
+}
+
+/**
+ * Remembers the chosen style in the database, which the next launch reads
+ * before first paint. No revalidation: the page already shows it.
+ */
+export async function saveThemeAction(theme: unknown) {
+  return writeTheme(theme, db);
 }

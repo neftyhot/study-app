@@ -5,13 +5,15 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
 import { TimeTracker } from "@/components/layout/time-tracker";
 import { WhatsNew } from "@/components/layout/whats-new";
+import { ThemePersistence } from "@/components/theme-persistence";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { db } from "@/db";
 import { APP_VERSION } from "@/lib/app-info";
-import { appearanceCss, THEME_IDS } from "@/lib/appearance";
+import { appearanceCss, THEME_IDS, themeBootScript } from "@/lib/appearance";
 import { CHANGELOG } from "@/lib/changelog";
-import { hasAcceptedPrivacy, readAppearance } from "@/lib/settings";
+import { hasAcceptedPrivacy, readAppearance, readTheme } from "@/lib/settings";
 
 import "./globals.css";
 
@@ -34,7 +36,7 @@ const nunito = Nunito({
 export const metadata: Metadata = {
   title: "Megan Study",
   description:
-    "Turn lecture slides and study guides into sourced, atomic flashcards.",
+    "Turn your lecture slides and study guides into flashcards, a study guide and practice exams.",
 };
 
 /**
@@ -50,6 +52,9 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
+  const savedTheme = readTheme(db);
+  const bootScript = themeBootScript(savedTheme);
+
   return (
     <html
       lang="en"
@@ -63,15 +68,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           id="appearance-css"
           dangerouslySetInnerHTML={{ __html: appearanceCss(readAppearance(db)) }}
         />
+        {/* The saved style, on <html> before first paint; see themeBootScript. */}
+        {bootScript ? (
+          <script id="theme-boot" dangerouslySetInnerHTML={{ __html: bootScript }} />
+        ) : null}
       </head>
       <body className="flex min-h-full flex-col">
         <ThemeProvider
-          attribute="class"
+          attribute={["class", "data-theme"]}
           defaultTheme="system"
           themes={[...THEME_IDS]}
           enableSystem
           disableTransitionOnChange
         >
+          <ThemePersistence saved={savedTheme} />
+          <TooltipProvider>
           {/* Nothing else — header, pages, time tracking — until the privacy
               policy is agreed to; see privacy-policy.ts. */}
           {hasAcceptedPrivacy(db) ? (
@@ -89,6 +100,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           ) : (
             <PrivacyGate />
           )}
+          </TooltipProvider>
           <Toaster />
         </ThemeProvider>
       </body>

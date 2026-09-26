@@ -85,9 +85,9 @@ export function filterCards<T extends QueueCard>(
 }
 
 /**
- * Structured order is whatever order the caller supplied (topic, then
- * creation), which keeps a concept's facets adjacent — the order they were
- * atomized in is the order they make sense in.
+ * Structured order is whatever order the caller supplied — lecture order
+ * (slideshow, slide, then extraction sequence; see lib/order.ts), which keeps
+ * a concept's facets adjacent and follows the course as it was taught.
  */
 export function buildQueue(
   cards: readonly QueueCard[],

@@ -51,7 +51,7 @@ export default async function SettingsPage() {
 
       <StatsCard stats={loadStats(db)} />
 
-      {license ? (
+      {license?.type === "trial" ? (
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2 text-base">
@@ -94,12 +94,6 @@ export default async function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <p className="text-sm">
-            Your install id:{" "}
-            <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs select-all">
-              {installId(db)}
-            </code>
-          </p>
           <details className="group rounded-lg border p-4">
             <summary className="cursor-pointer text-sm font-medium">
               Read the full privacy policy
@@ -138,20 +132,46 @@ export default async function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Where your data lives</CardTitle>
-          <CardDescription className="space-y-1">
-            {[resolveDbPath(), uploadsRoot(), modelsRoot()].map((path) => (
-              <span key={path} className="block break-all font-mono text-xs">
-                {path}
-              </span>
-            ))}
-            <span className="block pt-2">
-              Everything stays on this machine. Export a deck from its settings
-              card to take a copy elsewhere.
-            </span>
-          </CardDescription>
-        </CardHeader>
+        <CardContent>
+          <details className="group">
+            <summary className="cursor-pointer text-sm font-medium">
+              Advanced
+            </summary>
+            <dl className="mt-4 space-y-4 text-sm">
+              {license ? (
+                <div className="space-y-1">
+                  <dt className="font-medium">Licence</dt>
+                  <dd className="text-muted-foreground">
+                    {TIER_LABELS[license.type]} · {expiryLabel(license)}
+                    {license.name ? ` · Issued to ${license.name}` : ""}
+                  </dd>
+                </div>
+              ) : null}
+              <div className="space-y-1">
+                <dt className="font-medium">Install id</dt>
+                <dd>
+                  <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs select-all">
+                    {installId(db)}
+                  </code>
+                </dd>
+              </div>
+              <div className="space-y-1">
+                <dt className="font-medium">Where your data lives</dt>
+                <dd className="text-muted-foreground space-y-1">
+                  {[resolveDbPath(), uploadsRoot(), modelsRoot()].map((path) => (
+                    <span key={path} className="block font-mono text-xs break-all">
+                      {path}
+                    </span>
+                  ))}
+                  <span className="block pt-1">
+                    Everything stays on this computer. Use “Export” in a
+                    deck&apos;s ••• menu to take a copy elsewhere.
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </details>
+        </CardContent>
       </Card>
     </div>
   );

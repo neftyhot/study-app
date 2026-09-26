@@ -80,7 +80,7 @@ export default async function SourcesPage(
               </Badge>
             </CardTitle>
             <CardDescription>
-              These drive the coverage checklist in Phase 3.
+              We use these to check that your cards cover everything on the study guide.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -145,7 +145,7 @@ export default async function SourcesPage(
                   <CardDescription>
                     {file.unitCount} {UNIT_NOUN[file.fileType] ?? "sections"}
                     {flagged.length > 0
-                      ? ` · ${flagged.length} flagged for legibility`
+                      ? ` · ${flagged.length} may be hard to read`
                       : ""}
                     {file.errorMessage ? ` · ${file.errorMessage}` : ""}
                   </CardDescription>
@@ -183,7 +183,7 @@ export default async function SourcesPage(
                             </pre>
                           ) : (
                             <p className="text-muted-foreground italic">
-                              No extractable text.
+                              We couldn&apos;t find any text on this page.
                             </p>
                           )}
 

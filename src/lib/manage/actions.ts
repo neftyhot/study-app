@@ -20,8 +20,6 @@ import {
   deleteSourceFile,
   previewExamDeletion,
   previewSourceFileDeletion,
-  renameCourse,
-  renameExam,
   renameSourceFile,
   resetProgress,
   updateCourse,
@@ -55,17 +53,6 @@ export async function createExamAction(input: {
   const exam = createExam(db, input);
   revalidatePath("/");
   return { id: exam.id, title: exam.title };
-}
-
-export async function renameCourseAction(courseId: string, title: string) {
-  renameCourse(db, courseId, title);
-  revalidatePath("/");
-}
-
-export async function renameExamAction(examId: string, title: string) {
-  renameExam(db, examId, title);
-  revalidatePath("/");
-  revalidatePath(`/exams/${examId}`);
 }
 
 export async function updateCourseAction(

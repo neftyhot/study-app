@@ -80,13 +80,24 @@ export function ExportDialog({
   examId,
   cardCount,
   trigger,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   examId: string;
   cardCount: number;
   /** Lets the deck page place its own button. */
   trigger?: React.ReactNode;
+  /** When given, a menu elsewhere opens the dialog and no button is drawn. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [ownOpen, setOwnOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : ownOpen;
+  const setOpen = (next: boolean) => {
+    if (!controlled) setOwnOpen(next);
+    onOpenChange?.(next);
+  };
   const [format, setFormat] = useState<Format>("anki");
   const [term, setTerm] = useState<"tab" | "semicolon">("tab");
   const [text, setText] = useState<string | null>(null);
@@ -149,14 +160,16 @@ export function ExportDialog({
         if (!next) setText(null);
       }}
     >
-      <DialogTrigger asChild>
-        {trigger ?? (
-          <Button variant="outline">
-            <FileDown className="size-4" />
-            Export deck
-          </Button>
-        )}
-      </DialogTrigger>
+      {controlled ? null : (
+        <DialogTrigger asChild>
+          {trigger ?? (
+            <Button variant="outline">
+              <FileDown className="size-4" />
+              Export deck
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
 
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>

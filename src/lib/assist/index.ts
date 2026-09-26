@@ -6,7 +6,7 @@
  * assisted practice, and counting it as recall would inflate exactly the
  * number the rest of this app works to keep honest.
  */
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
@@ -322,15 +322,4 @@ export async function diagnoseCard(
   }
 
   return db.insert(errorDiagnoses).values(values).returning().get();
-}
-
-/** Most recently diagnosed cards, for the remediation view. */
-export function listDiagnoses(db: Db, examId: string) {
-  return db
-    .select({ diagnosis: errorDiagnoses, card: flashcards })
-    .from(errorDiagnoses)
-    .innerJoin(flashcards, eq(flashcards.id, errorDiagnoses.flashcardId))
-    .where(eq(flashcards.examId, examId))
-    .orderBy(desc(errorDiagnoses.createdAt))
-    .all();
 }

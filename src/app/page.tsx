@@ -1,12 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  CalendarDays,
-  FileStack,
-  Layers,
-  ListChecks,
-  ListPlus,
-} from "lucide-react";
+import { CalendarDays, ListPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { QuickStart } from "@/components/ingest/quick-start";
 import { CourseActions } from "@/components/manage/course-actions";
 import {
   EditCourseDialog,
@@ -42,38 +37,33 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Subjects</h1>
-          <p className="text-muted-foreground text-sm">
-            Upload slides and a study guide, then generate sourced flashcards.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild variant="outline">
-            <Link href="/decks/new">
-              <ListPlus className="size-4" />
-              Type in a deck
-            </Link>
-          </Button>
-          <CreateExamDialog courses={courseOptions} />
-          <CreateCourseDialog />
-        </div>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Your study sets
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          Add your slides, read the study guide, practise with flashcards, then
+          take a practice exam.
+        </p>
       </div>
 
-      {courses.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No subjects yet</CardTitle>
-            <CardDescription>
-              Create a subject for a class, then add a deck for each exam.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <CreateCourseDialog />
-          </CardContent>
-        </Card>
-      ) : (
+      <QuickStart courses={courseOptions} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground text-sm">Other ways to start:</span>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/decks/new">
+            <ListPlus className="size-4" />
+            Type in cards yourself
+          </Link>
+        </Button>
+        {courses.length > 0 ? (
+          <CreateExamDialog courses={courseOptions} />
+        ) : null}
+        <CreateCourseDialog />
+      </div>
+
+      {courses.length === 0 ? null : (
         <div className="space-y-6">
           {courses.map((course) => (
             <section key={course.id} className="space-y-3">
@@ -140,7 +130,7 @@ export default async function DashboardPage() {
                     </CardHeader>
                     <CardContent className="mt-auto">
                       <Button asChild size="sm" className="w-full">
-                        <Link href={`/exams/${exam.id}`}>Open</Link>
+                        <Link href={`/exams/${exam.id}`}>Study</Link>
                       </Button>
                     </CardContent>
                   </Card>
@@ -151,45 +141,6 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      <section className="grid gap-4 sm:grid-cols-3">
-        <PipelineStep
-          icon={<FileStack className="size-4" />}
-          title="Ingest"
-          body="PDF, PPTX & DOCX text, tables, and notes, indexed by slide, page, or heading."
-        />
-        <PipelineStep
-          icon={<Layers className="size-4" />}
-          title="Generate"
-          body="Atomic cards, each linked to the slide that supports it."
-        />
-        <PipelineStep
-          icon={<ListChecks className="size-4" />}
-          title="Verify"
-          body="Coverage matrix against every study-guide objective."
-        />
-      </section>
     </div>
-  );
-}
-
-function PipelineStep({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-}) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-sm font-medium">
-          {icon}
-          {title}
-        </CardTitle>
-        <CardDescription>{body}</CardDescription>
-      </CardHeader>
-    </Card>
   );
 }

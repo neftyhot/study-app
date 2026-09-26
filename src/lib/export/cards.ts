@@ -6,7 +6,7 @@
  * Each writer then does formatting only — no queries, no joins, no surprises
  * about which target happens to include the rubric.
  */
-import { asc, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
@@ -16,6 +16,7 @@ import {
   sourceFiles,
   sourceSlides,
 } from "@/db/schema";
+import { chronologicalCardOrder } from "@/lib/order";
 
 export type ExportCard = {
   id: string;
@@ -74,7 +75,7 @@ export function collectDeckCards(
     .leftJoin(sourceSlides, eq(flashcards.sourceSlideId, sourceSlides.id))
     .leftJoin(sourceFiles, eq(sourceSlides.sourceFileId, sourceFiles.id))
     .where(eq(flashcards.examId, examId))
-    .orderBy(asc(flashcards.topic), asc(flashcards.createdAt))
+    .orderBy(...chronologicalCardOrder())
     .all();
 
   const wanted = options.cardIds ? new Set(options.cardIds) : null;

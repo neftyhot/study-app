@@ -139,7 +139,7 @@ export function IngestionOptions({
     <div className="space-y-4 rounded-md border p-3">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-medium">Extraction density</p>
+          <p className="text-sm font-medium">How many cards?</p>
           {isAdmin ? (
             <div className="flex items-center gap-2">
               <Checkbox

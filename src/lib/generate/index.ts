@@ -15,9 +15,7 @@ import {
   flashcards,
   sourceFiles,
   sourceSlides,
-  studyGuideObjectives,
   type SourceSlide,
-  type StudyGuideObjective,
 } from "@/db/schema";
 import type { LlmProvider } from "@/lib/llm";
 import { estimateCost, formatCost } from "@/lib/llm/pricing";
@@ -45,6 +43,7 @@ import {
   type GenerationResponse,
 } from "./schemas";
 import { validateCards, type Rejection } from "./validate";
+import { fileUploadOrder, loadObjectives } from "@/lib/order";
 
 /**
  * Slides per model call.
@@ -505,7 +504,7 @@ function loadSlides(
     .select()
     .from(sourceSlides)
     .where(inArray(sourceSlides.sourceFileId, files))
-    .orderBy(sourceSlides.sourceFileId, sourceSlides.index)
+    .orderBy(...fileUploadOrder(sourceSlides.sourceFileId), sourceSlides.index)
     .all()
     // Slides with no usable text cannot support a card; skipping them keeps
     // them out of the prompt without hiding them from the legibility report.
@@ -525,20 +524,6 @@ function withinRange(
   const from = Math.min(range.from, range.to);
   const to = Math.max(range.from, range.to);
   return slide.index >= from && slide.index <= to;
-}
-
-function loadObjectives(db: Db, examId: string): StudyGuideObjective[] {
-  return db
-    .select()
-    .from(studyGuideObjectives)
-    .where(
-      and(
-        eq(studyGuideObjectives.examId, examId),
-        eq(studyGuideObjectives.excluded, false),
-      ),
-    )
-    .orderBy(studyGuideObjectives.orderIndex)
-    .all();
 }
 
 /**

@@ -33,7 +33,9 @@ export type UsageFeature =
   | "exam_rewrite"
   | "tutor"
   | "tutor_extract"
-  | "topics";
+  | "topics"
+  | "primer"
+  | "counter_example";
 
 export type StructuredRequest = {
   feature?: UsageFeature;

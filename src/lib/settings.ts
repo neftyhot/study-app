@@ -17,8 +17,10 @@ import { createClient, type Db } from "@/db/client";
 import { appSettings } from "@/db/schema";
 import {
   DEFAULT_APPEARANCE,
+  isThemePreference,
   sanitizeAppearance,
   type Appearance,
+  type ThemePreference,
 } from "@/lib/appearance";
 import { hasGoogleSession } from "@/lib/auth/google-session";
 import {
@@ -56,9 +58,6 @@ const ENV_KEY: Record<Exclude<ProviderId, "local">, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
 };
-
-/** Kept for the previous single-key setting name. */
-export const GEMINI_KEY = KEY_SETTING.gemini;
 
 function client(db?: Db): Db {
   return db ?? createClient();
@@ -131,6 +130,23 @@ export function writeAppearance(appearance: unknown, db?: Db): Appearance {
   return clean;
 }
 
+/* ------------------------------------------------------------------ Theme */
+
+const THEME_KEY = "theme";
+
+/** The saved style, or null when none has been saved here yet. */
+export function readTheme(db?: Db): ThemePreference | null {
+  const value = readSetting(THEME_KEY, db);
+  return isThemePreference(value) ? value : null;
+}
+
+/** Ignores anything that is not a known style, so a bad value never sticks. */
+export function writeTheme(theme: unknown, db?: Db): ThemePreference | null {
+  if (!isThemePreference(theme)) return null;
+  writeSetting(THEME_KEY, theme, db);
+  return theme;
+}
+
 /* ------------------------------------------------------------------- Keys */
 
 export function readApiKey(
@@ -170,15 +186,6 @@ export function allKeyStatuses(db?: Db): KeyStatus[] {
   return (["gemini", "anthropic", "openai"] as const).map((provider) =>
     apiKeyStatus(provider, db),
   );
-}
-
-/** Kept so existing callers of the Gemini-only helper keep working. */
-export function resolveGeminiKey(db?: Db): string | undefined {
-  return readApiKey("gemini", db);
-}
-
-export function geminiKeyStatus(db?: Db): KeyStatus {
-  return apiKeyStatus("gemini", db);
 }
 
 /* --------------------------------------------------------------- Provider */

@@ -7,7 +7,7 @@
  * never trapped in this app's SQLite file — everything they built or wrote
  * comes out, in a format they can read.
  */
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
@@ -25,6 +25,8 @@ import {
   studyProgress,
   studySessions,
 } from "@/db/schema";
+import { fileSlug } from "@/lib/export/slug";
+import { chronologicalCardOrder, fileUploadOrder } from "@/lib/order";
 
 /** Bumped when the shape changes, so an old file is still identifiable. */
 export const EXPORT_VERSION = 1;
@@ -43,6 +45,7 @@ export function buildExamExport(db: Db, examId: string) {
     .select()
     .from(sourceFiles)
     .where(eq(sourceFiles.examId, examId))
+    .orderBy(asc(sourceFiles.createdAt), sql`rowid`)
     .all();
 
   const fileIds = files.map((file) => file.id);
@@ -53,14 +56,17 @@ export function buildExamExport(db: Db, examId: string) {
           .select()
           .from(sourceSlides)
           .where(inArray(sourceSlides.sourceFileId, fileIds))
-          .orderBy(asc(sourceSlides.sourceFileId), asc(sourceSlides.index))
+          .orderBy(...fileUploadOrder(sourceSlides.sourceFileId), asc(sourceSlides.index))
           .all();
 
   const objectives = db
     .select()
     .from(studyGuideObjectives)
     .where(eq(studyGuideObjectives.examId, examId))
-    .orderBy(asc(studyGuideObjectives.orderIndex))
+    .orderBy(
+      ...fileUploadOrder(studyGuideObjectives.sourceFileId),
+      asc(studyGuideObjectives.orderIndex),
+    )
     .all();
 
   const objectiveIds = objectives.map((objective) => objective.id);
@@ -69,6 +75,7 @@ export function buildExamExport(db: Db, examId: string) {
     .select()
     .from(flashcards)
     .where(eq(flashcards.examId, examId))
+    .orderBy(...chronologicalCardOrder())
     .all();
 
   const cardIds = cards.map((card) => card.id);
@@ -231,12 +238,7 @@ export type ExamExport = NonNullable<ReturnType<typeof buildExamExport>>;
 
 /** A filename a student will recognise a year from now. */
 export function exportFilename(examTitle: string, date = new Date()): string {
-  const slug =
-    examTitle
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 48) || "exam";
+  const slug = fileSlug(examTitle, "exam");
 
   return `${slug}-${date.toISOString().slice(0, 10)}.json`;
 }

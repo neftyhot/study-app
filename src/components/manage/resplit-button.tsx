@@ -42,7 +42,7 @@ export function ResplitButton({ fileId }: { fileId: string }) {
       }}
     >
       {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Scissors className="size-3.5" />}
-      Re-split
+      Split again
     </Button>
   );
 }

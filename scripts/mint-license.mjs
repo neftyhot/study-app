@@ -38,7 +38,7 @@ function usage(message) {
       "  node scripts/mint-license.mjs --type admin [--name <who>]\n" +
       "  node scripts/mint-license.mjs --type student --days 14 [--machine <id>] [--name <who>]\n" +
       "  node scripts/mint-license.mjs --type lifetime --machine <id> [--name <who>]\n\n" +
-      "  npm run license:manager   for the GUI\n",
+      "  npm run license-manager:dev   for the GUI\n",
   );
   process.exit(1);
 }

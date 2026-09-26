@@ -171,7 +171,7 @@ export function UploadPanel({ examId }: { examId: string }) {
             <Upload className="text-muted-foreground mx-auto size-6" />
           )}
           <p className="mt-3 text-sm">
-            {busy ? "Extracting…" : "Drop files here, or"}
+            {busy ? "Reading your file…" : "Drop files here, or"}
           </p>
           <Button
             variant="outline"

@@ -2,8 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Midnight is a dark style too, so every dark: variant applies to it. */
-@custom-variant dark (&:is(.dark *, .midnight *, .forest *));
+/* Midnight, Forest, Slate, Nord and High-Contrast are dark styles too, so every dark: variant applies to them. */
+@custom-variant dark (&:is(.dark *, .midnight *, .forest *, .slate *, .nord *, .contrast *));
 
 @theme inline {
   --color-background: var(--background);
@@ -291,6 +291,156 @@
   --chart-3: #ffcd1f;
   --chart-4: #ff7873;
   --chart-5: #a7e8c4;
+}
+
+/*
+ * The five AAA reading themes. Every text colour here — body, card, muted,
+ * button labels — clears 7:1 against what it sits on, and every accent 3:1
+ * against the page; appearance.test.ts reads these blocks and checks.
+ */
+
+.paper {
+  --font-sans: ui-serif, Charter, "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif;
+  --radius: 0.5rem;
+  --background: #f7f4eb;
+  --foreground: #2c2a29;
+  --card: #faf7f0;
+  --card-foreground: #2c2a29;
+  --popover: #faf7f0;
+  --popover-foreground: #2c2a29;
+  --primary: #8c3a1c;
+  --primary-foreground: #ffffff;
+  --secondary: #ede7d9;
+  --secondary-foreground: #2c2a29;
+  --muted: #ede7d9;
+  --muted-foreground: #4a4440;
+  --accent: #f0e1d5;
+  --accent-foreground: #2c2a29;
+  --destructive: #8f1f17;
+  --border: #d9cfbd;
+  --input: #b8ab95;
+  --ring: #b4532a;
+  --chart-1: #8c3a1c;
+  --chart-2: #b4532a;
+  --chart-3: #7a6a3a;
+  --chart-4: #4a6a5a;
+  --chart-5: #4a4440;
+}
+
+.slate {
+  --radius: 0.625rem;
+  --background: #1a1e24;
+  --foreground: #e2e8f0;
+  --card: #242a33;
+  --card-foreground: #e2e8f0;
+  --popover: #242a33;
+  --popover-foreground: #e2e8f0;
+  --primary: #60a5fa;
+  --primary-foreground: #0b1220;
+  --secondary: #2c3440;
+  --secondary-foreground: #e2e8f0;
+  --muted: #242a33;
+  --muted-foreground: #cbd5e1;
+  --accent: #2c3a4f;
+  --accent-foreground: #e2e8f0;
+  --destructive: #ffa8a0;
+  --border: #3a4453;
+  --input: #56657a;
+  --ring: #60a5fa;
+  --chart-1: #60a5fa;
+  --chart-2: #38bdf8;
+  --chart-3: #a5b4fc;
+  --chart-4: #fbbf77;
+  --chart-5: #cbd5e1;
+}
+
+/* Solarized's own body grey (#657b83) is 4.1:1 on its cream; base02 reads at
+   AAA, and the signature blue stays as the focus ring and chart accent. */
+.solarized {
+  --radius: 0.375rem;
+  --background: #fdf6e3;
+  --foreground: #073642;
+  --card: #fffbef;
+  --card-foreground: #073642;
+  --popover: #fffbef;
+  --popover-foreground: #073642;
+  --primary: #165580;
+  --primary-foreground: #ffffff;
+  --secondary: #eee8d5;
+  --secondary-foreground: #073642;
+  --muted: #eee8d5;
+  --muted-foreground: #334a52;
+  --accent: #e3ecef;
+  --accent-foreground: #073642;
+  --destructive: #8c1d1b;
+  --border: #ddd6c1;
+  --input: #b9b29c;
+  --ring: #268bd2;
+  --chart-1: #268bd2;
+  --chart-2: #2aa198;
+  --chart-3: #b58900;
+  --chart-4: #cb4b16;
+  --chart-5: #6c71c4;
+}
+
+.nord {
+  --radius: 0.625rem;
+  --background: #2e3440;
+  --foreground: #eceff4;
+  --card: #3b4252;
+  --card-foreground: #eceff4;
+  --popover: #3b4252;
+  --popover-foreground: #eceff4;
+  --primary: #88c0d0;
+  --primary-foreground: #1c2028;
+  --secondary: #3b4252;
+  --secondary-foreground: #eceff4;
+  --muted: #3b4252;
+  --muted-foreground: #d8dee9;
+  --accent: #434c5e;
+  --accent-foreground: #eceff4;
+  --destructive: #f8d7da;
+  --border: #4c566a;
+  --input: #616e88;
+  --ring: #81a1c1;
+  --chart-1: #88c0d0;
+  --chart-2: #81a1c1;
+  --chart-3: #a3be8c;
+  --chart-4: #ebcb8b;
+  --chart-5: #b48ead;
+}
+
+/* Pure black and white: no colour at all, and edges drawn rather than shaded. */
+.contrast {
+  --radius: 0.25rem;
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --popover: #000000;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #000000;
+  --secondary: #000000;
+  --secondary-foreground: #ffffff;
+  --muted: #000000;
+  --muted-foreground: #ffffff;
+  --accent: #262626;
+  --accent-foreground: #ffffff;
+  --destructive: #ffffff;
+  --border: #ffffff;
+  --input: #ffffff;
+  --ring: #ffffff;
+  --chart-1: #ffffff;
+  --chart-2: #d4d4d4;
+  --chart-3: #a3a3a3;
+  --chart-4: #737373;
+  --chart-5: #525252;
+}
+
+.contrast [data-slot="card"] {
+  box-shadow: none;
+  --tw-ring-color: var(--border);
 }
 
 /* Bubble styles float their cards on a soft shadow instead of an outline. */

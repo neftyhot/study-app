@@ -38,7 +38,7 @@ export const DENSITY_PRESETS: Record<
   DensityPreset
 > = {
   high_yield: {
-    label: "High-yield cram",
+    label: "Just the essentials",
     cardsPerUnit: 0.3,
     // Bench: 64 cards on a 96-page chapter; real decks land at about half.
     expectedPerUnit: 0.3,
@@ -54,7 +54,7 @@ export const DENSITY_PRESETS: Record<
       "Core definitions, mechanisms and relationships. Conversational and repeated bullets are skipped.",
   },
   exhaustive: {
-    label: "Exhaustive",
+    label: "Everything",
     cardsPerUnit: 2.5,
     // Bench: 321 cards on a 96-page chapter; real decks land at about half.
     expectedPerUnit: 1.5,
@@ -62,8 +62,6 @@ export const DENSITY_PRESETS: Record<
       "Every testable detail, every sub-bullet, every step of every pathway. This is what the deck did before this setting existed.",
   },
 };
-
-export const DEFAULT_DENSITY: DensityMode = "standard";
 
 type Preset = Exclude<DensityMode, "custom">;
 

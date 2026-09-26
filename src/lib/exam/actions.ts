@@ -10,7 +10,6 @@ import { regroupTopics } from "@/lib/topics";
 import {
   abandonPaper,
   createPaper,
-  diagnostic,
   loadPaperCards,
   paperQuestions,
   saveAnswer,
@@ -116,23 +115,6 @@ export async function loadQuestions(paperId: string) {
     prompt: question.prompt,
     options: question.options,
     answer: question.answer,
-  }));
-}
-
-export async function loadDiagnostic(paperId: string) {
-  return diagnostic(db, paperId).map((row) => ({
-    id: row.id,
-    position: row.position,
-    prompt: row.prompt,
-    topic: row.topic,
-    format: row.format,
-    answer: row.answer,
-    verdict: row.verdict,
-    errorType: row.errorType,
-    feedback: row.feedback,
-    expectedAnswer: row.expectedAnswer,
-    missedPoints: row.missedPoints,
-    source: row.source,
   }));
 }
 

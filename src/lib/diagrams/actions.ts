@@ -10,7 +10,6 @@ import { slideImage } from "./render";
 
 import {
   createDrill,
-  deleteDrill,
   DrillError,
   updateDrill,
   type NewDrill,
@@ -67,13 +66,6 @@ export async function updateDrillAction(
     if (error instanceof DrillError) return { ok: false, problems: error.problems };
     throw error;
   }
-}
-
-export async function deleteDrillAction(examId: string, drillId: string) {
-  const deleted = deleteDrill(db, drillId);
-  revalidatePath(`/exams/${examId}/diagrams`);
-  revalidatePath(`/exams/${examId}`);
-  return deleted;
 }
 
 /**

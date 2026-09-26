@@ -41,6 +41,7 @@ import { applyLearnResult } from "./progress";
 import type { TypedGrade } from "./typed";
 import { requestAssist, type AssistKind } from "@/lib/assist";
 import type { LlmProvider } from "@/lib/llm";
+import { chronologicalCardOrder } from "@/lib/order";
 
 /** Concepts per round, bounded by PRD §5's 5–8. */
 export const MIN_ROUND_SIZE = 5;
@@ -457,7 +458,7 @@ export function loadLearnCards(db: Db, examId: string) {
     .from(flashcards)
     .leftJoin(cardRubrics, eq(cardRubrics.flashcardId, flashcards.id))
     .where(and(eq(flashcards.examId, examId), eq(flashcards.excluded, false)))
-    .orderBy(flashcards.topic, flashcards.createdAt)
+    .orderBy(...chronologicalCardOrder())
     .all();
 }
 

@@ -5,7 +5,6 @@ import { and, count, desc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-o
 import { db } from "@/db";
 import { todayIso } from "@/lib/srs";
 import {
-  assistEvents,
   coverageMappings,
   cardRevisions,
   contentConflicts,
@@ -20,6 +19,12 @@ import {
   studyProgress,
   studySessions,
 } from "@/db/schema";
+import {
+  chronologicalCardOrder,
+  compareChronological,
+  fileUploadOrder,
+  sortObjectives,
+} from "@/lib/order";
 
 /** Courses with their exams, for the dashboard. */
 export async function listCoursesWithExams() {
@@ -67,12 +72,17 @@ export async function listSourceFiles(examId: string) {
   });
 }
 
+/** Study-guide items, by question number. */
 export async function listObjectives(examId: string) {
-  return db
+  const rows = await db
     .select()
     .from(studyGuideObjectives)
     .where(eq(studyGuideObjectives.examId, examId))
-    .orderBy(studyGuideObjectives.orderIndex);
+    .orderBy(
+      ...fileUploadOrder(studyGuideObjectives.sourceFileId),
+      studyGuideObjectives.orderIndex,
+    );
+  return sortObjectives(rows);
 }
 
 /** How many extracted units are available as answer material. */
@@ -132,7 +142,7 @@ export async function listFlashcards(examId: string) {
       sourceSlide: { with: { sourceFile: true } },
       rubric: true,
     },
-    orderBy: [flashcards.topic, flashcards.createdAt],
+    orderBy: chronologicalCardOrder(),
   });
 }
 
@@ -142,7 +152,13 @@ export async function listFlashcards(examId: string) {
  * "Covered by 6 cards via Slides 15–19" without a second query.
  */
 export async function getCoverageMatrix(examId: string) {
-  return db.query.studyGuideObjectives.findMany({
+  const files = await db
+    .select({ id: sourceFiles.id })
+    .from(sourceFiles)
+    .where(eq(sourceFiles.examId, examId))
+    .orderBy(sourceFiles.createdAt, sql`rowid`);
+  const fileRank = new Map(files.map((file, rank) => [file.id, rank]));
+  const rows = await db.query.studyGuideObjectives.findMany({
     where: eq(studyGuideObjectives.examId, examId),
     orderBy: [studyGuideObjectives.orderIndex],
     with: {
@@ -156,6 +172,19 @@ export async function getCoverageMatrix(examId: string) {
       },
     },
   });
+  const byFile = [...rows].sort(
+    (a, b) =>
+      (fileRank.get(a.sourceFileId ?? "") ?? Infinity) -
+      (fileRank.get(b.sourceFileId ?? "") ?? Infinity),
+  );
+  for (const row of byFile) {
+    row.coverage.sort((a, b) =>
+      a.flashcard && b.flashcard
+        ? compareChronological(a.flashcard, b.flashcard)
+        : Number(!a.flashcard) - Number(!b.flashcard),
+    );
+  }
+  return sortObjectives(byFile);
 }
 
 export type CoverageRow = Awaited<ReturnType<typeof getCoverageMatrix>>[number];
@@ -259,7 +288,7 @@ export async function listStudyCards(examId: string) {
       rubric: true,
       progress: true,
     },
-    orderBy: [flashcards.topic, flashcards.createdAt],
+    orderBy: chronologicalCardOrder(),
   });
 }
 
@@ -381,17 +410,6 @@ export async function listDiagnosedCards(examId: string) {
     .innerJoin(flashcards, eq(flashcards.id, errorDiagnoses.flashcardId))
     .where(eq(flashcards.examId, examId))
     .orderBy(desc(errorDiagnoses.attemptsConsidered));
-}
-
-/** How often help was used, per kind — assisted practice at a glance. */
-export async function countAssists(examId: string) {
-  const rows = await db
-    .select({ kind: assistEvents.kind })
-    .from(assistEvents)
-    .innerJoin(flashcards, eq(flashcards.id, assistEvents.flashcardId))
-    .where(eq(flashcards.examId, examId));
-
-  return rows.length;
 }
 
 /**

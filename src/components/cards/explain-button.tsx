@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import type { ExplainedCard } from "@/lib/generate/enrich";
 
 /**
- * "Explain with AI" for a card whose explanation was never written.
+ * "Explain Answer" for a card whose explanation was never written.
  *
  * Bulk generation skips explanations to keep a deck cheap; this writes one
  * card's the first time a student asks, and the server stores it so the
@@ -19,7 +19,7 @@ export function ExplainButton({
   cardId,
   onExplained,
   size = "sm",
-  label = "Explain with AI",
+  label = "Explain Answer",
 }: {
   cardId: string;
   onExplained: (result: ExplainedCard) => void;
