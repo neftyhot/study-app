@@ -17,9 +17,15 @@ import { courses, exams, primerGuides, primerSections, sourceFiles, sourceSlides
 import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 
 import {
+  OUTLINE_SCHEMA,
   PrimerError,
+  completeOutline,
   counterExample,
+  fallbackOutline,
   generatePrimer,
+  mergeConcepts,
+  primerBatches,
+  uncoveredSlides,
   getPrimer,
   loadPrimerSlides,
   normaliseSentence,
@@ -69,15 +75,23 @@ function upload(
   );
 }
 
-/** A provider that answers every call with `data`, and records the calls. */
-function fakeProvider(data: unknown, model = "fake-lite") {
+/**
+ * A provider that answers every call with `data` (or, for the organising
+ * call, `outline`), and records the calls.
+ */
+function fakeProvider(data: unknown, model = "fake-lite", outline: unknown = {}) {
   const calls: StructuredRequest[] = [];
   const provider: LlmProvider = {
     name: "fake",
     model,
     async generateStructured<T>(request: StructuredRequest) {
       calls.push(request);
-      return { data: data as T };
+      if (request.schema === OUTLINE_SCHEMA) {
+        if (outline instanceof Error) throw outline;
+        return { data: outline as T };
+      }
+      const answer = typeof data === "function" ? data(request) : data;
+      return { data: answer as T };
     },
   };
   return { provider, calls };
@@ -188,7 +202,9 @@ describe("writing a primer", () => {
 
     await generatePrimer(db, provider, examId, "foundational");
 
-    expect(calls).toHaveLength(1);
+    // One batch for two slides, then the organising call.
+    expect(calls).toHaveLength(2);
+    expect(calls[1].schema).toBe(OUTLINE_SCHEMA);
     expect(calls[0].feature).toBe("primer");
     expect(calls[0].prompt).toContain("[S1.1]");
     expect(calls[0].prompt).toContain("[S1.2]");
@@ -324,5 +340,141 @@ describe("citation rendering", () => {
     expect(html).not.toContain("<blockquote");
     expect(html).not.toContain("<img");
     expect(html).toContain("No exact quote");
+  });
+});
+
+describe("covering the whole lecture", () => {
+  const slide = (n: number, text = `Slide ${n} explains idea number ${n} in enough words to teach it properly.`) => ({
+    id: `s${n}`,
+    documentIndex: 1,
+    slideNumber: n,
+    text,
+    hasImage: false,
+  });
+
+  it("batches slides in order by count and by size, skipping empty ones", () => {
+    const slides = [slide(1), slide(2, ""), slide(3), slide(4), slide(5)];
+    expect(primerBatches(slides, 2).map((b) => b.map((x) => x.slideNumber))).toEqual([[1, 3], [4, 5]]);
+    const long = [slide(1, "x".repeat(900)), slide(2, "y".repeat(900)), slide(3)];
+    expect(primerBatches(long, 10, 1000).map((b) => b.length)).toEqual([1, 2]);
+  });
+
+  it("finds slides with content that nothing cites, ignoring title slides", () => {
+    const slides = [slide(1), slide(2, "Agenda"), slide(3)];
+    expect(uncoveredSlides(slides, new Set(["1:1"])).map((x) => x.slideNumber)).toEqual([3]);
+  });
+
+  it("joins concepts two batches both explained, keeping every new sentence", () => {
+    const cite = (text: string) => ({ ...s(text), source_document_index: null, source_slide_number: null, source_excerpt: null });
+    const concept = (name: string, def: string[], topic = "") => ({
+      conceptName: name,
+      topic,
+      definition: def.map(cite),
+      breakdown: [],
+      example: [],
+    });
+    const merged = mergeConcepts([
+      concept("Cardiac Output", ["CO = HR × SV."]),
+      concept("Preload", ["Stretch before contraction."]),
+      concept("cardiac output", ["CO = HR × SV.", "About 5 L/min at rest."]),
+    ] as Parameters<typeof mergeConcepts>[0]);
+    expect(merged.map((c) => c.conceptName)).toEqual(["Cardiac Output", "Preload"]);
+    expect(merged[0].definition.map((x) => x.text)).toEqual(["CO = HR × SV.", "About 5 L/min at rest."]);
+  });
+
+  const outlineConcepts = ["A", "B", "C", "D"].map((name, i) => ({
+    conceptName: name,
+    topic: i < 2 ? "Basics" : "Advanced",
+    summary: "",
+  }));
+
+  it("falls back to the lecture's own headings, in order", () => {
+    expect(fallbackOutline(outlineConcepts).topics).toEqual([
+      { title: "Basics", intro: "", conceptIds: [0, 1] },
+      { title: "Advanced", intro: "", conceptIds: [2, 3] },
+    ]);
+  });
+
+  it("puts every concept in the outline exactly once, even ones the model forgot", () => {
+    const outline = completeOutline(
+      {
+        overview: " About the heart. ",
+        topics: [
+          { title: "Foundations", intro: "Start here.", conceptIds: [2, 0, 0, 99] },
+          { title: "Empty", conceptIds: [] },
+          { title: "Next", conceptIds: [0, 3] },
+        ],
+      },
+      outlineConcepts,
+    );
+    expect(outline.overview).toBe("About the heart.");
+    // 1 was forgotten: it goes right after 0, the concept before it in the lecture.
+    expect(outline.topics).toEqual([
+      { title: "Foundations", intro: "Start here.", conceptIds: [2, 0, 1] },
+      { title: "Next", intro: "", conceptIds: [3] },
+    ]);
+    expect(completeOutline({ topics: [] }, outlineConcepts).topics).toHaveLength(2);
+  });
+
+  it("explains a long lecture batch by batch, fills gaps, and stores it as topics", async () => {
+    const texts = Array.from({ length: 25 }, (_, i) => `Slide ${i + 1}: idea ${i + 1} is described here with plenty of words for a student to learn.`);
+    upload("lecture1.pptx", "2026-01-01 00:00:00", texts.map((text) => ({ text })));
+
+    // Each batch explains every slide it was sent except slide 7, which only
+    // the gap pass picks up.
+    const answer = (request: StructuredRequest) => {
+      const numbers = [...request.prompt.matchAll(/\[S1\.(\d+)\]/g)].map((m) => Number(m[1]));
+      const gap = numbers.length === 1 && numbers[0] === 7;
+      return {
+        concepts: numbers
+          .filter((n) => gap || n !== 7)
+          .map((n) => ({
+            conceptName: `Idea ${n}`,
+            topic: n <= 12 ? "Part one" : "Part two",
+            definition: [s(`Idea ${n} matters.`, 1, n)],
+            breakdown: [],
+            example: [],
+          })),
+      };
+    };
+    const ids = Array.from({ length: 25 }, (_, i) => i);
+    const outline = {
+      overview: "The lecture in brief.",
+      topics: [
+        { title: "Groundwork", intro: "First things.", conceptIds: ids.slice(0, 10) },
+        { title: "Building on it", intro: "", conceptIds: ids.slice(10) },
+      ],
+    };
+    const { provider, calls } = fakeProvider(answer, "fake-lite", outline);
+    const progress: string[] = [];
+
+    await generatePrimer(db, provider, examId, "balanced", { onProgress: (p) => progress.push(p.stage) });
+
+    // 3 batches of ≤10 slides, 1 gap pass, 1 organising call.
+    expect(calls).toHaveLength(5);
+    expect(progress).toContain("filling_gaps");
+    expect(progress.at(-1)).toBe("saving");
+
+    const primer = getPrimer(db, examId, "balanced")!;
+    expect(primer.guide.overview).toBe("The lecture in brief.");
+    expect(primer.chapters.map((c) => [c.title, c.sections.length])).toEqual([
+      ["Groundwork", 10],
+      ["Building on it", 15],
+    ]);
+    const names = primer.chapters.flatMap((c) => c.sections.map((x) => x.conceptName));
+    expect(names).toEqual(Array.from({ length: 25 }, (_, i) => `Idea ${i + 1}`));
+  });
+
+  it("still writes the guide, by lecture heading, when organising fails", async () => {
+    upload("lecture1.pptx", "2026-01-01 00:00:00", [{ text: "The heart has four chambers." }]);
+    const response = {
+      concepts: [
+        { conceptName: "Chambers", topic: "Anatomy", definition: [s("Four chambers.")], breakdown: [], example: [] },
+      ],
+    };
+    await generatePrimer(db, fakeProvider(response, "fake-lite", new Error("down")).provider, examId, "balanced");
+    const primer = getPrimer(db, examId, "balanced")!;
+    expect(primer.chapters.map((c) => c.title)).toEqual(["Anatomy"]);
+    expect(primer.guide.overview).toBeNull();
   });
 });

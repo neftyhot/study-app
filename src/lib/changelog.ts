@@ -6,6 +6,17 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.1.0",
+    date: "2026-09-26",
+    notes: [
+      "The Study Guide is rewritten as a proper document: an overview, then numbered topics in the order to learn them, foundations first, with a contents list to jump around.",
+      "It now covers your whole lecture. Slides are explained a few at a time, and any slide left out gets a second pass, so no topic is skipped, even on long decks.",
+      "Each concept reads like a textbook entry: what it is, how it works, and an example, with every sentence linked back to its slide.",
+      "Writing a guide shows its progress, and keeps going if you look around.",
+      "Flashcards are one click away: flip through every card from the deck page or the Study Guide, or see them all as a list.",
+    ],
+  },
+  {
     version: "1.0.0",
     date: "2026-09-26",
     notes: [

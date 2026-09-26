@@ -231,24 +231,26 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
                 blurb={
                   stats.flashcards === 0
                     ? "Make your flashcards below first."
-                    : "Short questions that come back just before you'd forget them."
+                    : `${stats.flashcards} cards. Flip through them all, or learn them a few at a time.`
                 }
-                href={
-                  dueCount === 0 && plan.today.fresh > 0
-                    ? `/exams/${examId}/learn`
-                    : `/exams/${examId}/study`
-                }
+                href={`/exams/${examId}/study`}
                 action={
                   dueCount > 0
-                    ? `Review ${dueCount} card${dueCount === 1 ? "" : "s"}`
-                    : plan.today.fresh > 0
-                      ? "Learn new cards"
-                      : "Study flashcards"
+                    ? `Review ${dueCount} due card${dueCount === 1 ? "" : "s"}`
+                    : `Flip through all ${stats.flashcards} cards`
                 }
-                primary={
-                  stats.flashcards > 0 && (dueCount > 0 || plan.today.fresh > 0)
-                }
+                primary={stats.flashcards > 0 && (dueCount > 0 || plan.today.fresh > 0)}
                 disabled={stats.flashcards === 0}
+                more={
+                  stats.flashcards === 0
+                    ? []
+                    : [
+                        ...(plan.today.fresh > 0
+                          ? [{ href: `/exams/${examId}/learn`, label: "Learn new cards" }]
+                          : []),
+                        { href: `/exams/${examId}/cards`, label: "See every card as a list" },
+                      ]
+                }
               />
               <PathStep
                 step={3}
@@ -270,20 +272,6 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {stats.flashcards > 0 && dueCount > 0 && plan.today.fresh > 0 ? (
-          <Hint label="Meet cards you haven't seen yet, a few at a time">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/exams/${examId}/learn`}>Learn new cards</Link>
-            </Button>
-          </Hint>
-        ) : null}
-        {stats.flashcards > 0 ? (
-          <Hint label="See, edit or remove any of your cards">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/exams/${examId}/cards`}>Browse cards</Link>
-            </Button>
-          </Hint>
-        ) : null}
         {drills.length > 0 ? (
           <Hint label="Label the parts of diagrams from your slides">
             <Button asChild variant="outline" size="sm">
@@ -411,6 +399,7 @@ function PathStep({
   action,
   primary,
   disabled = false,
+  more = [],
 }: {
   step: number;
   icon: React.ReactNode;
@@ -420,6 +409,8 @@ function PathStep({
   action: string;
   primary: boolean;
   disabled?: boolean;
+  /** Other ways into the same step, shown as smaller buttons under the main one. */
+  more?: { href: string; label: string }[];
 }) {
   return (
     <li className="flex flex-col gap-2 rounded-lg border p-4">
@@ -443,6 +434,11 @@ function PathStep({
           </Link>
         </Button>
       )}
+      {more.map((link) => (
+        <Button key={link.href} asChild variant="outline" size="sm">
+          <Link href={link.href}>{link.label}</Link>
+        </Button>
+      ))}
     </li>
   );
 }

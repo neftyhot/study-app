@@ -9,8 +9,25 @@ permissions:
   contents: write
 
 jobs:
+  # Makes the draft before either build starts. electron-builder creates one
+  # when none exists, and two builds that both find none make two drafts with
+  # the assets split between them; with one already there, both upload to it
+  # and can run side by side.
+  create-draft:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+                 --title "${TAG#v}" --notes "" --verify-tag
+
   build-macos:
     runs-on: macos-14
+    needs: create-draft
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -52,9 +69,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
-    # After the mac job, so the two do not race to create the release draft:
-    # electron-builder makes one if none exists, and two at once make two.
-    needs: build-macos
+    needs: create-draft
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

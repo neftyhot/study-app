@@ -1010,9 +1010,31 @@ export const primerGuides = sqliteTable(
     depth: text("depth", { enum: primerDepths }).notNull(),
     /** The model that wrote it, so a surprising guide can be traced. */
     model: text("model"),
+    /** What the whole deck teaches and the route through it, in a paragraph or two. */
+    overview: text("overview"),
     createdAt: createdAt(),
   },
   (t) => [uniqueIndex("primer_guides_exam_depth_idx").on(t.examId, t.depth)],
+);
+
+/**
+ * A chapter of a primer: concepts that belong together, placed so that what
+ * a topic relies on comes in an earlier one. Guides written before topics
+ * existed have none, and read as a single list.
+ */
+export const primerTopics = sqliteTable(
+  "primer_topics",
+  {
+    id: id(),
+    guideId: text("guide_id")
+      .notNull()
+      .references(() => primerGuides.id, { onDelete: "cascade" }),
+    orderIndex: integer("order_index").notNull(),
+    title: text("title").notNull(),
+    /** Why this topic comes here and what it sets up, in a few sentences. */
+    intro: text("intro").notNull().default(""),
+  },
+  (t) => [index("primer_topics_guide_idx").on(t.guideId, t.orderIndex)],
 );
 
 /**
@@ -1027,7 +1049,9 @@ export const primerSections = sqliteTable(
     guideId: text("guide_id")
       .notNull()
       .references(() => primerGuides.id, { onDelete: "cascade" }),
-    /** Position in the guide; follows the lecture's own order. */
+    /** The topic it sits under; null only in guides written before topics. */
+    topicId: text("topic_id").references(() => primerTopics.id, { onDelete: "set null" }),
+    /** Position in the guide, across topics: the order to read it in. */
     orderIndex: integer("order_index").notNull(),
     conceptName: text("concept_name").notNull(),
     definition: text("definition", { mode: "json" }).$type<CitedSentence[]>().notNull(),
@@ -1244,6 +1268,7 @@ export type CardRevision = typeof cardRevisions.$inferSelect;
 export type AppSetting = typeof appSettings.$inferSelect;
 export type PrimerGuide = typeof primerGuides.$inferSelect;
 export type PrimerSection = typeof primerSections.$inferSelect;
+export type PrimerTopic = typeof primerTopics.$inferSelect;
 export type GenerationJob = typeof generationJobs.$inferSelect;
 export type PracticeExam = typeof practiceExams.$inferSelect;
 export type PracticeQuestion = typeof practiceQuestions.$inferSelect;
