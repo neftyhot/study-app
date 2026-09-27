@@ -10,9 +10,14 @@
  * Outside the desktop app (a development server, say) this returns null and
  * the settings row simply does not appear.
  */
+/** Must match TRIAL_DAYS in electron/license/gate.cjs. */
+export const TRIAL_DAYS = 7;
+
 const TYPES = ["admin", "student", "lifetime", "trial"] as const;
 
 export type LicenseStatus = {
+  /** The key's id, as the License Manager lists it. */
+  id: string | null;
   type: (typeof TYPES)[number];
   name: string | null;
   expiresAt: number | null;
@@ -28,6 +33,7 @@ export function readLicenseStatus(): LicenseStatus | null {
     if (!TYPES.includes(parsed.type as LicenseStatus["type"])) return null;
 
     return {
+      id: typeof parsed.id === "string" ? parsed.id : null,
       type: parsed.type as LicenseStatus["type"],
       name: typeof parsed.name === "string" ? parsed.name : null,
       expiresAt:

@@ -17,6 +17,7 @@ import {
   type AssistKind,
 } from "@/lib/assist";
 import { getProvider } from "@/lib/llm";
+import { mergeTopicVariants } from "@/lib/topics";
 
 import {
   finishLearnSession,
@@ -454,6 +455,7 @@ export async function endLearnSession(sessionId: string) {
 
 /** Topic list for the Learn picker, excluding cards the student excluded. */
 export async function learnTopics(examId: string) {
+  mergeTopicVariants(db, examId);
   const rows = db
     .selectDistinct({ topic: flashcards.topic })
     .from(flashcards)

@@ -9,18 +9,18 @@ import { Button } from "@/components/ui/button";
 import type { LicenseApi } from "@/main/auth/ipc";
 
 /**
- * Buying the lifetime license during the free trial.
- *
- * Checkout opens in the student's browser; the Electron main process then
- * asks the licensing server for the key minted for this machine, verifies
- * it, and stores it. This only starts that and reports back.
+ * The checkout-and-wait logic, shared by Settings and the first-run screen.
+ * `onActivated` runs once the bought key is verified and stored.
  */
-export function PurchaseLicense() {
-  const router = useRouter();
+export function usePurchase(onActivated: () => void) {
   const api = useSyncExternalStore(noSubscription, desktopApi, () => null);
   const [waiting, setWaiting] = useState(false);
   const [checking, setChecking] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activated = useRef(onActivated);
+  useEffect(() => {
+    activated.current = onActivated;
+  });
 
   useEffect(() => () => stop(), []);
 
@@ -49,7 +49,7 @@ export function PurchaseLicense() {
       setWaiting(false);
       if (result.valid) {
         toast.success("License activated. Thank you!");
-        router.refresh();
+        activated.current();
       } else {
         toast.error(result.message ?? "That license could not be verified.");
       }
@@ -75,7 +75,23 @@ export function PurchaseLicense() {
     }, 5000);
   }
 
-  if (!api) return null;
+  return { available: api !== null, waiting, checking, purchase, check };
+}
+
+/**
+ * Buying the lifetime license during the free trial.
+ *
+ * Checkout opens in the student's browser; the Electron main process then
+ * asks the licensing server for the key minted for this machine, verifies
+ * it, and stores it. This only starts that and reports back.
+ */
+export function PurchaseLicense() {
+  const router = useRouter();
+  const { available, waiting, checking, purchase, check } = usePurchase(() =>
+    router.refresh(),
+  );
+
+  if (!available) return null;
 
   return (
     <div className="flex flex-wrap items-center gap-2 pt-2">

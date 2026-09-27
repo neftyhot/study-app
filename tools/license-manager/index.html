@@ -150,8 +150,9 @@
             <tbody id="rows"></tbody>
           </table>
           <div class="empty" style="text-align: left">
+            <button id="pull-purchases" type="button">Pull Stripe purchases</button>
             <button id="sync-revocations" type="button">Push revocations to server</button>
-            <span id="sync-status" class="paths">Revoke, Restore and Delete send the list automatically.</span>
+            <span id="sync-status" class="paths">Keys bought through Stripe are pulled in at launch. Revoke, Restore and Delete send the list automatically.</span>
           </div>
         </div>
       </section>
@@ -295,7 +296,7 @@
         for (const record of records) {
           const tr = document.createElement("tr");
           tr.innerHTML = `
-            <td>${record.name ? escapeHtml(record.name) : "<span class='paths'>unnamed</span>"}</td>
+            <td>${record.name ? escapeHtml(record.name) : "<span class='paths'>unnamed</span>"}${record.email ? `<br><span class='paths'>${escapeHtml(record.email)}</span>` : ""}${record.source === "stripe" ? " <span class='paths'>(bought)</span>" : ""}<br><span class='paths mono'>${escapeHtml(String(record.id).slice(0, 8))}</span></td>
             <td><span class="tag ${record.type}">${record.type}</span></td>
             <td class="mono">${record.machineId ? escapeHtml(record.machineId) : "<span class='paths'>any</span>"}</td>
             <td>${expiryCell(record)}</td>
@@ -415,6 +416,21 @@
 
       $("copy-last").addEventListener("click", () => lastToken && copy(lastToken));
       $("reveal").addEventListener("click", () => window.authority.reveal());
+      /** Renders, then says how many bought keys were new to the ledger. */
+      function renderPulled(state) {
+        render(state);
+        const pull = state.pull;
+        if (!pull) return;
+        if (pull.ok) {
+          $("sync-status").textContent = `Stripe purchases: ${pull.total} on the server, ${pull.added} new here.`;
+        } else {
+          fail("Could not pull Stripe purchases, so bought keys may be missing from this list: " + pull.error);
+        }
+      }
+
+      $("pull-purchases").addEventListener("click", async () => {
+        renderPulled(await window.authority.pullPurchases());
+      });
       $("sync-revocations").addEventListener("click", async () => {
         renderSynced(await window.authority.syncRevocations());
       });
@@ -563,7 +579,16 @@
         loaded.stats = loaded.suggestions = false;
       });
 
-      window.authority.state().then(render).catch((error) => fail(String(error)));
+      window.authority.state().then((state) => {
+        render(state);
+        // Only when a server is set up; otherwise there is nothing to pull.
+        if (state.hasPrivateKey) {
+          window.authority.pullPurchases().then((pulled) => {
+            if (pulled.pull?.ok) renderPulled(pulled);
+            else render(pulled);
+          });
+        }
+      }).catch((error) => fail(String(error)));
     </script>
   </body>
 </html>

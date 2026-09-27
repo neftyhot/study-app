@@ -195,7 +195,7 @@ export function mintLicense(options) {
  * Only keys this signing key actually made are accepted, so the ledger stays
  * a record of what was issued rather than of whatever was pasted in.
  */
-export function importLicense(token) {
+export function importLicense(token, extra = {}) {
   const text = typeof token === "string" ? token.trim() : "";
   let outer;
   let payload;
@@ -230,6 +230,8 @@ export function importLicense(token) {
     token: text,
     status: "active",
     importedAt: Date.now(),
+    ...(typeof extra.email === "string" ? { email: extra.email } : {}),
+    ...(typeof extra.source === "string" ? { source: extra.source } : {}),
   };
   writeLicenses([...records, record]);
   return { record, added: true };

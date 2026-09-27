@@ -242,6 +242,24 @@ export async function handleAdmin(request: Request, env: InsightsEnv, path: stri
     return Response.json({ ok: true });
   }
 
+  // Keys minted here from Stripe checkouts. The License Manager never signed
+  // them, so without this they are missing from its ledger and cannot be
+  // revoked there.
+  if (request.method === "GET" && path === "/admin/purchases") {
+    const entries = await readAll<Record<string, unknown>>(env.LICENSES, "session:");
+    return Response.json(
+      entries
+        .map(({ value }) => value)
+        .filter((value) => typeof value.token === "string")
+        .map((value) => ({
+          token: value.token,
+          licenseId: value.licenseId ?? null,
+          email: value.email ?? null,
+          issuedAt: value.issuedAt ?? null,
+        })),
+    );
+  }
+
   if (request.method === "PUT" && path === "/admin/revocations") {
     let body: { ids?: unknown };
     try {

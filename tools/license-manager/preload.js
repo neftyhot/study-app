@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("authority", {
   setStatus: (id, status) => ipcRenderer.invoke("set-status", id, status),
   remove: (id) => ipcRenderer.invoke("delete", id),
   syncRevocations: () => ipcRenderer.invoke("sync-revocations"),
+  pullPurchases: () => ipcRenderer.invoke("pull-purchases"),
   copy: (text) => ipcRenderer.invoke("copy", text),
   reveal: () => ipcRenderer.invoke("reveal"),
   chooseFolder: () => ipcRenderer.invoke("choose-folder"),

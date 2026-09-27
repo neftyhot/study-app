@@ -346,4 +346,19 @@ describe("telemetry and admin", () => {
     expect(await (await call(`/revoked/${id}`, {}, null)).json()).toEqual({ revoked: false });
     expect((await call(`/license/${MACHINE}`, {}, null)).status).toBe(200);
   });
+
+  it("lists purchased keys for the License Manager, to the admin only", async () => {
+    await webhook(checkoutEvent());
+    expect((await call("/admin/purchases", {}, null)).status).toBe(401);
+
+    const list = (await (await call("/admin/purchases")).json()) as {
+      token: string;
+      licenseId: string;
+      email: string;
+    }[];
+    expect(list).toHaveLength(1);
+    expect(list[0].email).toBe("student@example.com");
+    const { payload } = verifyLicense(list[0].token, { machineId: MACHINE, publicKeyPem: PUBLIC_PEM });
+    expect(payload!.id).toBe(list[0].licenseId);
+  });
 });

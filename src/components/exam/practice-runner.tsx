@@ -44,7 +44,9 @@ import {
 export type SourceTopics = Record<string, { topic: string; cards: number }[]>;
 
 /** Past this many topics under one file, the list is too fine to choose from. */
+// Mirror MAX_TOPICS_PER_FILE and MIN_CARDS_PER_TOPIC in lib/topics.
 const NARROW_TOPICS = 8;
+const TINY_TOPIC = 3;
 
 export type Question = {
   id: string;
@@ -105,9 +107,13 @@ export function PracticeRunner({
   );
   const [chosen, setChosen] = useState<string[]>([]);
   const [regrouping, setRegrouping] = useState(false);
-  const narrow = sources.some(
-    (source) => (topics[source.id]?.length ?? 0) > NARROW_TOPICS,
-  );
+  const narrow = sources.some((source) => {
+    const list = topics[source.id] ?? [];
+    return (
+      list.length > NARROW_TOPICS ||
+      (list.length > 1 && list.some((topic) => topic.cards < TINY_TOPIC))
+    );
+  });
 
   // Counted over this paper's questions only. Counting every stored answer
   // carried the last paper's answers into the next one: 21 of 20, 22 of 20.

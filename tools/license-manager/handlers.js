@@ -63,6 +63,35 @@ async function syncRevocations(api, configDir) {
 }
 
 /**
+ * Copies keys bought through Stripe into the ledger.
+ *
+ * The Worker mints those itself, so until they are pulled here they are not
+ * listed and cannot be revoked. Keys already in the ledger are left as they
+ * are — a revoked one stays revoked. Never throws, like syncRevocations.
+ */
+async function pullPurchases(api, configDir) {
+  try {
+    if (!configDir) throw new Error("No settings folder.");
+    const purchases = await admin(configDir, "/admin/purchases");
+    let added = 0;
+    for (const purchase of Array.isArray(purchases) ? purchases : []) {
+      try {
+        const result = api.importLicense(purchase.token, {
+          email: purchase.email ?? undefined,
+          source: "stripe",
+        });
+        if (result.added) added += 1;
+      } catch {
+        // Signed by another key (a test Worker, say): not ours to list.
+      }
+    }
+    return { ok: true, added, total: Array.isArray(purchases) ? purchases.length : 0 };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
  * @param {import("electron").IpcMain} ipcMain
  * @param {{isDev: boolean, root: string, electron: object, configDir?: string, onRootChange?: (root: string) => void}} context
  */
@@ -109,6 +138,11 @@ async function registerHandlers(ipcMain, context) {
     sync: await syncRevocations(api, context.configDir),
   }));
 
+  ipcMain.handle("pull-purchases", async () => {
+    const pull = await pullPurchases(api, context.configDir);
+    return { ...(await snapshot(isDev)), pull };
+  });
+
   ipcMain.handle("copy", (_event, text) => {
     electron.clipboard.writeText(String(text ?? ""));
     return true;
@@ -137,4 +171,4 @@ async function registerHandlers(ipcMain, context) {
   });
 }
 
-module.exports = { registerHandlers, snapshot, loadStore, syncRevocations };
+module.exports = { registerHandlers, snapshot, loadStore, syncRevocations, pullPurchases };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { renameMap } from "./index";
+import { needsRegroup, renameMap, variantRenames } from "./index";
 
 describe("renameMap", () => {
   const topics = ["Olfactory bulb", "Olfactory receptors", "Taste buds", "Gustatory pathway", "Smell"];
@@ -38,5 +38,42 @@ describe("renameMap", () => {
   it("does not rename a topic to itself", () => {
     const map = renameMap(["Taste"], [{ name: "Taste", members: ["Taste"] }]);
     expect(map.size).toBe(0);
+  });
+});
+
+describe("variantRenames", () => {
+  it("folds case and spacing variants into the most-used spelling", () => {
+    const renames = variantRenames([
+      { topic: "Email communication", cards: 23 },
+      { topic: "Email Communication", cards: 41 },
+      { topic: "Email  communication.", cards: 2 },
+      { topic: "Business memos", cards: 8 },
+    ]);
+    expect(Object.fromEntries(renames)).toEqual({
+      "Email communication": "Email Communication",
+      "Email  communication.": "Email Communication",
+    });
+  });
+
+  it("leaves distinct topics alone", () => {
+    expect(variantRenames([{ topic: "A", cards: 1 }, { topic: "B", cards: 1 }]).size).toBe(0);
+  });
+});
+
+describe("needsRegroup", () => {
+  const t = (cards: number, topic = `T${cards}-${Math.random()}`) => ({ topic, cards, example: "" });
+
+  it("regroups a file with a one- or two-card topic", () => {
+    expect(needsRegroup([t(12), t(19), t(1), t(7)])).toBe(true);
+  });
+
+  it("leaves a few broad topics alone", () => {
+    expect(needsRegroup([t(46), t(8), t(23)])).toBe(false);
+  });
+
+  it("regroups too many topics, and anything when forced", () => {
+    expect(needsRegroup(Array.from({ length: 9 }, () => t(5)))).toBe(true);
+    expect(needsRegroup([t(10), t(10)], true)).toBe(true);
+    expect(needsRegroup([t(1)], true)).toBe(false);
   });
 });

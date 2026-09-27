@@ -23,6 +23,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -33,6 +34,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  clampRoundSize,
+  DEFAULT_ROUND_SIZE,
+  MAX_ROUND_SIZE,
+  MIN_ROUND_SIZE,
+} from "@/lib/learn/round-size";
 import {
   answerMultipleChoice,
   answerTyped,
@@ -846,7 +853,8 @@ function LearnPicker({
 }) {
   const [scope, setScope] = useState<StudyScope>("all");
   const [topic, setTopic] = useState(topics[0] ?? "");
-  const [roundSize, setRoundSize] = useState(6);
+  const [roundSizeText, setRoundSizeText] = useState(String(DEFAULT_ROUND_SIZE));
+  const roundSize = clampRoundSize(Number(roundSizeText || DEFAULT_ROUND_SIZE));
   const [application, setApplication] = useState(true);
   const [starting, setStarting] = useState(false);
 
@@ -897,21 +905,22 @@ function LearnPicker({
             </Select>
           ) : null}
 
-          <Select
-            value={String(roundSize)}
-            onValueChange={(value) => setRoundSize(Number(value))}
-          >
-            <SelectTrigger className="sm:w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[5, 6, 7, 8].map((size) => (
-                <SelectItem key={size} value={String(size)}>
-                  {size} concepts per round
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Input
+              id="learn-round-size"
+              type="number"
+              inputMode="numeric"
+              min={MIN_ROUND_SIZE}
+              max={MAX_ROUND_SIZE}
+              value={roundSizeText}
+              onChange={(event) => setRoundSizeText(event.target.value)}
+              onBlur={() => setRoundSizeText(String(roundSize))}
+              className="w-20"
+            />
+            <Label htmlFor="learn-round-size" className="font-normal whitespace-nowrap">
+              concepts per round
+            </Label>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
 import { SiteHeader } from "@/components/layout/site-header";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
+import { readLicenseStatus, TRIAL_DAYS } from "@/lib/license/status";
 import { TimeTracker } from "@/components/layout/time-tracker";
 import { WhatsNew } from "@/components/layout/whats-new";
 import { ThemePersistence } from "@/components/theme-persistence";
@@ -53,6 +54,7 @@ export const dynamic = "force-dynamic";
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   const savedTheme = readTheme(db);
+  const license = readLicenseStatus();
   const bootScript = themeBootScript(savedTheme);
 
   return (
@@ -98,7 +100,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               </main>
             </>
           ) : (
-            <PrivacyGate />
+            <PrivacyGate
+              trial={
+                license?.type === "trial"
+                  ? { days: TRIAL_DAYS, daysRemaining: license.daysRemaining }
+                  : null
+              }
+            />
           )}
           </TooltipProvider>
           <Toaster />

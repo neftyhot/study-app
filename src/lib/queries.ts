@@ -4,6 +4,7 @@ import { and, count, desc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-o
 
 import { db } from "@/db";
 import { todayIso } from "@/lib/srs";
+import { mergeTopicVariants } from "@/lib/topics";
 import {
   coverageMappings,
   cardRevisions,
@@ -307,6 +308,7 @@ export async function getOpenStudySession(examId: string) {
 }
 
 export async function listTopics(examId: string) {
+  mergeTopicVariants(db, examId);
   const rows = await db
     .selectDistinct({ topic: flashcards.topic })
     .from(flashcards)
@@ -324,6 +326,7 @@ export async function listTopics(examId: string) {
  * under `fileId: null`.
  */
 export async function listTopicsBySource(examId: string) {
+  mergeTopicVariants(db, examId);
   const rows = await db
     .select({
       fileId: sourceSlides.sourceFileId,

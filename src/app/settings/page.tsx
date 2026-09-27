@@ -145,6 +145,11 @@ export default async function SettingsPage() {
                     {TIER_LABELS[license.type]} · {expiryLabel(license)}
                     {license.name ? ` · Issued to ${license.name}` : ""}
                   </dd>
+                  {license.id ? (
+                    <dd className="text-muted-foreground font-mono text-xs">
+                      Key {license.id.slice(0, 8)} (the id the License Manager lists)
+                    </dd>
+                  ) : null}
                 </div>
               ) : null}
               <div className="space-y-1">

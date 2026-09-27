@@ -8,6 +8,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
+import { clampRoundSize, DEFAULT_ROUND_SIZE } from "@/lib/learn/round-size";
 import {
   answerAttempts,
   cardRubrics,
@@ -43,15 +44,12 @@ import { requestAssist, type AssistKind } from "@/lib/assist";
 import type { LlmProvider } from "@/lib/llm";
 import { chronologicalCardOrder } from "@/lib/order";
 
-/** Concepts per round, bounded by PRD §5's 5–8. */
-export const MIN_ROUND_SIZE = 5;
-export const MAX_ROUND_SIZE = 8;
-export const DEFAULT_ROUND_SIZE = 6;
-
-export function clampRoundSize(size: number): number {
-  if (!Number.isFinite(size)) return DEFAULT_ROUND_SIZE;
-  return Math.min(Math.max(Math.round(size), MIN_ROUND_SIZE), MAX_ROUND_SIZE);
-}
+export {
+  clampRoundSize,
+  DEFAULT_ROUND_SIZE,
+  MAX_ROUND_SIZE,
+  MIN_ROUND_SIZE,
+} from "@/lib/learn/round-size";
 
 export function openLearnSession(
   db: Db,

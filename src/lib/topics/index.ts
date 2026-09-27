@@ -13,14 +13,24 @@
  * applying it is plain code here, and it only ever renames — a card never
  * moves file, and a topic the model forgot keeps its name.
  */
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import { flashcards, sourceFiles, sourceSlides } from "@/db/schema";
 import type { JsonSchema, LlmProvider } from "@/lib/llm";
 
-/** A file with this many topics or fewer is already broad enough. */
+/** A file with this many topics or fewer is already broad enough... */
 export const MAX_TOPICS_PER_FILE = 8;
+
+/** ...unless one of them is this small, which is a fact, not a section. */
+export const MIN_CARDS_PER_TOPIC = 3;
+
+/** Whether a file's topics still need folding. */
+export function needsRegroup(topics: readonly TopicUsage[], force = false): boolean {
+  if (topics.length <= 1) return false;
+  if (force || topics.length > MAX_TOPICS_PER_FILE) return true;
+  return topics.some((usage) => usage.cards < MIN_CARDS_PER_TOPIC);
+}
 
 export const REGROUP_SCHEMA: JsonSchema = {
   type: "object",
@@ -66,7 +76,16 @@ a contents slide.
   "Spermatogenesis". Not a single fact, hormone or structure.
 - Every topic given must appear in exactly one group, copied exactly.
 - Where a given topic is already broad, reuse its name for the group.
-- Prefer fewer, larger groups. A group of one card is almost always wrong.`;
+- Topics that mean the same thing ("Persuasive Messages", "Persuasive
+  message pattern") belong in ONE group.
+- Never name a group after the whole lecture or file (e.g. "Short Message
+  Patterns" for a file of that name): the student already picks the file, so
+  a group that repeats it tells them nothing. Split its cards into the real
+  sections instead.
+- Where a name from OTHER FILES fits, use it exactly as written, so the same
+  subject is never spelt two ways across the deck.
+- Prefer fewer, larger groups. A group of one or two cards is almost always
+  wrong.`;
 
 export type TopicUsage = { topic: string; cards: number; example: string };
 
@@ -172,6 +191,69 @@ export function applyRenames(
   return changed;
 }
 
+/** Case, spacing and trailing punctuation do not make a topic different. */
+export function topicKey(topic: string): string {
+  return topic.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.:;,]+$/, "");
+}
+
+/**
+ * Spellings of one topic that differ only by case or spacing ("Email
+ * communication", "Email Communication"), each mapped to the spelling most
+ * cards already use. Ties go to the one sorting first, so the choice is stable.
+ */
+export function variantRenames(
+  usage: readonly { topic: string; cards: number }[],
+): Map<string, string> {
+  const groups = new Map<string, Map<string, number>>();
+  for (const { topic, cards } of usage) {
+    const key = topicKey(topic);
+    if (!key) continue;
+    const spellings = groups.get(key) ?? new Map<string, number>();
+    spellings.set(topic, (spellings.get(topic) ?? 0) + cards);
+    groups.set(key, spellings);
+  }
+
+  const renames = new Map<string, string>();
+  for (const spellings of groups.values()) {
+    if (spellings.size < 2) continue;
+    const [keep] = [...spellings.entries()].sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    )[0];
+    for (const topic of spellings.keys()) if (topic !== keep) renames.set(topic, keep);
+  }
+  return renames;
+}
+
+/**
+ * Gives every spelling of a topic across the exam the same one, so the topic
+ * pickers list it once and choosing it takes every card. Plain code and cheap:
+ * safe to run whenever topics are listed.
+ */
+export function mergeTopicVariants(db: Db, examId: string): number {
+  const usage = db
+    .select({ topic: flashcards.topic, cards: count(flashcards.id) })
+    .from(flashcards)
+    .where(and(eq(flashcards.examId, examId), isNotNull(flashcards.topic)))
+    .groupBy(flashcards.topic)
+    .all()
+    .map((row) => ({ topic: row.topic!, cards: row.cards }));
+
+  const renames = variantRenames(usage);
+  if (renames.size === 0) return 0;
+
+  let changed = 0;
+  db.transaction((tx) => {
+    for (const [from, to] of renames) {
+      changed += tx
+        .update(flashcards)
+        .set({ topic: to })
+        .where(and(eq(flashcards.examId, examId), eq(flashcards.topic, from)))
+        .run().changes;
+    }
+  });
+  return changed;
+}
+
 export type RegroupResult = { files: number; cardsRenamed: number; topicsBefore: number; topicsAfter: number };
 
 /**
@@ -186,13 +268,27 @@ export async function regroupTopics(
   examId: string,
   options: { force?: boolean } = {},
 ): Promise<RegroupResult> {
+  mergeTopicVariants(db, examId);
   const files = topicsByFile(db, examId);
   const result: RegroupResult = { files: 0, cardsRenamed: 0, topicsBefore: 0, topicsAfter: 0 };
+
+  // Names other files settled on, offered for reuse. Read afresh per file so a
+  // name one file just chose is there for the next.
+  const elsewhere = (fileId: string) => {
+    const names = [
+      ...new Set(
+        topicsByFile(db, examId)
+          .filter((other) => other.fileId !== fileId)
+          .flatMap((other) => other.topics.map((usage) => usage.topic)),
+      ),
+    ].sort();
+    return names.length ? `\n\nOTHER FILES' TOPICS\n${names.map((n) => `- ${n}`).join("\n")}` : "";
+  };
 
   for (const file of files) {
     result.topicsBefore += file.topics.length;
 
-    if (file.topics.length <= (options.force ? 1 : MAX_TOPICS_PER_FILE)) {
+    if (!needsRegroup(file.topics, options.force)) {
       result.topicsAfter += file.topics.length;
       continue;
     }
@@ -205,7 +301,7 @@ export async function regroupTopics(
       const { data } = await llm.generateStructured<RegroupResponse>({
         feature: "topics",
         system: REGROUP_SYSTEM,
-        prompt: `FILE: ${file.filename}\n\nTOPICS\n${list}`,
+        prompt: `FILE: ${file.filename}\n\nTOPICS\n${list}${elsewhere(file.fileId)}`,
         schema: REGROUP_SCHEMA,
         temperature: 0,
         thinking: "minimal",
@@ -225,5 +321,7 @@ export async function regroupTopics(
     }
   }
 
+  // The model may have picked a name another file spells differently.
+  mergeTopicVariants(db, examId);
   return result;
 }

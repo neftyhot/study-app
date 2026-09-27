@@ -290,6 +290,7 @@ function createWindow(url) {
 function publishLicense(license) {
   if (!license?.payload) return;
   process.env.STUDY_APP_LICENSE = JSON.stringify({
+    id: license.payload.id ?? null,
     type: license.payload.type,
     name: license.payload.name ?? null,
     expiresAt: license.payload.expiresAt ?? null,

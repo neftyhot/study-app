@@ -424,8 +424,9 @@ describe("learn sessions", () => {
   });
 
   it("clamps the round size to the 5–8 the PRD specifies", () => {
-    expect(clampRoundSize(2)).toBe(5);
-    expect(clampRoundSize(20)).toBe(8);
+    expect(clampRoundSize(0)).toBe(1);
+    expect(clampRoundSize(500)).toBe(50);
+    expect(clampRoundSize(20)).toBe(20);
     expect(clampRoundSize(7)).toBe(7);
   });
 

@@ -6,6 +6,16 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.2.0",
+    date: "2026-09-26",
+    notes: [
+      "Buy a licence right from the welcome screen, or choose the free 7-day trial. The screen now says plainly which is which.",
+      "Cleaner topics: the same topic spelled two ways is now merged into one, and tiny or repeated topics are folded into real sections. On an older deck, press “Combine topics” on the Practice Exam screen.",
+      "Learn by Topic: choose how many concepts each round covers, from 1 to 50, instead of at most 8.",
+      "Settings › Advanced shows your licence key's short id, the same one the developer's records use.",
+    ],
+  },
+  {
     version: "1.1.0",
     date: "2026-09-26",
     notes: [
