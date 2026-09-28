@@ -29,13 +29,15 @@ export default async function CardsPage(
     })),
   );
 
-  const views: DeckCardView[] = cards.map((card) => {
+  const views: DeckCardView[] = cards.map((card, index) => {
     const label = card.sourceSlide
       ? `${card.sourceSlide.sourceFile.fileType === "pptx" ? "Slide" : card.sourceSlide.sourceFile.fileType === "pdf" ? "Page" : "Section"} ${card.sourceSlide.index} of ${card.sourceSlide.sourceFile.filename}`
       : null;
 
     return {
       id: card.id,
+      // The number the tutor knows it by: "explain flashcard 32".
+      number: index + 1,
       topic: card.topic ?? "Untitled",
       question: card.question,
       directAnswer: card.directAnswer,
@@ -44,7 +46,9 @@ export default async function CardsPage(
       hasAiSupplement: card.hasAiSupplement,
       isUserEdited: card.isUserEdited,
       essentialPoints: card.rubric?.essentialPoints ?? [],
-      source: label ? { label, excerpt: card.sourceExcerpt } : null,
+      source: label && card.sourceSlide
+        ? { label, excerpt: card.sourceExcerpt, slideId: card.sourceSlide.id }
+        : null,
       // Searching the excerpt too means "where did I read this" works from here.
       haystack: [
         card.topic ?? "",

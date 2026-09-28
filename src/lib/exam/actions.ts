@@ -1,9 +1,11 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
-import { getTypedGrader } from "@/lib/grade";
+import { practiceExams } from "@/db/schema";
+import { getTypedGrader, isStrictness } from "@/lib/grade";
 import { getProvider } from "@/lib/llm";
 import { regroupTopics } from "@/lib/topics";
 
@@ -26,6 +28,8 @@ export type StartRequest = {
   ranges: Record<string, { from: number; to: number }>;
   topics: string[];
   rephrase: boolean;
+  /** How hard typed answers are marked; left out, the Settings choice. */
+  strictness?: string;
 };
 
 /**
@@ -77,6 +81,7 @@ export async function startPaper(examId: string, request: StartRequest) {
     seed,
     durationMinutes: request.durationMinutes,
     rephrased,
+    strictness: isStrictness(request.strictness) ? request.strictness : null,
   });
 
   if (!paper) return { ok: false as const, error: "Could not set a paper." };
@@ -97,7 +102,13 @@ export async function answerQuestion(questionId: string, answer: string) {
 }
 
 export async function submit(examId: string, paperId: string) {
-  const marked = await submitPaper(db, paperId, getTypedGrader());
+  const paper = db
+    .select({ strictness: practiceExams.strictness })
+    .from(practiceExams)
+    .where(eq(practiceExams.id, paperId))
+    .get();
+  const strictness = isStrictness(paper?.strictness) ? paper.strictness : null;
+  const marked = await submitPaper(db, paperId, getTypedGrader(strictness));
   revalidatePath(`/exams/${examId}/practice`);
   return marked ?? null;
 }

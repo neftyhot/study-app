@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import { Check, Copy, Download, FileDown, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -171,7 +171,7 @@ export function ExportDialog({
         </DialogTrigger>
       )}
 
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl [&>*]:min-w-0">
         <DialogHeader>
           <DialogTitle>Export this deck</DialogTitle>
           <DialogDescription>
@@ -204,8 +204,8 @@ export function ExportDialog({
         <p className="text-muted-foreground text-xs">{target.keeps}</p>
 
         {format === "quizlet" ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
+          <div className="min-w-0 space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Label htmlFor="term-separator" className="text-sm font-normal">
                 Between term and definition
               </Label>
@@ -231,7 +231,10 @@ export function ExportDialog({
               readOnly
               value={loading ? "" : (text ?? "")}
               rows={8}
-              className="font-mono text-xs"
+              wrap="off"
+              // A long deck is thousands of lines: keep the box a fixed size
+              // and scroll inside it, both ways, rather than grow the dialog.
+              className="h-56 max-h-[40vh] w-full resize-none overflow-auto field-sizing-fixed font-mono text-xs md:text-xs"
               placeholder={loading ? "Building…" : ""}
             />
 

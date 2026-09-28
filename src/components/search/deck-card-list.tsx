@@ -2,11 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { Pencil, Sparkles } from "lucide-react";
+import { FileText, Pencil, Sparkles } from "lucide-react";
 
 import { BulkBar, type DeckTarget } from "@/components/cards/bulk-bar";
 import { CardEditor } from "@/components/cards/card-editor";
 import { DeckSearch } from "@/components/search/deck-search";
+import { SourceViewer } from "@/components/sources/source-viewer";
 import { Highlighted } from "@/components/search/highlighted";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ import {
 
 export type DeckCardView = {
   id: string;
+  /** Position in lecture order, as the study view and the tutor number it. */
+  number: number;
   topic: string;
   question: string;
   directAnswer: string;
@@ -33,7 +36,7 @@ export type DeckCardView = {
   hasAiSupplement: boolean;
   isUserEdited: boolean;
   essentialPoints: string[];
-  source: { label: string; excerpt: string | null } | null;
+  source: { label: string; excerpt: string | null; slideId: string } | null;
   /** Everything this card can be found by, including its source excerpt. */
   haystack: string;
 };
@@ -60,6 +63,7 @@ export function DeckCardList({
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<DeckCardView["source"]>(null);
   const router = useRouter();
 
   const toggle = useCallback((id: string) => {
@@ -150,6 +154,12 @@ export function DeckCardList({
                       aria-label={`Select "${card.question.slice(0, 40)}"`}
                       className="mt-1 shrink-0"
                     />
+                    <span
+                      className="text-muted-foreground mt-0.5 shrink-0 font-mono text-xs"
+                      title={`Flashcard #${card.number} — ask the tutor about "flashcard ${card.number}"`}
+                    >
+                      #{card.number}
+                    </span>
                     <span className="min-w-0 flex-1">
                       {card.cardType === "cloze" ? (
                         // Shown whole here: the browser is for reading the
@@ -240,6 +250,15 @@ export function DeckCardList({
                             <Highlighted text={card.source.excerpt} query={query} />
                           </blockquote>
                         ) : null}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-1 h-7 px-2 text-xs"
+                          onClick={() => setViewing(card.source)}
+                        >
+                          <FileText className="size-3" />
+                          Show original slide
+                        </Button>
                       </details>
                     ) : null}
                   </CardContent>
@@ -249,6 +268,13 @@ export function DeckCardList({
           </div>
         </section>
       ))}
+
+      <SourceViewer
+        slideId={viewing?.slideId ?? null}
+        excerpt={viewing?.excerpt}
+        open={viewing !== null}
+        onOpenChange={(open) => !open && setViewing(null)}
+      />
     </div>
   );
 }

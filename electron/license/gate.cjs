@@ -21,6 +21,13 @@ const {
 const TRIAL_DAYS = 7;
 const DAY_MS = 86_400_000;
 
+/**
+ * How long a bought key keeps working with no answer from the licensing
+ * server. Long enough for a semester abroad or a dead router; short enough
+ * that blocking the server doesn't keep a refunded key alive forever.
+ */
+const CONFIRM_DAYS = 45;
+
 let cachedMachineId = null;
 
 /**
@@ -62,13 +69,36 @@ function refuseRevoked(userDataDir, result) {
 }
 
 /**
+ * A bought key the licensing server hasn't vouched for in CONFIRM_DAYS.
+ * Admin keys are exempt. The first look after updating to a version with this
+ * check starts the clock rather than locking anyone out.
+ */
+function refuseUnconfirmed(userDataDir, result, now, options) {
+  if (!options.confirmRequired || !result.valid) return result;
+  if (result.payload?.type === "admin") return result;
+  const checkedAt = store.readRevocationCheckedAt(userDataDir);
+  if (checkedAt === null) {
+    store.recordRevocationCheck(userDataDir, now);
+    return result;
+  }
+  if (now - checkedAt <= CONFIRM_DAYS * DAY_MS) return result;
+  return { valid: false, reason: REASON.unconfirmed, payload: result.payload };
+}
+
+/** Whether the next launch is close enough to the limit to check first. */
+function confirmationDue(userDataDir, now = Date.now()) {
+  const checkedAt = store.readRevocationCheckedAt(userDataDir);
+  return checkedAt !== null && now - checkedAt > (CONFIRM_DAYS - 7) * DAY_MS;
+}
+
+/**
  * Evaluates the stored license for this launch.
  *
  * Order matters. A recorded clock tamper is sticky: once the clock has been
  * moved backwards, restarting with the clock put back must not silently
  * restore access, because that would make the check trivially bypassable.
  */
-function evaluate(userDataDir, now = Date.now()) {
+function evaluate(userDataDir, now = Date.now(), options = {}) {
   if (store.clockTampered(userDataDir)) {
     return {
       valid: false,
@@ -81,9 +111,14 @@ function evaluate(userDataDir, now = Date.now()) {
   const token = store.readToken(userDataDir);
   const lastLaunch = store.readLastLaunch(userDataDir);
 
-  const result = refuseRevoked(
+  const result = refuseUnconfirmed(
     userDataDir,
-    verifyLicense(token, { machineId: machineId(), now, lastLaunch }),
+    refuseRevoked(
+      userDataDir,
+      verifyLicense(token, { machineId: machineId(), now, lastLaunch }),
+    ),
+    now,
+    options,
   );
 
   if (result.reason === REASON.clockRollback) {
@@ -91,8 +126,13 @@ function evaluate(userDataDir, now = Date.now()) {
   }
 
   // No working license: the free trial, if it has time left. A moved-back
-  // clock never gets here — it would otherwise stretch the trial forever.
-  if (!result.valid && result.reason !== REASON.clockRollback) {
+  // clock never gets here — it would otherwise stretch the trial forever, and
+  // neither does a bought key waiting to be confirmed, which says so.
+  if (
+    !result.valid &&
+    result.reason !== REASON.clockRollback &&
+    result.reason !== REASON.unconfirmed
+  ) {
     const startedAt = store.startTrial(userDataDir, now);
     const expiresAt = startedAt + TRIAL_DAYS * DAY_MS;
 
@@ -166,9 +206,12 @@ function activate(userDataDir, token, now = Date.now()) {
 
 module.exports = {
   TRIAL_DAYS,
+  CONFIRM_DAYS,
+  confirmationDue,
   machineId,
   licenseId,
   refuseRevoked,
+  refuseUnconfirmed,
   evaluate,
   validate,
   activate,

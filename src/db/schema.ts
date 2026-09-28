@@ -932,6 +932,8 @@ export const practiceExams = sqliteTable(
     score: integer("score"),
     /** True when the paper's wording was rewritten rather than reused. */
     rephrased: integer("rephrased", { mode: "boolean" }).notNull().default(false),
+    /** How hard typed answers are marked, chosen when it was set; null follows Settings. */
+    strictness: text("strictness"),
     startedAt: createdAt(),
     submittedAt: text("submitted_at"),
   },
@@ -1064,8 +1066,46 @@ export const primerSections = sqliteTable(
      */
     counterExample: text("counter_example", { mode: "json" }).$type<CounterExample>(),
     counterExampleAt: text("counter_example_at"),
+    /**
+     * More worked examples, each written when the student presses "Another
+     * example" and kept, so the second visit shows them without a model call.
+     */
+    extraExamples: text("extra_examples", { mode: "json" }).$type<string[]>(),
   },
   (t) => [index("primer_sections_guide_idx").on(t.guideId, t.orderIndex)],
+);
+
+/* ------------------------------------------------------------------ Tutor */
+
+/** One turn of a saved tutor conversation, text only. */
+export type SavedTutorTurn = {
+  role: "user" | "model";
+  text: string;
+  /** How many pictures were attached; the pictures themselves are not kept. */
+  imageCount?: number;
+  beyondMaterial?: boolean;
+};
+
+/**
+ * A tutor conversation, kept on this machine so the student can reopen it and
+ * carry on: the whole transcript goes back with the next question.
+ */
+export const tutorChats = sqliteTable(
+  "tutor_chats",
+  {
+    id: id(),
+    examId: text("exam_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    /** The first question, shortened; shown in the history list. */
+    title: text("title").notNull(),
+    messages: text("messages", { mode: "json" }).$type<SavedTutorTurn[]>().notNull(),
+    createdAt: createdAt(),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [index("tutor_chats_exam_idx").on(t.examId, t.updatedAt)],
 );
 
 /* --------------------------------------------------------------- Relations */

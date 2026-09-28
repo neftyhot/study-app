@@ -8,7 +8,8 @@
  * This file asks the Worker for it, while unlicensed.
  *
  * It also asks whether a key has been revoked (checkRevoked). That is the one
- * other call, and it only ever takes access away; offline, nothing changes.
+ * other call, and it only ever takes access away. Offline, nothing changes
+ * until a bought key has gone unconfirmed for a long while (gate.cjs).
  *
  * Whatever comes back is verified here like any pasted key: the Worker is a
  * convenience for delivery, not a source of trust. Only the signature is.

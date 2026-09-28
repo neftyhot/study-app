@@ -7,6 +7,7 @@ import { slideImage } from "@/lib/diagrams/render";
 import { getProvider, LlmError, type ChatTurn } from "@/lib/llm";
 import { readProvider } from "@/lib/settings";
 
+import { deckContext, flashcardContext } from "./context";
 import { askTutor, extractCards, type ExtractedCard } from "./index";
 import { saveTutorCards } from "./save";
 
@@ -27,6 +28,7 @@ function splitDataUrl(url: string) {
 async function buildTurns(
   messages: TutorMessage[],
   slideId?: string | null,
+  focus?: string | null,
 ): Promise<ChatTurn[]> {
   const turns: ChatTurn[] = messages.map((message) => ({
     role: message.role,
@@ -36,16 +38,21 @@ async function buildTurns(
       .filter((image): image is NonNullable<typeof image> => image !== null),
   }));
 
-  // The page under discussion rides along with the newest question, so the
-  // model has it in view without it being re-sent on every turn.
-  if (slideId) {
-    const last = turns.at(-1);
-    if (last?.role === "user") {
+  // The page and the card under discussion open the conversation, and are
+  // re-attached on every request, so a follow-up never loses sight of them.
+  const first = turns.find((turn) => turn.role === "user");
+  if (first && focus?.trim()) {
+    first.text = `${focus.trim()}\n\n${first.text}`;
+  }
+  if (first && slideId) {
+    try {
       const image = await slideImage(db, slideId);
-      last.images = [
+      first.images = [
         { mimeType: "image/png", data: image.data.toString("base64") },
-        ...(last.images ?? []),
+        ...(first.images ?? []),
       ];
+    } catch {
+      // A page with nothing to draw still has its text in the material.
     }
   }
 
@@ -56,14 +63,31 @@ export type AskResult =
   | { ok: true; reply: string; suggestions: string[]; beyondMaterial: boolean }
   | { ok: false; error: string };
 
-export async function askTutorAction(input: {
+type TutorInput = {
   messages: TutorMessage[];
+  /** The deck whose material the tutor reads. */
+  examId?: string | null;
   slideId?: string | null;
+  /** What the student is looking at, e.g. the card they were just asked. */
+  focus?: string | null;
   provider?: "gemini" | "anthropic" | "openai" | "local";
-}): Promise<AskResult> {
+};
+
+export async function askTutorAction(input: TutorInput): Promise<AskResult> {
   try {
     const provider = getProvider(input.provider);
-    const answer = await askTutor(provider, await buildTurns(input.messages, input.slideId));
+    const [material, cards] = input.examId
+      ? await Promise.all([
+          deckContext(input.examId, provider.name),
+          flashcardContext(input.examId, provider.name),
+        ])
+      : ["", ""];
+    const answer = await askTutor(
+      provider,
+      await buildTurns(input.messages, input.slideId, input.focus),
+      material,
+      cards,
+    );
     return { ok: true, ...answer, suggestions: answer.suggestions ?? [] };
   } catch (error) {
     return {
@@ -80,17 +104,21 @@ export type ExtractResult =
   | { ok: true; cards: ExtractedCard[] }
   | { ok: false; error: string };
 
-export async function extractCardsAction(input: {
-  messages: TutorMessage[];
-  slideId?: string | null;
-  instruction?: string;
-  limit?: number;
-  provider?: "gemini" | "anthropic" | "openai" | "local";
-}): Promise<ExtractResult> {
+export async function extractCardsAction(
+  input: TutorInput & { instruction?: string; limit?: number },
+): Promise<ExtractResult> {
   try {
     const provider = getProvider(input.provider);
+    const [material, existing] = input.examId
+      ? await Promise.all([
+          deckContext(input.examId, provider.name),
+          flashcardContext(input.examId, provider.name),
+        ])
+      : ["", ""];
     const cards = await extractCards(provider, {
-      turns: await buildTurns(input.messages, input.slideId),
+      material,
+      cards: existing,
+      turns: await buildTurns(input.messages, input.slideId, input.focus),
       instruction: input.instruction,
       limit: input.limit,
     });

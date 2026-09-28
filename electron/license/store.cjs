@@ -130,7 +130,25 @@ function removeRevoked(userDataDir, id) {
   });
 }
 
+/**
+ * When the licensing server last answered a revocation check, either way.
+ * Only ever moves forward, like the launch clock.
+ */
+function readRevocationCheckedAt(userDataDir) {
+  const value = read(userDataDir).revocationCheckedAt;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function recordRevocationCheck(userDataDir, now = Date.now()) {
+  const state = read(userDataDir);
+  const previous =
+    typeof state.revocationCheckedAt === "number" ? state.revocationCheckedAt : 0;
+  write(userDataDir, { ...state, revocationCheckedAt: Math.max(previous, now) });
+}
+
 module.exports = {
+  readRevocationCheckedAt,
+  recordRevocationCheck,
   readRevoked,
   addRevoked,
   removeRevoked,

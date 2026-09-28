@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2, Play } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { beginStudySession } from "@/lib/study/actions";

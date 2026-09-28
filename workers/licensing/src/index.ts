@@ -3,7 +3,8 @@
  *
  *   POST /stripe/webhook   Stripe → here. On a paid checkout, mint a
  *                          `lifetime` key for the machine id Stripe carried
- *                          back as `client_reference_id`, and keep it.
+ *                          back as `client_reference_id`, and keep it. On a
+ *                          full refund or a dispute, revoke that key.
  *   GET  /license/:machine The app polls this after opening checkout, and
  *                          activates with whatever it gets — after verifying
  *                          the signature itself, like any pasted key.
@@ -11,6 +12,11 @@
  *                          shows the key, as a fallback to automatic delivery.
  *   POST /telemetry, /admin/*  Usage totals (every install) and the developer's
  *                          view of them and of suggestions (insights.ts).
+ *   DELETE /telemetry/:id  Erase one install's usage record.
+ *   POST /admin/reissue    Move a purchase to a new machine: a fresh key for
+ *                          it, and the old one revoked.
+ *   GET  /latest           The newest GitHub release, cached ~10 min.
+ *   GET  /config           Remote model defaults (PUT /admin/config sets them).
  *   GET  /revoked/:id      Whether a key has been revoked in the License
  *                          Manager (PUT /admin/revocations sets the list).
  *   POST /feedback         A feature suggestion from the app's settings.
@@ -26,11 +32,25 @@
  * the tests run this same file.
  */
 
-import { handleAdmin, handleTelemetry, isRevoked, LICENSE_ID, type ListResult } from "./insights";
+import {
+  authorized,
+  handleAdmin,
+  handleConfig,
+  handleTelemetry,
+  handleTelemetryDelete,
+  isRevoked,
+  LICENSE_ID,
+  listEntries,
+  purchaseMetadata,
+  readCache,
+  revokeAutomatically,
+  type ListResult,
+  type PutOptions,
+} from "./insights";
 
 export type KVLike = {
   get(key: string): Promise<string | null>;
-  put(key: string, value: string): Promise<void>;
+  put(key: string, value: string, options?: PutOptions): Promise<void>;
   delete(key: string): Promise<void>;
   list(options: { prefix: string; cursor?: string }): Promise<ListResult>;
 };
@@ -44,6 +64,8 @@ export type Env = {
   PAYMENT_LINK_ID?: string;
   /** Bearer token for the /admin routes; held by the License Manager. */
   ADMIN_TOKEN?: string;
+  /** The replacement token while ADMIN_TOKEN is being rotated (README). */
+  ADMIN_TOKEN_NEXT?: string;
   LICENSES: KVLike;
 };
 
@@ -86,6 +108,23 @@ const worker = {
 
     if (request.method === "POST" && url.pathname === "/telemetry") {
       return handleTelemetry(request, env);
+    }
+
+    if (request.method === "DELETE" && url.pathname.startsWith("/telemetry/")) {
+      return handleTelemetryDelete(decodeURIComponent(url.pathname.slice("/telemetry/".length)), env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/config") {
+      return handleConfig(env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/latest") {
+      return handleLatest(env);
+    }
+
+    if (request.method === "POST" && url.pathname === "/admin/reissue") {
+      if (!authorized(request, env)) return new Response("Unauthorized", { status: 401 });
+      return handleReissue(request, env);
     }
 
     if (url.pathname.startsWith("/admin/")) {
@@ -152,6 +191,7 @@ async function handleFeedback(request: Request, env: Env): Promise<Response> {
 type CheckoutSession = {
   id: string;
   client_reference_id?: string | null;
+  payment_intent?: string | null;
   payment_status?: string;
   payment_link?: string | null;
   customer_details?: { email?: string | null; name?: string | null } | null;
@@ -173,6 +213,10 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     event = JSON.parse(body);
   } catch {
     return new Response("Bad payload", { status: 400 });
+  }
+
+  if (event.type === "charge.refunded" || event.type === "charge.dispute.created") {
+    return handleClawback(event.type, (event.data?.object ?? {}) as Clawback, env);
   }
 
   // `completed` for cards; `async_payment_succeeded` for methods (bank
@@ -215,11 +259,51 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     email: session.customer_details?.email ?? null,
   });
 
-  const record = JSON.stringify(issued);
-  await env.LICENSES.put(`session:${session.id}`, record);
-  await env.LICENSES.put(`machine:${machineId}`, record);
+  await storePurchase(env, issued);
+  // How a later refund or dispute, which names only the payment, finds the key.
+  if (session.payment_intent) {
+    await env.LICENSES.put(`pi:${session.payment_intent}`, session.id);
+  }
 
   return json({ received: true, licenseId: issued.licenseId });
+}
+
+async function storePurchase(env: Env, issued: IssuedLicense): Promise<void> {
+  const record = JSON.stringify(issued);
+  await env.LICENSES.put(`session:${issued.sessionId}`, record, { metadata: purchaseMetadata(issued) });
+  await env.LICENSES.put(`machine:${issued.machineId}`, record);
+}
+
+/** A charge (on `charge.refunded`) or a dispute: both name the payment intent. */
+type Clawback = {
+  payment_intent?: string | null;
+  amount?: number;
+  amount_refunded?: number;
+  refunded?: boolean;
+};
+
+/**
+ * Money back means the key goes: a full refund, or any dispute (the money is
+ * held from the moment it opens). A partial refund — a goodwill discount —
+ * keeps it. Payments this Worker never minted for are acknowledged and left.
+ */
+async function handleClawback(type: string, object: Clawback, env: Env): Promise<Response> {
+  if (type === "charge.refunded") {
+    const full =
+      object.refunded === true ||
+      (typeof object.amount === "number" &&
+        typeof object.amount_refunded === "number" &&
+        object.amount_refunded >= object.amount);
+    if (!full) return json({ received: true, partial: true });
+  }
+
+  const sessionId = object.payment_intent ? await env.LICENSES.get(`pi:${object.payment_intent}`) : null;
+  const record = sessionId ? await env.LICENSES.get(`session:${sessionId}`) : null;
+  if (!record) return json({ received: true, unknown: true });
+
+  const { licenseId } = JSON.parse(record) as IssuedLicense;
+  await revokeAutomatically(env, licenseId);
+  return json({ received: true, revoked: licenseId });
 }
 
 /**
@@ -335,6 +419,140 @@ function pemToDer(pem: string): ArrayBuffer {
     .replace(/\s+/g, "");
   const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
   return bytes.buffer;
+}
+
+/* ---------------------------------------------------------------- Reissue */
+
+/**
+ * A buyer on a new computer: their key is bound to the old one, so they get a
+ * new key for the new machine id and the old key is revoked. Found by the
+ * purchase's license id or checkout session; hand-minted keys have neither
+ * here and are reissued with scripts/mint-license.mjs.
+ */
+async function handleReissue(request: Request, env: Env): Promise<Response> {
+  let body: { licenseId?: unknown; sessionId?: unknown; machineId?: unknown };
+  try {
+    body = JSON.parse((await request.text()).slice(0, 10_000));
+  } catch {
+    return new Response("Bad payload", { status: 400 });
+  }
+
+  const machineId = typeof body.machineId === "string" ? body.machineId.trim() : "";
+  if (!MACHINE_ID.test(machineId)) return new Response("Bad machine id", { status: 400 });
+
+  let sessionId: string | null = null;
+  if (typeof body.sessionId === "string" && SESSION_ID.test(body.sessionId)) {
+    sessionId = body.sessionId;
+  } else if (typeof body.licenseId === "string" && LICENSE_ID.test(body.licenseId)) {
+    sessionId = await findSessionByLicense(env, body.licenseId);
+  } else {
+    return new Response("Need licenseId or sessionId", { status: 400 });
+  }
+
+  const raw = sessionId ? await env.LICENSES.get(`session:${sessionId}`) : null;
+  if (!raw) return new Response("No such purchase", { status: 404 });
+  const old = JSON.parse(raw) as IssuedLicense;
+
+  const issued = await mintLifetimeLicense(env.LICENSE_PRIVATE_KEY, {
+    machineId,
+    sessionId: old.sessionId,
+    name: nameInToken(old.token),
+    email: old.email,
+  });
+
+  await storePurchase(env, issued);
+  // The old machine's poll would otherwise keep answering with a dead key.
+  if (old.machineId !== machineId) await env.LICENSES.delete(`machine:${old.machineId}`);
+  await revokeAutomatically(env, old.licenseId);
+
+  return json({ token: issued.token, licenseId: issued.licenseId, revoked: old.licenseId });
+}
+
+async function findSessionByLicense(env: Env, licenseId: string): Promise<string | null> {
+  const entries = await listEntries(env.LICENSES, "session:");
+  for (const entry of entries) {
+    const metadata = entry.metadata as { licenseId?: unknown } | undefined;
+    if (metadata && typeof metadata.licenseId === "string") {
+      if (metadata.licenseId === licenseId) return entry.name.slice("session:".length);
+      continue;
+    }
+    // Written before metadata: read it.
+    const raw = await env.LICENSES.get(entry.name);
+    if (raw && (JSON.parse(raw) as IssuedLicense).licenseId === licenseId) {
+      return entry.name.slice("session:".length);
+    }
+  }
+  return null;
+}
+
+/** The "Issued to" name inside a key minted here, so a reissue keeps it. */
+function nameInToken(token: string): string | null {
+  try {
+    const { payload } = JSON.parse(atob(token)) as { payload: string };
+    const bytes = Uint8Array.from(atob(payload), (char) => char.charCodeAt(0));
+    const { name } = JSON.parse(new TextDecoder().decode(bytes)) as { name?: unknown };
+    return typeof name === "string" ? name : null;
+  } catch {
+    return null;
+  }
+}
+
+/* ---------------------------------------------------------- Latest release */
+
+const LATEST_URL = "https://api.github.com/repos/neftyhot/study-app/releases/latest";
+const LATEST_CACHE_KEY = "latest:cache";
+const LATEST_CACHE_MS = 10 * 60_000;
+
+export type LatestRelease = {
+  version: string;
+  tag: string;
+  url: string;
+  publishedAt: string | null;
+  assets: { name: string; url: string }[];
+};
+
+/**
+ * The app's update check. GitHub allows 60 unauthenticated calls an hour per
+ * IP, which every install asking directly would soon exhaust; one cached call
+ * here serves them all, and a stale answer beats none when GitHub is down.
+ */
+async function handleLatest(env: Env): Promise<Response> {
+  const cached = await readCache<LatestRelease>(env.LICENSES, LATEST_CACHE_KEY);
+  if (cached && Date.now() - cached.at < LATEST_CACHE_MS) return json(cached.value);
+
+  try {
+    const response = await fetch(LATEST_URL, {
+      headers: {
+        "User-Agent": "study-app-licensing",
+        Accept: "application/vnd.github+json",
+      },
+    });
+    if (!response.ok) throw new Error(`GitHub ${response.status}`);
+    const release = (await response.json()) as {
+      tag_name?: unknown;
+      html_url?: unknown;
+      published_at?: unknown;
+      assets?: { name?: unknown; browser_download_url?: unknown }[];
+    };
+    if (typeof release.tag_name !== "string" || typeof release.html_url !== "string") {
+      throw new Error("GitHub release without a tag");
+    }
+    const value: LatestRelease = {
+      version: release.tag_name.replace(/^v/, ""),
+      tag: release.tag_name,
+      url: release.html_url,
+      publishedAt: typeof release.published_at === "string" ? release.published_at : null,
+      assets: (Array.isArray(release.assets) ? release.assets : [])
+        .filter((asset) => typeof asset?.name === "string" && typeof asset.browser_download_url === "string")
+        .map((asset) => ({ name: asset.name as string, url: asset.browser_download_url as string })),
+    };
+    await env.LICENSES.put(LATEST_CACHE_KEY, JSON.stringify({ at: Date.now(), value }));
+    return json(value);
+  } catch (error) {
+    console.error(`[licensing] latest release: ${error instanceof Error ? error.message : String(error)}`);
+    if (cached) return json(cached.value);
+    return json({ error: "unavailable" }, 502);
+  }
 }
 
 /* --------------------------------------------------------------- Delivery */

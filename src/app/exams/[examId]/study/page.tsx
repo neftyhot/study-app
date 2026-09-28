@@ -29,8 +29,9 @@ export default async function StudyPage(
 
   // Mapped here rather than passed whole: the client needs a flat view, and
   // Drizzle rows carry relations the deck never reads.
-  const views: StudyCardView[] = cards.map((card) => ({
+  const views: StudyCardView[] = cards.map((card, index) => ({
     id: card.id,
+    number: index + 1,
     topic: card.topic,
     question: card.question,
     directAnswer: card.directAnswer,
@@ -48,6 +49,7 @@ export default async function StudyPage(
     lastGrade: card.progress?.lastGrade ?? null,
     source: card.sourceSlide
       ? {
+          slideId: card.sourceSlide.id,
           label: `${card.sourceSlide.sourceFile.fileType === "pptx" ? "Slide" : "Page"} ${card.sourceSlide.index} of ${card.sourceSlide.sourceFile.filename}`,
           excerpt: card.sourceExcerpt,
           title: card.sourceSlide.title,

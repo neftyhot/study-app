@@ -29,6 +29,8 @@ const gate = require("./license/gate.cjs");
 const purchase = require("./license/purchase.cjs");
 const { registerGoogleAuth } = require("./google-auth.cjs");
 const updater = require("./updater.cjs");
+const { backupDatabase, backupDir } = require("./backup.cjs");
+const { crashLogPath, installCrashLog, logCrash } = require("./crash-log.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
@@ -149,9 +151,18 @@ async function migrate() {
   sqlite.pragma("journal_mode = WAL");
 
   try {
+    await backupDatabase(sqlite, process.env.DATABASE_URL);
     run(drizzle(sqlite), {
       migrationsFolder: resourcePath(".next", "standalone", "drizzle"),
     });
+  } catch (error) {
+    // Drizzle runs each migration in a transaction, so the file is as it was;
+    // say where the copies are rather than failing silently.
+    dialog.showErrorBox(
+      "Megan Study couldn't update its database",
+      `Your study data wasn't changed. Daily copies are kept in:\n${backupDir(process.env.DATABASE_URL)}\n\n${error instanceof Error ? error.message : String(error)}`,
+    );
+    throw error;
   } finally {
     sqlite.close();
   }
@@ -190,6 +201,13 @@ async function startServer() {
   // form on the left so the compile-time define leaves the name alone.
   process.env["STUDY_APP_SERVER_URL"] = process.env.LICENSE_SERVER_URL ?? "";
   process.env.NODE_ENV = "production";
+
+  // API keys are sealed with the OS keychain (src/lib/secret-box.ts); the
+  // server runs in this process, so it can borrow safeStorage directly.
+  const { safeStorage } = require("electron");
+  if (safeStorage.isEncryptionAvailable()) globalThis.__studyAppCipher = safeStorage;
+  // PowerPoint slides are drawn in a hidden window (src/lib/ingest/slide-render.ts).
+  globalThis.__studyAppDrawSlides = require("./slide-drawer.cjs").drawSlides;
 
   const entry = resourcePath(".next", "standalone", "server.js");
   process.chdir(path.dirname(entry));
@@ -318,6 +336,8 @@ async function launchApp(license) {
 
 app.whenReady().then(async () => {
   const { userData } = configureDataDirectories();
+  installCrashLog(app, userData);
+  process.env.STUDY_APP_CRASH_LOG = crashLogPath(userData);
 
   registerGoogleAuth({
     isDev,
@@ -332,6 +352,23 @@ app.whenReady().then(async () => {
 
   let appLaunched = false;
 
+  // Bought keys need an occasional answer from the licensing server (see
+  // gate.cjs); with no server configured there is nothing to ask.
+  const evaluateLicense = () =>
+    gate.evaluate(userData, Date.now(), {
+      confirmRequired: purchase.licenseServerUrl() !== null,
+    });
+
+  /** Asks whether a key is revoked, and remembers any answer. */
+  async function askRevoked(id) {
+    const revoked = await purchase.checkRevoked(id);
+    if (revoked === null) return null;
+    gate.store.recordRevocationCheck(userData);
+    if (revoked) gate.store.addRevoked(userData, id);
+    else gate.store.removeRevoked(userData, id);
+    return revoked;
+  }
+
   /**
    * Stores a verified key and, from the activation screen, swaps that window
    * for the app itself rather than asking the student to quit and reopen.
@@ -340,16 +377,16 @@ app.whenReady().then(async () => {
     // Ask the server first, so a revoked key is refused here and one that was
     // restored is accepted again. Offline, the local list decides.
     const id = gate.licenseId(token);
-    if (id) {
-      const revoked = await purchase.checkRevoked(id);
-      if (revoked === true) gate.store.addRevoked(userData, id);
-      if (revoked === false) gate.store.removeRevoked(userData, id);
-    }
+    if (id) await askRevoked(id);
 
     const result = gate.activate(userData, token);
     if (!result.valid) return result;
 
-    const license = gate.evaluate(userData);
+    // A stored key still waiting on the server stays on this screen.
+    const license = evaluateLicense();
+    if (!license.valid) {
+      return { valid: false, reason: license.reason, message: license.message };
+    }
     if (appLaunched) {
       publishLicense(license);
     } else {
@@ -367,7 +404,14 @@ app.whenReady().then(async () => {
     const { configured, token } = await purchase.fetchPurchasedLicense(
       gate.machineId(),
     );
-    if (!token) return { configured, found: false };
+    if (!token) {
+      // A stored key waiting on the server to confirm it: try it again.
+      const stored = gate.store.readToken(userData);
+      if (stored && evaluateLicense().reason === "unconfirmed") {
+        return { configured, found: true, ...(await activateAndLaunch(stored)) };
+      }
+      return { configured, found: false };
+    }
 
     const result = await activateAndLaunch(token);
     return { configured, found: true, ...result };
@@ -385,14 +429,11 @@ app.whenReady().then(async () => {
     const id = gate.licenseId(gate.store.readToken(userData));
     if (!id) return;
 
-    const revoked = await purchase.checkRevoked(id);
-    if (revoked !== true) return;
-
     // The key stays stored, refused by the list, so the activation screen
     // can say it was revoked rather than that a trial ended.
-    gate.store.addRevoked(userData, id);
+    if ((await askRevoked(id)) !== true) return;
 
-    const license = gate.evaluate(userData);
+    const license = evaluateLicense();
     publishLicense(license);
     if (license.valid) return;
 
@@ -404,7 +445,7 @@ app.whenReady().then(async () => {
 
   // Why the activation screen is showing: trial over, a bad key, a clock.
   ipcMain.handle("get-gate-status", () => {
-    const status = gate.evaluate(userData);
+    const status = evaluateLicense();
     return {
       reason: status.valid ? null : status.reason,
       message: status.valid ? null : status.message,
@@ -444,7 +485,11 @@ app.whenReady().then(async () => {
   updater.cleanUpAfterUpdate(app);
 
   try {
-    const license = gate.evaluate(userData);
+    // Near the end of the offline allowance, ask before deciding.
+    const storedId = gate.licenseId(gate.store.readToken(userData));
+    if (storedId && gate.confirmationDue(userData)) await askRevoked(storedId);
+
+    const license = evaluateLicense();
 
     if (!license.valid) {
       createActivationWindow();
@@ -471,6 +516,7 @@ app.whenReady().then(async () => {
     // Logged as well as shown: a dialog is useless when the app is being run
     // from a terminal to find out why it will not start.
     console.error(detail);
+    logCrash(userData, "could not start", error, { version: app.getVersion() });
     dialog.showErrorBox(`${APP_NAME} could not start`, detail);
     app.quit();
   }

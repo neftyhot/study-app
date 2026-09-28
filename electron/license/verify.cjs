@@ -26,6 +26,8 @@ const REASON = {
   trialEnded: "trial_ended",
   // Checked against the licensing server, not the signature: see gate.cjs.
   revoked: "revoked",
+  // No answer from the licensing server for too long: see gate.cjs.
+  unconfirmed: "unconfirmed",
 };
 
 /**
@@ -191,6 +193,8 @@ const MESSAGES = {
     "Your 7-day free trial has ended. Purchase a license to keep using Megan Study — everything you made is still here.",
   [REASON.revoked]:
     "This license key has been revoked. Purchase a license to keep using Megan Study — everything you made is still here.",
+  [REASON.unconfirmed]:
+    "Megan Study needs to confirm your license key online, which it hasn't managed to do for a while. Connect to the internet, then press “Check again”.",
 };
 
 function messageFor(reason) {

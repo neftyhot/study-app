@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Download, Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import "@/main/auth/ipc";
 import { Button } from "@/components/ui/button";

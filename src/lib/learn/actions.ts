@@ -33,7 +33,7 @@ import {
   submitOutcome,
   provideAssist,
 } from "./session";
-import type { TypedGrade } from "./typed";
+import { exactAnswerGrade, type TypedGrade } from "./typed";
 import { getTypedGrader } from "@/lib/grade";
 
 /**
@@ -55,6 +55,8 @@ export type LearnPrompt = {
   countsTowardMastery: boolean;
   /** An earlier edit to this card is still restorable. */
   canUndo: boolean;
+  /** The page or slide this card was built from, for the source viewer. */
+  sourceSlideId: string | null;
 };
 
 export type LearnStatus = {
@@ -106,6 +108,7 @@ function cardRow(cardId: string) {
       directAnswer: flashcards.directAnswer,
       fullExplanation: flashcards.fullExplanation,
       sourceExcerpt: flashcards.sourceExcerpt,
+      sourceSlideId: flashcards.sourceSlideId,
       essentialPoints: cardRubrics.essentialPoints,
       optionalPoints: cardRubrics.optionalPoints,
       misconceptions: cardRubrics.commonMisconceptions,
@@ -194,6 +197,7 @@ function status(sessionId: string): LearnStatus {
       remediate: step.remediate,
       countsTowardMastery: step.countsTowardMastery,
       canUndo: hasRevision(db, card.id),
+      sourceSlideId: card.sourceSlideId ?? null,
     },
   };
 }
@@ -255,14 +259,16 @@ export async function answerTyped(
   const step = view?.step;
   if (!step || step.cardId !== cardId) return null;
 
-  const grade = await grader.grade({
+  const request = {
     question: card.question,
     expected: card.directAnswer,
     essentialPoints: card.essentialPoints ?? [],
     optionalPoints: card.optionalPoints ?? [],
     misconceptions: card.misconceptions ?? [],
     answer,
-  });
+  };
+  // The multiple-choice answer, typed exactly, is right before any rubric.
+  const grade = exactAnswerGrade(request) ?? (await grader.grade(request));
 
   const correct = grade.verdict === "correct";
 

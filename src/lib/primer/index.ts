@@ -30,6 +30,7 @@ import {
 import type { JsonSchema, LlmProvider } from "@/lib/llm";
 
 import type { CitedSentence, CounterExample } from "./types";
+import { SKIP_LOGISTICS_RULE } from "@/lib/logistics";
 
 export type { CitedSentence, CounterExample } from "./types";
 
@@ -277,16 +278,19 @@ Each slide is tagged [SN.M]: slideshow N, slide M.
 export function primerPrompt(
   depth: PrimerDepth,
   sourceText: string,
-  context: { part?: number; parts?: number; gapFill?: boolean } = {},
+  context: { part?: number; parts?: number; gapFill?: boolean; skipLogistics?: boolean } = {},
 ): string {
   const where =
     context.parts && context.parts > 1
       ? `\n\nThis is part ${context.part} of ${context.parts} of the lecture.`
       : "";
   const gap = context.gapFill
-    ? "\n\nThese slides were left out of the first pass. Write at least one concept for every one of them."
+    ? context.skipLogistics
+      ? "\n\nThese slides were left out of the first pass. Write at least one concept for every one of them that teaches something; one that is only course logistics stays out."
+      : "\n\nThese slides were left out of the first pass. Write at least one concept for every one of them."
     : "";
-  return `${DEPTH_INSTRUCTIONS[depth]}${where}${gap}\n\nSLIDES\n${sourceText}`;
+  const logistics = context.skipLogistics ? `\n\n${SKIP_LOGISTICS_RULE}` : "";
+  return `${DEPTH_INSTRUCTIONS[depth]}${where}${gap}${logistics}\n\nSLIDES\n${sourceText}`;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -576,9 +580,12 @@ export async function generatePrimer(
   options: {
     batchSize?: number;
     concurrency?: number;
+    /** Leave announcements and course admin out. Default on. */
+    skipLogistics?: boolean;
     onProgress?: (progress: PrimerProgress) => void;
   } = {},
 ): Promise<string> {
+  const skipLogistics = options.skipLogistics !== false;
   const slides = loadPrimerSlides(db, examId);
   const batches = primerBatches(slides, options.batchSize ?? PRIMER_BATCH_SLIDES);
   if (batches.length === 0) {
@@ -597,7 +604,7 @@ export async function generatePrimer(
     const { data } = await llm.generateStructured<PrimerResponse>({
       feature: "primer",
       system: PRIMER_SYSTEM,
-      prompt: primerPrompt(depth, primerSourceText(batch), context),
+      prompt: primerPrompt(depth, primerSourceText(batch), { ...context, skipLogistics }),
       schema: PRIMER_SCHEMA,
       temperature: 0.3,
       thinking: "minimal",
@@ -921,4 +928,76 @@ export async function counterExample(
     .run();
 
   return { counterExample: result, cached: false };
+}
+
+/* ------------------------------------------------------------------------ */
+/* More examples                                                            */
+/* ------------------------------------------------------------------------ */
+
+/** Past this, the student has plenty; the button says so instead of paying again. */
+export const MAX_EXTRA_EXAMPLES = 5;
+
+export const EXAMPLE_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    example: {
+      type: "string",
+      description:
+        "One new concrete example of the concept in action, as a short paragraph of 2-4 sentences.",
+    },
+  },
+  required: ["example"],
+  additionalProperties: false,
+};
+
+export const EXAMPLE_SYSTEM = `You give a student one more concrete example of a concept from their lecture.
+
+- Make it clearly different from every example they have already seen: a
+  different setting, different numbers, or a different angle on the mechanism.
+- Walk through it so the concept's mechanism is visible, in 2-4 plain
+  sentences.
+- Never contradict the explanation you are given.`;
+
+export function examplePrompt(
+  section: Pick<PrimerSection, "conceptName" | "definition" | "breakdown" | "example">,
+  seen: string[],
+): string {
+  const join = (list: CitedSentence[]) => list.map((s) => s.text).join(" ");
+  const already = [join(section.example), ...seen].filter(Boolean);
+  return [
+    `CONCEPT: ${section.conceptName}`,
+    `DEFINITION: ${join(section.definition)}`,
+    `HOW IT WORKS: ${join(section.breakdown)}`,
+    already.length
+      ? `EXAMPLES ALREADY SHOWN (do not repeat):\n${already.map((e, i) => `${i + 1}. ${e}`).join("\n")}`
+      : "No example has been shown yet.",
+  ].join("\n");
+}
+
+/** Writes one more example for a section and keeps it. Null when the section is gone. */
+export async function anotherExample(
+  db: Db,
+  llm: () => LlmProvider,
+  sectionId: string,
+): Promise<{ examples: string[] } | null> {
+  const section = db.select().from(primerSections).where(eq(primerSections.id, sectionId)).get();
+  if (!section) return null;
+  const seen = section.extraExamples ?? [];
+  if (seen.length >= MAX_EXTRA_EXAMPLES) return { examples: seen };
+
+  const { data } = await llm().generateStructured<{ example: string }>({
+    feature: "primer_example",
+    system: EXAMPLE_SYSTEM,
+    prompt: examplePrompt(section, seen),
+    schema: EXAMPLE_SCHEMA,
+    temperature: 0.7,
+    thinking: "minimal",
+  });
+
+  const example = data.example?.trim();
+  if (!example) throw new PrimerError("The model did not write an example. Try again.");
+
+  const examples = [...seen, example];
+  db.update(primerSections).set({ extraExamples: examples }).where(eq(primerSections.id, sectionId)).run();
+  return { examples };
 }

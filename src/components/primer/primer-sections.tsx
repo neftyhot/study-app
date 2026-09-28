@@ -1,11 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, ChevronRight, ListTree, Loader2, ShieldQuestion } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Lightbulb,
+  ListTree,
+  Loader2,
+  ShieldQuestion,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { CitedSentence, CounterExample } from "@/lib/primer/types";
+
+/** Matches MAX_EXTRA_EXAMPLES in lib/primer; that module is server-only. */
+const MAX_EXTRA_EXAMPLES = 5;
 
 import { CitedText, type CitationSlides } from "./cited-text";
 
@@ -16,6 +26,8 @@ export type PrimerSectionView = {
   breakdown: CitedSentence[];
   example: CitedSentence[];
   counterExample: CounterExample | null;
+  /** Examples written on request, after the one the guide came with. */
+  extraExamples: string[];
 };
 
 export type PrimerChapterView = {
@@ -211,8 +223,76 @@ function Concept({
           <CitedText sentences={section.example} slides={slides} />
         </div>
       ) : null}
+      <MoreExamples
+        sectionId={section.id}
+        initial={section.extraExamples}
+        hasBuiltIn={section.example.length > 0}
+      />
       <CounterExamplePanel sectionId={section.id} initial={section.counterExample} />
     </article>
+  );
+}
+
+/**
+ * More worked examples, one per press. Each is kept, so they are all there on
+ * the next visit; the button goes once there are plenty.
+ */
+function MoreExamples({
+  sectionId,
+  initial,
+  hasBuiltIn,
+}: {
+  sectionId: string;
+  initial: string[];
+  hasBuiltIn: boolean;
+}) {
+  const [examples, setExamples] = useState(initial);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function more() {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/primer/example", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectionId }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+      setExamples(body.examples);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const offset = hasBuiltIn ? 2 : 1;
+  return (
+    <div className="space-y-3" aria-live="polite">
+      {examples.map((example, index) => (
+        <div
+          key={index}
+          className="bg-muted/40 space-y-1 rounded-md border-l-4 border-l-primary px-4 py-3"
+        >
+          <h4 className="text-sm font-semibold">Example {index + offset}</h4>
+          <p className="leading-relaxed">{example}</p>
+        </div>
+      ))}
+      {error ? <p className="text-destructive text-sm">{error}</p> : null}
+      {examples.length < MAX_EXTRA_EXAMPLES ? (
+        <Button variant="outline" size="sm" disabled={loading} onClick={() => void more()}>
+          {loading ? <Loader2 className="size-4 animate-spin" /> : <Lightbulb className="size-4" />}
+          {loading
+            ? "Writing an example…"
+            : hasBuiltIn || examples.length > 0
+              ? "Another example"
+              : "Show an example"}
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

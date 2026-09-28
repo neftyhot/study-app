@@ -34,6 +34,39 @@ function newer(a, b) {
   return false;
 }
 
+/**
+ * The latest release as { version, assets: [{ name, url }] }: from the
+ * developer's server, which caches GitHub, or GitHub when that fails.
+ */
+async function latestRelease() {
+  const base = (process.env.STUDY_APP_SERVER_URL || process.env.LICENSE_SERVER_URL || "").trim().replace(/\/+$/, "");
+  if (base) {
+    try {
+      const response = await fetch(`${base}/latest`, { signal: AbortSignal.timeout(8000) });
+      if (response.ok) {
+        const latest = await response.json();
+        if (latest.version) return { version: String(latest.version), assets: latest.assets ?? [] };
+      }
+    } catch {
+      // Fall through to GitHub.
+    }
+  }
+  try {
+    const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+      headers: { accept: "application/vnd.github+json", "user-agent": "MeganStudy-Updater" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    const release = await response.json();
+    return {
+      version: String(release.tag_name ?? "").replace(/^v/, ""),
+      assets: (release.assets ?? []).map((asset) => ({ name: asset.name, url: asset.browser_download_url })),
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** The running app's bundle: …/Megan Study.app, or its former name. */
 function bundlePath(app) {
   return path.resolve(app.getPath("exe"), "..", "..", "..");
@@ -60,26 +93,25 @@ async function installUpdate(app) {
     return { ok: false, error: `No permission to write to ${path.dirname(bundle)}.` };
   }
 
-  const response = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-    headers: { accept: "application/vnd.github+json", "user-agent": "MeganStudy-Updater" },
-  });
-  if (!response.ok) return { ok: false, error: "Could not reach GitHub." };
-  const release = await response.json();
+  const release = await latestRelease();
+  if (!release) return { ok: false, error: "Could not reach the update server." };
 
-  const version = String(release.tag_name ?? "").replace(/^v/, "");
+  const { version } = release;
   if (!newer(version, app.getVersion())) return { ok: false, error: "You already have the latest version." };
 
-  const assets = release.assets ?? [];
+  const dmgs = release.assets.filter((asset) => asset.name.endsWith(".dmg"));
   const dmg =
-    assets.find((asset) => /arm64\.dmg$/.test(asset.name)) ?? assets.find((asset) => asset.name.endsWith(".dmg"));
-  if (!dmg) return { ok: false, error: "That release has no Mac download." };
+    dmgs.find((asset) => asset.name.includes(process.arch)) ??
+    dmgs.find((asset) => !/(arm64|x64)/.test(asset.name)) ??
+    (process.arch === "arm64" ? dmgs[0] : undefined);
+  if (!dmg) return { ok: false, error: "That release has no download for this Mac." };
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "megan-study-update-"));
   const file = path.join(work, "update.dmg");
   let mount = null;
 
   try {
-    const download = await fetch(dmg.browser_download_url, { headers: { "user-agent": "MeganStudy-Updater" } });
+    const download = await fetch(dmg.url, { headers: { "user-agent": "MeganStudy-Updater" } });
     if (!download.ok || !download.body) throw new Error("The download failed.");
     await pipeline(Readable.fromWeb(download.body), fs.createWriteStream(file));
 

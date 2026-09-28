@@ -6,6 +6,33 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.3.0",
+    date: "2026-09-27",
+    notes: [
+      "PowerPoint slides now show as they really look. The app draws them itself, so you don't need PowerPoint, and it never asks for permission or for a folder.",
+      "Dropping files on the dashboard now opens a setup page: choose how many cards you want and which files to build from before anything is generated. The deck page has a Sources button to add or remove files later.",
+      "Ask a tutor opens in a roomier side panel. It reads your whole deck, and follow-up questions stay in the same conversation.",
+      "Tutor chats are saved on your computer. Open one from “Past chats” and keep going; the tutor sees the earlier conversation.",
+      "Ask the tutor about “flashcard 32” and it answers about that exact card. Card numbers are shown in the deck list.",
+      "Fixed the tutor's first question sometimes failing.",
+      "Settings has a model choice: Standard, or a stronger Thinking model. When you hit a usage limit, a guide walks you through adding billing on your AI provider's own site, step by step. If a model is busy or out of quota, the app switches to a backup model automatically.",
+      "Study guide: each concept has an “Another example” button, and up to five extra examples are saved.",
+      "Making flashcards or a study guide now skips announcements, due dates and syllabus details. Untick “Ignore announcements and syllabus info” to include them.",
+      "Learn: press Enter to check your answer. Typing the multiple-choice answer word for word now counts as correct. After each answer you can open the original slide or ask a question about the card.",
+      "Choose how strictly a practice test is marked just before it's written.",
+      "AI features now use Gemini Flash instead of Flash-Lite, for better cards and answers.",
+      "“Show original slide” opens the whole slideshow or PDF at the slide a card came from, and you can scroll through the rest. Lecture transcripts open at the right spot too, with the passage highlighted.",
+      "New themes: Blossom and Rosewood in pink, Lavender and Plum in purple. A few look-alike themes were folded together; if you used one, you get the closest match.",
+      "The Quizlet export's copy-and-paste box no longer runs off the screen.",
+      "Your API keys are now encrypted with your computer's keychain.",
+      "The app keeps a daily copy of your database for the last week, and backs up before any update changes it.",
+      "If the app crashes, the details go to a log file on your computer (Settings › Advanced) that you can send with a bug report. Nothing is sent automatically.",
+      "Settings › Advanced can delete your usage statistics from the developer's server.",
+      "A bought licence now needs to go online once every 45 days to stay confirmed. Offline for longer, just connect and press “Check again”; nothing is lost.",
+      "Downloads for Intel Macs and Windows on ARM.",
+    ],
+  },
+  {
     version: "1.2.0",
     date: "2026-09-26",
     notes: [

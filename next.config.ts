@@ -25,6 +25,16 @@ const nextConfig: NextConfig = {
    * node_modules. Harmless for normal `next start` deployments.
    */
   output: "standalone",
+
+  /**
+   * The slide drawer's page loads the renderer's browser build as a file, not
+   * an import, so tracing cannot see it; ship it with the route that serves it.
+   */
+  outputFileTracingIncludes: {
+    "/api/decks/renderer": [
+      "./node_modules/@aiden0z/pptx-renderer/dist/aiden0z-pptx-renderer.browser.es.js",
+    ],
+  },
 };
 
 export default nextConfig;

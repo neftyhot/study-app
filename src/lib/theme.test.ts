@@ -105,7 +105,7 @@ describe("saving the style", () => {
     expect(readTheme(db)).toBeNull();
   });
 
-  it.each(["nord", "contrast", "system", "sepia"])("round-trips %s", (theme) => {
+  it.each(["plum", "contrast", "system", "blossom"])("round-trips %s", (theme) => {
     expect(writeTheme(theme, db)).toBe(theme);
     expect(readTheme(db)).toBe(theme);
   });
@@ -122,6 +122,15 @@ describe("saving the style", () => {
     expect(writeTheme("</script>", db)).toBeNull();
     expect(writeTheme(42, db)).toBeNull();
     expect(readTheme(db)).toBe("solarized");
+  });
+
+  it.each([
+    ["sepia", "paper"],
+    ["sage", "mint"],
+    ["nord", "slate"],
+  ])("reads the retired %s as %s", (old, replacement) => {
+    writeSetting("theme", old, db);
+    expect(readTheme(db)).toBe(replacement);
   });
 
   it("ignores a stored value that is no longer a style", () => {
@@ -154,9 +163,9 @@ describe("themeBootScript", () => {
   }
 
   it("applies a saved style before paint", () => {
-    const result = boot("nord");
-    expect(result.classes).toEqual(new Set(["h-full", "nord"]));
-    expect(result.attributes["data-theme"]).toBe("nord");
+    const result = boot("plum");
+    expect(result.classes).toEqual(new Set(["h-full", "plum"]));
+    expect(result.attributes["data-theme"]).toBe("plum");
     expect(result.colorScheme).toBe("dark");
   });
 

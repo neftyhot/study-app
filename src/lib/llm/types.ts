@@ -35,7 +35,8 @@ export type UsageFeature =
   | "tutor_extract"
   | "topics"
   | "primer"
-  | "counter_example";
+  | "counter_example"
+  | "primer_example";
 
 export type StructuredRequest = {
   feature?: UsageFeature;
@@ -97,6 +98,8 @@ export type ChatRequest = {
   schema: JsonSchema;
   temperature?: number;
   maxOutputTokens?: number;
+  /** As on StructuredRequest; a chat left at "default" can think away its whole budget. */
+  thinking?: ThinkingEffort;
 };
 
 export interface LlmProvider {
@@ -112,10 +115,18 @@ export interface LlmProvider {
   generateChat?<T>(request: ChatRequest): Promise<StructuredResult<T>>;
 }
 
+/**
+ * Why a call failed, where it matters to the student: "limit" is a quota or
+ * spending cap (the fix is billing, or waiting), "unavailable" is a model this
+ * key cannot use at all. Anything else is left unset.
+ */
+export type LlmErrorKind = "limit" | "unavailable";
+
 export class LlmError extends Error {
   constructor(
     message: string,
     readonly cause?: unknown,
+    readonly kind?: LlmErrorKind,
   ) {
     super(message);
     this.name = "LlmError";

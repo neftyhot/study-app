@@ -8,10 +8,11 @@ import {
   Dices,
   FileText,
   Loader2,
+  MessageCircleQuestion,
   Pencil,
   Sparkles,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,8 @@ import {
 import type { AssistKind } from "@/lib/assist";
 import type { TypedGrade } from "@/lib/learn/typed";
 import { CardEditor } from "@/components/cards/card-editor";
+import { SourceViewer } from "@/components/sources/source-viewer";
+import { TutorPanel } from "@/components/tutor/tutor-panel";
 import {
   ExplainButton,
   MisconceptionList,
@@ -127,6 +130,7 @@ export function LearnMode({
   const [guessing, setGuessing] = useState(false);
   const [typed, setTyped] = useState("");
   const [helps, setHelps] = useState<AssistResult[]>([]);
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [helping, setHelping] = useState<AssistKind | null>(null);
 
   if (!sessionId || !status) {
@@ -230,6 +234,8 @@ export function LearnMode({
       ...previous.filter((item) => item.kind !== kind),
       result,
     ]);
+    // The excerpt stays in the aids list; the whole file opens at its page.
+    if (kind === "source" && prompt.sourceSlideId) setSourceOpen(true);
     // Using an aid changes what this attempt can prove; say so immediately.
     setStatus(result.status);
   }
@@ -330,17 +336,26 @@ export function LearnMode({
             <AssistBar
               helps={helps}
               helping={helping}
-              onAsk={(kind) => void help(kind)}
+              onAsk={(kind) =>
+                kind === "source" && helps.some((item) => item.kind === "source")
+                  ? setSourceOpen(true)
+                  : void help(kind)
+              }
             />
           ) : null}
 
           {reveal ? (
             <RevealPanel
               key={`${shown.cardId}:${reveal.attemptId ?? reveal.directAnswer}`}
+              examId={examId}
+              sourceSlideId={shown.sourceSlideId}
               reveal={reveal}
               cardId={shown.cardId}
               question={shown.question}
               canUndo={shown.canUndo}
+              onShowSource={
+                shown.sourceSlideId ? () => setSourceOpen(true) : undefined
+              }
               onContinue={continueAfterReveal}
               onOverride={async () => {
                 if (!sessionId || !reveal.attemptId) return;
@@ -400,13 +415,18 @@ export function LearnMode({
               <Textarea
                 value={typed}
                 onChange={(event) => setTyped(event.target.value)}
-                placeholder="Answer from memory…"
+                placeholder="Answer from memory… (Enter to check, Shift+Enter for a new line)"
                 className="min-h-24"
                 disabled={busy}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  // Enter checks; Shift+Enter starts a new line.
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
                     event.preventDefault();
-                    void submitTyped();
+                    if (!busy && typed.trim()) void submitTyped();
                   }
                 }}
               />
@@ -441,22 +461,38 @@ export function LearnMode({
           )}
         </CardContent>
       </Card>
+
+      <SourceViewer
+        slideId={shown.sourceSlideId}
+        excerpt={
+          reveal?.sourceExcerpt ??
+          helps.find((item) => item.kind === "source")?.body
+        }
+        open={sourceOpen}
+        onOpenChange={setSourceOpen}
+      />
     </div>
   );
 }
 
 function RevealPanel({
+  examId,
+  sourceSlideId,
   reveal,
   cardId,
   question,
   canUndo,
+  onShowSource,
   onContinue,
   onOverride,
 }: {
+  examId: string;
+  sourceSlideId: string | null;
   reveal: Reveal;
   cardId: string;
   question: string;
   canUndo: boolean;
+  onShowSource?: () => void;
   onContinue: () => void;
   onOverride: () => Promise<void>;
 }) {
@@ -590,6 +626,25 @@ function RevealPanel({
 
       <div className="flex flex-wrap gap-2">
         <Button onClick={onContinue}>Continue</Button>
+
+        {onShowSource ? (
+          <Button variant="outline" onClick={onShowSource}>
+            <FileText className="size-3.5" />
+            Show original slide
+          </Button>
+        ) : null}
+
+        <TutorPanel
+          examId={examId}
+          slideId={sourceSlideId}
+          focus={`I'm studying this flashcard.\nQuestion: ${question}\nAnswer: ${reveal.directAnswer}`}
+          trigger={
+            <Button variant="outline">
+              <MessageCircleQuestion className="size-3.5" />
+              Ask a question
+            </Button>
+          }
+        />
 
         {reveal.attemptId && !reveal.correct ? (
           <Button

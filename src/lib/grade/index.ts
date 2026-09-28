@@ -4,6 +4,7 @@ import { getProvider } from "@/lib/llm";
 import { readGradingStrictness } from "@/lib/settings";
 
 import { createSemanticGrader } from "./semantic";
+import type { Strictness } from "./strictness";
 
 export * from "./schemas";
 export { createSemanticGrader, reconcileGrade } from "./semantic";
@@ -17,10 +18,10 @@ export * from "./strictness";
  * than failing the session — but the fallback marks its grades `provisional`
  * so the UI can say the answer was matched on keywords, not understood.
  */
-export function getTypedGrader(): TypedAnswerGrader {
+export function getTypedGrader(strictness?: Strictness | null): TypedAnswerGrader {
   try {
     return createSemanticGrader(getProvider(), {
-      strictness: readGradingStrictness(),
+      strictness: strictness ?? readGradingStrictness(),
       // 12/12 grading fixtures with thinking off as with it on, at a quarter
       // of the cost and a fraction of the wait (`npm run grade:check`).
       thinking: "minimal",

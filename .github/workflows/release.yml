@@ -67,6 +67,50 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --mac --arm64 --publish always
 
+  # Intel Macs. Built on an Intel runner so the native modules (SQLite,
+  # canvas, llama.cpp) are compiled for x64 rather than cross-built.
+  build-macos-x64:
+    runs-on: macos-15-intel
+    needs: create-draft
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Inject OAuth Credentials and License Server
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          # A public URL, so a repository variable rather than a secret. Without
+          # it a purchase is not delivered to the app automatically.
+          LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
+        run: |
+          echo "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID" >> .env.local
+          echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
+          echo "LICENSE_SERVER_URL=$LICENSE_SERVER_URL" >> .env.local
+
+      - name: Build Standalone and Electron Main
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_OPTIONS: "--max-old-space-size=4096"
+        run: |
+          npx next build
+          node scripts/prepare-standalone.mjs
+          npm run electron:compile
+
+      - name: Build and Publish Intel DMG
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --mac --x64 --publish always
+
   build-windows:
     runs-on: windows-latest
     needs: create-draft
@@ -94,11 +138,46 @@ jobs:
           echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
           echo "LICENSE_SERVER_URL=$LICENSE_SERVER_URL" >> .env.local
 
-      # Builds the installer (MeganStudy-Setup-<version>.exe) and the portable
-      # exe (MeganStudy-Portable-<version>.exe) and uploads both to the draft.
+      # Builds the installer (MeganStudy-Setup-<version>-x64.exe) and the portable
+      # exe (MeganStudy-Portable-<version>-x64.exe) and uploads both to the draft.
       - name: Build and Publish Installer and Portable
         env:
           NEXT_TELEMETRY_DISABLED: 1
           NODE_OPTIONS: "--max-old-space-size=4096"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build:win -- --publish always
+
+  build-windows-arm64:
+    runs-on: windows-11-arm
+    needs: create-draft
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Inject OAuth Credentials and License Server
+        shell: bash
+        env:
+          GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
+          GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
+          LICENSE_SERVER_URL: ${{ vars.LICENSE_SERVER_URL }}
+        run: |
+          echo "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID" >> .env.local
+          echo "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET" >> .env.local
+          echo "LICENSE_SERVER_URL=$LICENSE_SERVER_URL" >> .env.local
+
+      # Windows on ARM (Surface, Snapdragon laptops), built natively.
+      - name: Build and Publish Installer and Portable
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_OPTIONS: "--max-old-space-size=4096"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:win-arm64 -- --publish always

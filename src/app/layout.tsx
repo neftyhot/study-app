@@ -6,6 +6,7 @@ import { PrivacyGate } from "@/components/privacy/privacy-gate";
 import { readLicenseStatus, TRIAL_DAYS } from "@/lib/license/status";
 import { TimeTracker } from "@/components/layout/time-tracker";
 import { WhatsNew } from "@/components/layout/whats-new";
+import { UpgradeGuideHost } from "@/components/settings/upgrade-guide";
 import { ThemePersistence } from "@/components/theme-persistence";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
@@ -95,6 +96,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 notes={CHANGELOG.find((entry) => entry.version === APP_VERSION)?.notes ?? []}
               />
               <TimeTracker />
+              <UpgradeGuideHost />
               <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
                 {children}
               </main>

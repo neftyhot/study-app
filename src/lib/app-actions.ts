@@ -4,13 +4,21 @@ import { db } from "@/db";
 import { APP_VERSION, compareVersions, RELEASES_REPO, serverUrl } from "@/lib/app-info";
 import { readSetting, writeSetting } from "@/lib/settings";
 import { recordTime } from "@/lib/stats";
-import { maybeSendReport } from "@/lib/telemetry";
+import { refreshRemoteModels } from "@/lib/llm/models";
+import { deleteServerStatistics, maybeSendReport } from "@/lib/telemetry";
 
 /** The window reporting how long it has been open, focused or not. */
 export async function recordTimeAction(focused: number, background: number) {
   recordTime(db, focused, background);
-  // Piggybacks on the minute tick; sends every 15 min, or soon after counts change.
+  // Piggybacks on the minute tick; sends hourly, or soon after counts change.
   void maybeSendReport(db);
+  // At most daily: newer model names, so retired ones don't strand old installs.
+  void refreshRemoteModels(db);
+}
+
+/** Settings → Privacy: erase this install's statistics from the server. */
+export async function deleteStatisticsAction(): Promise<{ ok: boolean }> {
+  return { ok: await deleteServerStatistics(db) };
 }
 
 /* --------------------------------------------------------------- Feedback */
@@ -77,31 +85,78 @@ const CACHE_MS = 30 * 60 * 1000;
 
 export type UpdateInfo = { version: string; url: string; download: string | null };
 
-/** A newer release on GitHub, if there is one. Quiet when offline. */
+type Release = { version: string; url: string; assets: { name: string; url: string }[] };
+
+/**
+ * The latest release, from the developer's server (which caches GitHub, so a
+ * busy day does not run into GitHub's 60-an-hour limit), or GitHub itself when
+ * that server is not set up or not answering.
+ */
+async function latestRelease(): Promise<Release | null> {
+  const base = serverUrl();
+  if (base) {
+    try {
+      const response = await fetch(`${base}/latest`, { signal: AbortSignal.timeout(5000) });
+      if (response.ok) {
+        const latest = (await response.json()) as Partial<Release>;
+        if (latest.version) {
+          return {
+            version: latest.version,
+            url: latest.url ?? `https://github.com/${RELEASES_REPO}/releases/latest`,
+            assets: latest.assets ?? [],
+          };
+        }
+      }
+    } catch {
+      // Fall through to GitHub.
+    }
+  }
+
+  const response = await fetch(`https://api.github.com/repos/${RELEASES_REPO}/releases/latest`, {
+    headers: { accept: "application/vnd.github+json" },
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) return null;
+  const release = (await response.json()) as {
+    tag_name?: string;
+    html_url?: string;
+    assets?: { name: string; browser_download_url: string }[];
+  };
+  const version = release.tag_name?.replace(/^v/, "") ?? "";
+  if (!version) return null;
+  return {
+    version,
+    url: release.html_url ?? `https://github.com/${RELEASES_REPO}/releases/latest`,
+    assets: (release.assets ?? []).map((asset) => ({ name: asset.name, url: asset.browser_download_url })),
+  };
+}
+
+/** The download for this computer: its own processor's build first. */
+function pickDownload(
+  assets: { name: string; url: string }[],
+  platform: string = process.platform,
+  arch: string = process.arch,
+): string | null {
+  const extension = platform === "win32" ? ".exe" : ".dmg";
+  // On Windows the installer, not the portable exe.
+  const fits = assets
+    .filter((asset) => asset.name.endsWith(extension))
+    .sort((a, b) => Number(b.name.includes("Setup")) - Number(a.name.includes("Setup")));
+  const own = fits.find((asset) => asset.name.includes(arch));
+  // A build named for no processor is universal; one named for another is not.
+  const plain = fits.find((asset) => !/(arm64|x64)/.test(asset.name));
+  return (own ?? plain ?? fits[0])?.url ?? null;
+}
+
+/** A newer release, if there is one. Quiet when offline. */
 export async function checkForUpdateAction(): Promise<UpdateInfo | null> {
   if (cached && Date.now() - cached.at < CACHE_MS) return cached.result;
 
   let result: UpdateInfo | null = null;
   try {
-    const response = await fetch(`https://api.github.com/repos/${RELEASES_REPO}/releases/latest`, {
-      headers: { accept: "application/vnd.github+json" },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (response.ok) {
-      const release = (await response.json()) as {
-        tag_name?: string;
-        html_url?: string;
-        assets?: { name: string; browser_download_url: string }[];
-      };
-      const version = release.tag_name?.replace(/^v/, "") ?? "";
-      if (version && compareVersions(version, APP_VERSION) > 0) {
-        const dmg = release.assets?.find((asset) => asset.name.endsWith(".dmg"));
-        result = {
-          version,
-          url: release.html_url ?? `https://github.com/${RELEASES_REPO}/releases/latest`,
-          download: dmg?.browser_download_url ?? null,
-        };
-      }
+    const release = await latestRelease();
+    if (release && compareVersions(release.version, APP_VERSION) > 0) {
+      result = { version: release.version, url: release.url, download: pickDownload(release.assets) };
     }
   } catch {
     // Offline or rate-limited: say nothing rather than something wrong.

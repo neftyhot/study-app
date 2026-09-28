@@ -3,7 +3,7 @@
 @import "shadcn/tailwind.css";
 
 /* Midnight, Forest, Slate, Nord and High-Contrast are dark styles too, so every dark: variant applies to them. */
-@custom-variant dark (&:is(.dark *, .midnight *, .forest *, .slate *, .nord *, .contrast *));
+@custom-variant dark (&:is(.dark *, .midnight *, .forest *, .slate *, .contrast *, .rosewood *, .plum *));
 
 @theme inline {
   --color-background: var(--background);
@@ -182,32 +182,115 @@
   --chart-5: #98f1d1;
 }
 
-.sepia {
-  --font-sans: ui-serif, Charter, "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif;
-  --radius: 0.5rem;
-  --background: #f4ecd8;
-  --foreground: #3b2f1e;
-  --card: #fbf6ea;
-  --card-foreground: #3b2f1e;
-  --popover: #fbf6ea;
-  --popover-foreground: #3b2f1e;
-  --primary: #8a5a2b;
+.blossom {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #fdf2f6;
+  --foreground: #3d1a2b;
+  --card: #ffffff;
+  --card-foreground: #3d1a2b;
+  --popover: #ffffff;
+  --popover-foreground: #3d1a2b;
+  --primary: #c42a68;
   --primary-foreground: #ffffff;
-  --secondary: #ebe1c8;
-  --secondary-foreground: #3b2f1e;
-  --muted: #ebe1c8;
-  --muted-foreground: #6b5a40;
-  --accent: #e6d9b8;
-  --accent-foreground: #3b2f1e;
+  --secondary: #fbe1ec;
+  --secondary-foreground: #3d1a2b;
+  --muted: #f9e4ed;
+  --muted-foreground: #7a4a60;
+  --accent: #f8d6e5;
+  --accent-foreground: #3d1a2b;
   --destructive: #b3261e;
-  --border: #dccfae;
-  --input: #dccfae;
-  --ring: #8a5a2b;
-  --chart-1: #8a5a2b;
-  --chart-2: #5b7a3a;
-  --chart-3: #c08a2e;
-  --chart-4: #a4452c;
-  --chart-5: #6b5a40;
+  --border: #f0cddc;
+  --input: #f0cddc;
+  --ring: #c42a68;
+  --chart-1: #c42a68;
+  --chart-2: #8e5cd9;
+  --chart-3: #f2a33a;
+  --chart-4: #3fb8a0;
+  --chart-5: #f58fb8;
+}
+
+.rosewood {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #240c19;
+  --foreground: #fbe9f1;
+  --card: #3a1729;
+  --card-foreground: #fbe9f1;
+  --popover: #3a1729;
+  --popover-foreground: #fbe9f1;
+  --primary: #ff7eb6;
+  --primary-foreground: #240c19;
+  --secondary: #3a1729;
+  --secondary-foreground: #fbe9f1;
+  --muted: #2f1221;
+  --muted-foreground: #d9adc2;
+  --accent: #4a1e35;
+  --accent-foreground: #fbe9f1;
+  --destructive: #ff8a80;
+  --border: #55253d;
+  --input: #55253d;
+  --ring: #ff7eb6;
+  --chart-1: #ff7eb6;
+  --chart-2: #c49bff;
+  --chart-3: #ffcd1f;
+  --chart-4: #5fd4b8;
+  --chart-5: #ffb3d4;
+}
+
+.lavender {
+  --radius: 0.75rem;
+  --background: #f6f3fd;
+  --foreground: #2a2143;
+  --card: #fdfcff;
+  --card-foreground: #2a2143;
+  --popover: #fdfcff;
+  --popover-foreground: #2a2143;
+  --primary: #6a45d6;
+  --primary-foreground: #ffffff;
+  --secondary: #ebe5fa;
+  --secondary-foreground: #2a2143;
+  --muted: #ebe5fa;
+  --muted-foreground: #5e5480;
+  --accent: #e2d9f8;
+  --accent-foreground: #2a2143;
+  --destructive: #b3261e;
+  --border: #ddd4f3;
+  --input: #ddd4f3;
+  --ring: #6a45d6;
+  --chart-1: #6a45d6;
+  --chart-2: #c42a68;
+  --chart-3: #e0a82e;
+  --chart-4: #2f9e8f;
+  --chart-5: #a58bf0;
+}
+
+.plum {
+  --font-sans: var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif;
+  --radius: 1rem;
+  --background: #1b1228;
+  --foreground: #f0eafb;
+  --card: #2c1f40;
+  --card-foreground: #f0eafb;
+  --popover: #2c1f40;
+  --popover-foreground: #f0eafb;
+  --primary: #b995ff;
+  --primary-foreground: #1b1228;
+  --secondary: #2c1f40;
+  --secondary-foreground: #f0eafb;
+  --muted: #231834;
+  --muted-foreground: #bfb0db;
+  --accent: #3a2a54;
+  --accent-foreground: #f0eafb;
+  --destructive: #ff8a80;
+  --border: #43325f;
+  --input: #43325f;
+  --ring: #b995ff;
+  --chart-1: #b995ff;
+  --chart-2: #ff7eb6;
+  --chart-3: #ffcd1f;
+  --chart-4: #5fd4b8;
+  --chart-5: #8fb4ff;
 }
 
 .mint {
@@ -236,33 +319,6 @@
   --chart-3: #e0a82e;
   --chart-4: #e5675f;
   --chart-5: #7fd6a8;
-}
-
-.sage {
-  --radius: 0.75rem;
-  --background: #eef1e8;
-  --foreground: #26352a;
-  --card: #f8faf4;
-  --card-foreground: #26352a;
-  --popover: #f8faf4;
-  --popover-foreground: #26352a;
-  --primary: #4f6e44;
-  --primary-foreground: #ffffff;
-  --secondary: #e0e6d6;
-  --secondary-foreground: #26352a;
-  --muted: #e0e6d6;
-  --muted-foreground: #5a6a58;
-  --accent: #d6dfc9;
-  --accent-foreground: #26352a;
-  --destructive: #b3261e;
-  --border: #d2dac5;
-  --input: #d2dac5;
-  --ring: #4f6e44;
-  --chart-1: #4f6e44;
-  --chart-2: #8aa66f;
-  --chart-3: #c2a25a;
-  --chart-4: #b0624a;
-  --chart-5: #6f8f86;
 }
 
 .forest {
@@ -294,7 +350,7 @@
 }
 
 /*
- * The five AAA reading themes. Every text colour here — body, card, muted,
+ * The four AAA reading themes. Every text colour here — body, card, muted,
  * button labels — clears 7:1 against what it sits on, and every accent 3:1
  * against the page; appearance.test.ts reads these blocks and checks.
  */
@@ -383,33 +439,6 @@
   --chart-5: #6c71c4;
 }
 
-.nord {
-  --radius: 0.625rem;
-  --background: #2e3440;
-  --foreground: #eceff4;
-  --card: #3b4252;
-  --card-foreground: #eceff4;
-  --popover: #3b4252;
-  --popover-foreground: #eceff4;
-  --primary: #88c0d0;
-  --primary-foreground: #1c2028;
-  --secondary: #3b4252;
-  --secondary-foreground: #eceff4;
-  --muted: #3b4252;
-  --muted-foreground: #d8dee9;
-  --accent: #434c5e;
-  --accent-foreground: #eceff4;
-  --destructive: #f8d7da;
-  --border: #4c566a;
-  --input: #616e88;
-  --ring: #81a1c1;
-  --chart-1: #88c0d0;
-  --chart-2: #81a1c1;
-  --chart-3: #a3be8c;
-  --chart-4: #ebcb8b;
-  --chart-5: #b48ead;
-}
-
 /* Pure black and white: no colour at all, and edges drawn rather than shaded. */
 .contrast {
   --radius: 0.25rem;
@@ -447,7 +476,10 @@
 .bubble [data-slot="card"],
 .midnight [data-slot="card"],
 .mint [data-slot="card"],
-.forest [data-slot="card"] {
+.forest [data-slot="card"],
+.blossom [data-slot="card"],
+.rosewood [data-slot="card"],
+.plum [data-slot="card"] {
   box-shadow:
     0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent),
     0 6px 20px color-mix(in oklab, var(--foreground) 9%, transparent);
@@ -456,7 +488,10 @@
 .bubble h1,
 .midnight h1,
 .mint h1,
-.forest h1 {
+.forest h1,
+.blossom h1,
+.rosewood h1,
+.plum h1 {
   font-weight: 800;
 }
 

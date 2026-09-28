@@ -134,3 +134,37 @@ export function createKeywordGrader(threshold = 0.6): TypedAnswerGrader {
     },
   };
 }
+
+function normalized(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/**
+ * The card's own answer, typed back word for word.
+ *
+ * It is the correct option in the multiple-choice round, so a student who
+ * recalls it exactly has recalled the card. Rubric points can say more than
+ * the one-line answer does; they must not turn that into "partly right".
+ */
+export function exactAnswerGrade(
+  request: Pick<TypedRequest, "expected" | "essentialPoints" | "answer" | "focusPoints">,
+): TypedGrade | null {
+  const expected = normalized(request.expected);
+  if (!expected || normalized(request.answer) !== expected) return null;
+  return {
+    verdict: "correct",
+    metPoints:
+      request.focusPoints && request.focusPoints.length > 0
+        ? request.focusPoints
+        : request.essentialPoints,
+    missedPoints: [],
+    creditedOptional: [],
+    errorType: "none",
+    feedback: "Word for word the card's answer.",
+    provisional: false,
+  };
+}

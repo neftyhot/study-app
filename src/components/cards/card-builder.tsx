@@ -12,7 +12,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, ImagePlus, Loader2, Plus, Star, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { DetailToggle, useDetailMode } from "@/components/cards/detail-toggle";
 import { Markdown } from "@/components/tutor/markdown";

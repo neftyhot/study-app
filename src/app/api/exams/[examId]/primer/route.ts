@@ -10,6 +10,7 @@ import type { NextRequest } from "next/server";
 import { db } from "@/db";
 import { exams } from "@/db/schema";
 import { getProvider } from "@/lib/llm";
+import { readSkipLogistics } from "@/lib/logistics";
 import { isPrimerDepth } from "@/lib/primer";
 import { primerRun, startPrimerRun } from "@/lib/primer/runs";
 
@@ -33,7 +34,9 @@ export async function POST(request: NextRequest, ctx: RouteContext<"/api/exams/[
     );
   }
 
-  if (!startPrimerRun(db, provider, examId, body.depth)) {
+  if (!startPrimerRun(db, provider, examId, body.depth, {
+      skipLogistics: readSkipLogistics(body?.skipLogistics),
+    })) {
     return Response.json({ error: "This study guide is already being written." }, { status: 409 });
   }
   return Response.json({ run: primerRun(examId, body.depth) }, { status: 202 });

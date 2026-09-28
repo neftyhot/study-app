@@ -16,7 +16,7 @@ import {
   type StructuredRequest,
 } from "./types";
 
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-5";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 
 const TOOL_NAME = "respond";
 

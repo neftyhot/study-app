@@ -6,7 +6,7 @@
 import { createHmac, generateKeyPairSync } from "node:crypto";
 import { createRequire } from "node:module";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import worker, { verifyStripeSignature, type Env, type KVLike } from "./index";
 
@@ -27,18 +27,31 @@ const PUBLIC_PEM = publicKey.export({ type: "spki", format: "pem" }).toString();
 
 class MemoryKV implements KVLike {
   readonly data = new Map<string, string>();
+  readonly metadata = new Map<string, unknown>();
+  /** Reads started but not yet answered, and the most there ever were at once. */
+  inFlight = 0;
+  maxInFlight = 0;
   async get(key: string) {
+    this.inFlight += 1;
+    this.maxInFlight = Math.max(this.maxInFlight, this.inFlight);
+    await Promise.resolve();
+    this.inFlight -= 1;
     return this.data.get(key) ?? null;
   }
-  async put(key: string, value: string) {
+  async put(key: string, value: string, options?: { metadata?: unknown }) {
     this.data.set(key, value);
+    if (options?.metadata !== undefined) this.metadata.set(key, structuredClone(options.metadata));
+    else this.metadata.delete(key);
   }
   async delete(key: string) {
     this.data.delete(key);
+    this.metadata.delete(key);
   }
   async list({ prefix }: { prefix: string; cursor?: string }) {
     return {
-      keys: [...this.data.keys()].filter((key) => key.startsWith(prefix)).map((name) => ({ name })),
+      keys: [...this.data.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .map((name) => (this.metadata.has(name) ? { name, metadata: this.metadata.get(name) } : { name })),
       list_complete: true,
     };
   }
@@ -360,5 +373,355 @@ describe("telemetry and admin", () => {
     expect(list[0].email).toBe("student@example.com");
     const { payload } = verifyLicense(list[0].token, { machineId: MACHINE, publicKeyPem: PUBLIC_PEM });
     expect(payload!.id).toBe(list[0].licenseId);
+  });
+});
+
+describe("hourly telemetry, cached stats, erasure", () => {
+  const TOKEN = "admin-token-for-tests-0123456789";
+  const INSTALL = "3f2b8c4e-1111-4222-8333-944455556666";
+  const MINUTE = 60_000;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-01T12:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function call(path: string, init: RequestInit = {}, token: string | null = TOKEN) {
+    return worker.fetch(
+      new Request(`https://licensing.example${path}`, {
+        ...init,
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      }),
+      { ...env, ADMIN_TOKEN: TOKEN },
+    );
+  }
+
+  function report(overrides: Record<string, unknown> = {}) {
+    return call("/telemetry", {
+      method: "POST",
+      body: JSON.stringify({ installId: INSTALL, version: "0.2.0", subjects: 1, decks: 1, cards: 10, reviewed: 5, focusedSeconds: 60, ...overrides }),
+    }, null);
+  }
+
+  const stored = () => JSON.parse(kv.data.get(`telemetry:${INSTALL}`)!);
+  const later = (minutes: number) => vi.setSystemTime(Date.now() + minutes * MINUTE);
+
+  it("writes a report only when it is worth a write", async () => {
+    await report();
+    const first = stored().lastSeen;
+
+    // Nothing changed, 20 minutes on: acknowledged, not written.
+    later(20);
+    expect(await (await report({ focusedSeconds: 999 })).json()).toEqual({ ok: true });
+    expect(stored().lastSeen).toBe(first);
+
+    // Unchanged for 50 minutes: written, so lastSeen stays within the hour.
+    later(30);
+    await report({ focusedSeconds: 1200 });
+    expect(stored().focusedSeconds).toBe(1200);
+    const second = stored().lastSeen;
+
+    // Counts changed, but only 5 minutes after the last write: skipped.
+    later(5);
+    await report({ cards: 11 });
+    expect(stored().cards).toBe(10);
+    expect(stored().lastSeen).toBe(second);
+
+    // Changed and 10 minutes on: written.
+    later(5);
+    await report({ cards: 12 });
+    expect(stored().cards).toBe(12);
+
+    // A new version is written at once.
+    later(1);
+    await report({ cards: 12, version: "0.3.0" });
+    expect(stored().version).toBe("0.3.0");
+    expect(stored().firstSeen).toBe(first);
+  });
+
+  it("caches /admin/stats for about ten minutes, unless asked for fresh", async () => {
+    await report();
+    expect((await (await call("/admin/stats")).json()).installs).toBe(1);
+    expect(JSON.parse(kv.data.get("stats:cache")!)).toMatchObject({ at: Date.now(), value: { installs: 1 } });
+
+    await report({ installId: "a1b2c3d4-0000-4000-8000-000000000000" });
+    expect((await (await call("/admin/stats")).json()).installs).toBe(1);
+    expect((await (await call("/admin/stats?fresh=1")).json()).installs).toBe(2);
+
+    await report({ installId: "b1b2c3d4-0000-4000-8000-000000000000" });
+    later(11);
+    expect((await (await call("/admin/stats")).json()).installs).toBe(3);
+  });
+
+  it("reads many installs in bounded batches", async () => {
+    for (let i = 0; i < 130; i += 1) {
+      const id = `${i.toString(16).padStart(8, "0")}-0000-4000-8000-000000000000`;
+      kv.data.set(`telemetry:${id}`, JSON.stringify({ installId: id, version: "0.2.0", usage: [], lastSeen: new Date().toISOString(), firstSeen: new Date().toISOString() }));
+    }
+    kv.maxInFlight = 0;
+    expect((await (await call("/admin/stats?fresh=1")).json()).installs).toBe(130);
+    expect(kv.maxInFlight).toBeLessThanOrEqual(50);
+  });
+
+  it("forgets an install on request, and the cached totals with it", async () => {
+    await report();
+    await call("/admin/stats");
+    expect(kv.data.has("stats:cache")).toBe(true);
+
+    const response = await call(`/telemetry/${INSTALL}`, { method: "DELETE" }, null);
+    expect(await response.json()).toEqual({ ok: true });
+    expect(kv.data.has(`telemetry:${INSTALL}`)).toBe(false);
+    expect(kv.data.has("stats:cache")).toBe(false);
+    expect((await (await call("/admin/stats")).json()).installs).toBe(0);
+
+    // Already gone is still fine; junk is not.
+    expect((await call(`/telemetry/${INSTALL}`, { method: "DELETE" }, null)).status).toBe(200);
+    expect((await call("/telemetry/..%2Fetc", { method: "DELETE" }, null)).status).toBe(400);
+  });
+});
+
+describe("admin token rotation", () => {
+  const CURRENT = "current-admin-token-0123456789";
+  const NEXT = "next-admin-token-abcdefghijklmn";
+
+  function stats(token: string, extra: Partial<Env> = {}) {
+    return worker.fetch(
+      new Request("https://licensing.example/admin/stats", { headers: { authorization: `Bearer ${token}` } }),
+      { ...env, ADMIN_TOKEN: CURRENT, ADMIN_TOKEN_NEXT: NEXT, ...extra },
+    );
+  }
+
+  it("accepts the current or the next token, and nothing else", async () => {
+    expect((await stats(CURRENT)).status).toBe(200);
+    expect((await stats(NEXT)).status).toBe(200);
+    expect((await stats("someone-elses-token-0123456789")).status).toBe(401);
+    // Rotation done: the old one is dropped.
+    expect((await stats(CURRENT, { ADMIN_TOKEN: NEXT, ADMIN_TOKEN_NEXT: undefined })).status).toBe(401);
+    // A too-short token is never accepted, in either slot.
+    expect((await stats("short", { ADMIN_TOKEN_NEXT: "short" })).status).toBe(401);
+  });
+});
+
+describe("purchases, refunds and reissues", () => {
+  const TOKEN = "admin-token-for-tests-0123456789";
+  const NEW_MACHINE = "NEW-MAC-0000-1111-2222-333344445555";
+
+  function call(path: string, init: RequestInit = {}, token: string | null = TOKEN) {
+    return worker.fetch(
+      new Request(`https://licensing.example${path}`, {
+        ...init,
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      }),
+      { ...env, ADMIN_TOKEN: TOKEN },
+    );
+  }
+
+  function charge(type: string, object: Record<string, unknown>) {
+    return webhook(JSON.stringify({ id: "evt_2", type, data: { object } }));
+  }
+
+  async function buy() {
+    await webhook(checkoutEvent({ payment_intent: "pi_123" }));
+    return JSON.parse(kv.data.get("session:cs_test_abc123")!) as { licenseId: string; token: string };
+  }
+
+  const revoked = async (id: string) => ((await (await get(`/revoked/${id}`)).json()) as { revoked: boolean }).revoked;
+
+  it("lists purchases from key metadata, reading only keys that lack it", async () => {
+    const { licenseId, token } = await buy();
+    expect(kv.metadata.get("session:cs_test_abc123")).toMatchObject({ licenseId, token, email: "student@example.com" });
+
+    // One written before metadata existed.
+    kv.data.set("session:cs_old", JSON.stringify({ token: "old-token", licenseId: "old-id", email: null, issuedAt: 1 }));
+
+    const read = vi.spyOn(kv, "get");
+    const list = (await (await call("/admin/purchases")).json()) as { token: string; licenseId: string }[];
+    expect(list.map((entry) => entry.licenseId).sort()).toEqual([licenseId, "old-id"].sort());
+    expect(list.find((entry) => entry.licenseId === licenseId)!.token).toBe(token);
+    expect(read.mock.calls.map(([key]) => key).filter((key) => key.startsWith("session:"))).toEqual(["session:cs_old"]);
+  });
+
+  it("leaves the token out of metadata when it would not fit, and still lists it", async () => {
+    await webhook(checkoutEvent({ customer_details: { email: "a@b.c", name: "N".repeat(900) } }));
+    const metadata = kv.metadata.get("session:cs_test_abc123") as Record<string, unknown>;
+    expect(metadata.token).toBeUndefined();
+    expect(JSON.stringify(metadata).length).toBeLessThanOrEqual(1024);
+
+    const [entry] = (await (await call("/admin/purchases")).json()) as { token: string }[];
+    expect(verifyLicense(entry.token, { machineId: MACHINE, publicKeyPem: PUBLIC_PEM }).valid).toBe(true);
+  });
+
+  it("revokes the key on a full refund, but not a partial one", async () => {
+    const { licenseId } = await buy();
+    expect(kv.data.get("pi:pi_123")).toBe("cs_test_abc123");
+
+    await charge("charge.refunded", { payment_intent: "pi_123", amount: 2495, amount_refunded: 500, refunded: false });
+    expect(await revoked(licenseId)).toBe(false);
+
+    const response = await charge("charge.refunded", { payment_intent: "pi_123", amount: 2495, amount_refunded: 2495, refunded: true });
+    expect(await response.json()).toMatchObject({ revoked: licenseId });
+    expect(await revoked(licenseId)).toBe(true);
+    expect((await get(`/license/${MACHINE}`)).status).toBe(404);
+
+    // Stripe retries; the list does not grow.
+    await charge("charge.refunded", { payment_intent: "pi_123", refunded: true });
+    expect(JSON.parse(kv.data.get("revoked:auto")!)).toEqual([licenseId]);
+
+    // The License Manager replacing its own list does not undo it.
+    await call("/admin/revocations", { method: "PUT", body: JSON.stringify({ ids: [] }) });
+    expect(await revoked(licenseId)).toBe(true);
+    const [purchase] = (await (await call("/admin/purchases")).json()) as { revoked: boolean }[];
+    expect(purchase.revoked).toBe(true);
+  });
+
+  it("revokes the key when a dispute opens, and ignores payments it never minted for", async () => {
+    const { licenseId } = await buy();
+
+    const unknown = await charge("charge.dispute.created", { payment_intent: "pi_someone_else", charge: "ch_1" });
+    expect(unknown.status).toBe(200);
+    expect(await unknown.json()).toMatchObject({ unknown: true });
+    expect(kv.data.has("revoked:auto")).toBe(false);
+
+    await charge("charge.dispute.created", { payment_intent: "pi_123", charge: "ch_1" });
+    expect(await revoked(licenseId)).toBe(true);
+  });
+
+  it("reissues a purchase to a new machine and revokes the old key", async () => {
+    const { licenseId } = await buy();
+
+    const body = JSON.stringify({ licenseId, machineId: NEW_MACHINE });
+    expect((await call("/admin/reissue", { method: "POST", body }, null)).status).toBe(401);
+    expect((await call("/admin/reissue", { method: "POST", body: JSON.stringify({ licenseId, machineId: "bad id" }) })).status).toBe(400);
+    expect((await call("/admin/reissue", { method: "POST", body: JSON.stringify({ licenseId: "nope", machineId: NEW_MACHINE }) })).status).toBe(404);
+
+    const response = await call("/admin/reissue", { method: "POST", body });
+    expect(response.status).toBe(200);
+    const issued = (await response.json()) as { token: string; licenseId: string; revoked: string };
+    expect(issued.revoked).toBe(licenseId);
+
+    const check = verifyLicense(issued.token, { machineId: NEW_MACHINE, publicKeyPem: PUBLIC_PEM });
+    expect(check.valid).toBe(true);
+    expect(check.payload).toMatchObject({ type: "lifetime", name: "Sam Student", id: issued.licenseId });
+
+    expect(await revoked(licenseId)).toBe(true);
+    expect((await get(`/license/${MACHINE}`)).status).toBe(404);
+    expect(await (await get(`/license/${NEW_MACHINE}`)).json()).toEqual({ token: issued.token });
+    const [purchase] = (await (await call("/admin/purchases")).json()) as { token: string; email: string }[];
+    expect(purchase).toMatchObject({ token: issued.token, email: "student@example.com" });
+
+    // By session id works too; and a later refund revokes whichever key is current.
+    const again = (await (await call("/admin/reissue", {
+      method: "POST",
+      body: JSON.stringify({ sessionId: "cs_test_abc123", machineId: MACHINE }),
+    })).json()) as { licenseId: string };
+    await charge("charge.refunded", { payment_intent: "pi_123", refunded: true });
+    expect(await revoked(again.licenseId)).toBe(true);
+  });
+});
+
+describe("GET /latest", () => {
+  const release = {
+    tag_name: "v0.4.1",
+    html_url: "https://github.com/neftyhot/study-app/releases/tag/v0.4.1",
+    published_at: "2026-09-20T10:00:00Z",
+    assets: [
+      { name: "Megan-Study-0.4.1-arm64.dmg", browser_download_url: "https://github.com/x/0.4.1-arm64.dmg" },
+      { name: "junk" },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("answers from GitHub, then from its cache", async () => {
+    const fetchMock = vi.fn(async () => Response.json(release));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const response = await get("/latest");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+    expect(await response.json()).toEqual({
+      version: "0.4.1",
+      tag: "v0.4.1",
+      url: release.html_url,
+      publishedAt: release.published_at,
+      assets: [{ name: "Megan-Study-0.4.1-arm64.dmg", url: "https://github.com/x/0.4.1-arm64.dmg" }],
+    });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.github.com/repos/neftyhot/study-app/releases/latest");
+    expect(new Headers(init.headers).get("user-agent")).toBeTruthy();
+
+    await get("/latest");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("serves a stale answer when GitHub fails, and 502 with nothing cached", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("rate limited", { status: 403 })));
+      expect((await get("/latest")).status).toBe(502);
+
+      vi.stubGlobal("fetch", vi.fn(async () => Response.json(release)));
+      await get("/latest");
+
+      vi.setSystemTime(Date.now() + 11 * 60_000);
+      const failing = vi.fn(async () => {
+        throw new Error("offline");
+      });
+      vi.stubGlobal("fetch", failing);
+      const stale = await get("/latest");
+      expect(failing).toHaveBeenCalled();
+      expect(((await stale.json()) as { version: string }).version).toBe("0.4.1");
+    } finally {
+      error.mockRestore();
+    }
+  });
+});
+
+describe("remote config", () => {
+  const TOKEN = "admin-token-for-tests-0123456789";
+
+  function put(body: unknown, token: string | null = TOKEN) {
+    return worker.fetch(
+      new Request("https://licensing.example/admin/config", {
+        method: "PUT",
+        body: JSON.stringify(body),
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      }),
+      { ...env, ADMIN_TOKEN: TOKEN },
+    );
+  }
+
+  it("serves {} until set, publicly cacheable", async () => {
+    const response = await get("/config");
+    expect(await response.json()).toEqual({});
+    expect(response.headers.get("cache-control")).toBe("public, max-age=600");
+  });
+
+  it("stores only known model slots with plausible ids, for the admin only", async () => {
+    expect((await put({ models: { gemini: "gemini-3-flash" } }, null)).status).toBe(401);
+
+    const stored = await put({
+      models: {
+        gemini: "gemini-3-flash",
+        geminiBulk: "models/gemini-3-flash-lite:latest",
+        anthropic: "<script>",
+        openai: "x".repeat(81),
+        geminiPrimer: 42,
+        somethingElse: "gpt-9",
+      },
+      extra: true,
+    });
+    const expected = { models: { gemini: "gemini-3-flash", geminiBulk: "models/gemini-3-flash-lite:latest" } };
+    expect(await stored.json()).toEqual(expected);
+    expect(await (await get("/config")).json()).toEqual(expected);
   });
 });

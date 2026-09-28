@@ -1,7 +1,9 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, FileText } from "lucide-react";
+
+import { SourceViewer } from "@/components/sources/source-viewer";
 
 import { cn } from "@/lib/utils";
 import { citationLabel } from "@/lib/order";
@@ -88,6 +90,7 @@ export function CitationCallout({
   slide?: { slideId: string; hasImage: boolean };
 }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [viewing, setViewing] = useState(false);
 
   return (
     <aside
@@ -112,6 +115,24 @@ export function CitationCallout({
           loading="lazy"
           onError={() => setImageFailed(true)}
         />
+      ) : null}
+      {slide ? (
+        <>
+          <button
+            type="button"
+            className="text-primary inline-flex items-center gap-1 text-xs font-medium hover:underline"
+            onClick={() => setViewing(true)}
+          >
+            <FileText className="size-3" />
+            Open the whole file here
+          </button>
+          <SourceViewer
+            slideId={slide.slideId}
+            excerpt={sentence.source_excerpt}
+            open={viewing}
+            onOpenChange={setViewing}
+          />
+        </>
       ) : null}
     </aside>
   );

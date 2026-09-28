@@ -144,6 +144,8 @@ export type GenerateOptions = {
    * default; off sends every objective to every batch, as before.
    */
   routeObjectives?: boolean;
+  /** Make no cards from announcements or course admin. Default on. */
+  skipLogistics?: boolean;
   onProgress?: (progress: GenerationProgress) => void;
 };
 
@@ -280,6 +282,7 @@ export async function generateCardsForExam(
         const promptOptions = {
           includeApplication: exam.includeApplication,
           covered: batch.flatMap((slide) => coveredBySlide.get(slide.id) ?? []),
+          skipLogistics: options.skipLogistics !== false,
         };
         const prompt =
           exam.scopeMode === "objectives"

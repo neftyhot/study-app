@@ -146,6 +146,14 @@ export async function ingestSourceFile(
       .where(eq(sourceFiles.id, file.id))
       .run();
 
+    // Draw a slideshow's slides now, while the student waits on cards anyway,
+    // so "Show original slide" opens at once later.
+    if (file.fileType === "pptx") {
+      void import("./slide-render")
+        .then(({ refreshDeckPictures }) => refreshDeckPictures(db, file))
+        .catch(() => {});
+    }
+
     return {
       sourceFileId: file.id,
       unitCount: units.length,

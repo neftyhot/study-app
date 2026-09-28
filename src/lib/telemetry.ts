@@ -21,9 +21,9 @@ const INSTALL_ID_KEY = "install_id";
 const LAST_SENT_KEY = "telemetry_last_sent";
 const LAST_COUNTS_KEY = "telemetry_last_counts";
 /** The regular heartbeat while the app is open. */
-export const REPORT_EVERY_MS = 15 * 60 * 1000;
+export const REPORT_EVERY_MS = 60 * 60 * 1000;
 /** A change in subjects, decks or cards is reported sooner, but no more often than this. */
-export const CHANGE_MIN_GAP_MS = 60 * 1000;
+export const CHANGE_MIN_GAP_MS = 10 * 60 * 1000;
 
 export function installId(db: Db): string {
   const existing = readSetting(INSTALL_ID_KEY, db);
@@ -71,7 +71,7 @@ function countsKey(report: ReturnType<typeof buildReport>): string {
 }
 
 /**
- * Whether a report is due: every 15 minutes, or a minute after the number of
+ * Whether a report is due: hourly, or ten minutes after the number of
  * subjects, decks or cards last sent has changed.
  */
 export function isReportDue(
@@ -120,4 +120,28 @@ export async function maybeSendReport(db: Db, { force = false } = {}): Promise<b
   } catch {
     return false;
   }
+}
+
+/**
+ * Erases what the server holds for this install, then starts a fresh install id
+ * so later reports can't be tied back to the deleted ones. Reports still go out
+ * (they are required), but only from the new id's totals onward.
+ */
+export async function deleteServerStatistics(db: Db): Promise<boolean> {
+  const base = serverUrl();
+  if (!base) return false;
+  const id = installId(db);
+  try {
+    const response = await fetch(`${base}/telemetry/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok && response.status !== 404) return false;
+  } catch {
+    return false;
+  }
+  writeSetting(INSTALL_ID_KEY, crypto.randomUUID(), db);
+  writeSetting(LAST_SENT_KEY, "", db);
+  writeSetting(LAST_COUNTS_KEY, "", db);
+  return true;
 }

@@ -71,6 +71,8 @@ export type PaperRequest = PaperScope & {
   seed?: number;
   /** Rewritten prompts by card id; anything missing keeps its own wording. */
   rephrased?: Map<string, string>;
+  /** How hard typed answers on this paper are marked. */
+  strictness?: string | null;
 };
 
 export function createPaper(
@@ -106,6 +108,7 @@ export function createPaper(
       durationMinutes: request.durationMinutes ?? null,
       questionCount: drafts.length,
       rephrased: rephrased.size > 0,
+      strictness: request.strictness ?? null,
     })
     .returning()
     .get();

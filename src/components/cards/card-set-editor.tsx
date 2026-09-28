@@ -12,7 +12,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Plus, Star, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { ImageField, type Attachment } from "@/components/cards/card-builder";
 import { DetailToggle, useDetailMode } from "@/components/cards/detail-toggle";

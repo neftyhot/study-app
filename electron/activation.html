@@ -144,6 +144,7 @@
         } else if (gate.message && gate.reason !== "missing") {
           fail(gate.message);
         }
+        if (gate.reason === "unconfirmed") $("recheck").hidden = false;
         $("manual-hint").hidden = gate.autoDelivery;
       });
 

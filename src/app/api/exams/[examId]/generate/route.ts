@@ -24,6 +24,7 @@ import {
 } from "@/lib/generate/jobs";
 import { readLicenseStatus } from "@/lib/license/status";
 import { getProvider, LlmError } from "@/lib/llm";
+import { readSkipLogistics } from "@/lib/logistics";
 import { duplicateExamSources } from "@/lib/manage";
 
 export const maxDuration = 300;
@@ -139,6 +140,7 @@ export async function POST(
       densityRatio,
       ranges,
       sourceFileIds: sourceFileIds?.length ? sourceFileIds : undefined,
+      skipLogistics: readSkipLogistics(body?.skipLogistics),
     });
 
     return Response.json({

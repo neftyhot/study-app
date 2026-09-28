@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, type DragEvent } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Upload } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {

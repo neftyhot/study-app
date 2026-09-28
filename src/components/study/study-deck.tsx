@@ -12,7 +12,7 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +24,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -43,6 +36,7 @@ import {
 import type { Grade } from "@/lib/study/grade";
 import type { StudyScope } from "@/lib/study/queue";
 import { CardEditor } from "@/components/cards/card-editor";
+import { SourceViewer } from "@/components/sources/source-viewer";
 import { CardImage, CardQuestion } from "@/components/cards/card-face";
 import {
   ExplainButton,
@@ -60,6 +54,8 @@ import {
 
 export type StudyCardView = {
   id: string;
+  /** Position in lecture order, as the card list and the tutor number it. */
+  number: number;
   topic: string | null;
   question: string;
   directAnswer: string;
@@ -79,6 +75,7 @@ export type StudyCardView = {
   commonMisconceptions?: string[];
   lastGrade: Grade | null;
   source: {
+    slideId: string;
     label: string;
     excerpt: string | null;
     title: string | null;
@@ -363,6 +360,9 @@ export function StudyDeck({
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="flex flex-wrap gap-1.5">
+              <Badge variant="outline" className="font-mono">
+                #{current.number}
+              </Badge>
               {current.topic ? (
                 <Badge variant="secondary">{current.topic}</Badge>
               ) : null}
@@ -601,34 +601,12 @@ export function StudyDeck({
         ) : null}
       </div>
 
-      <Dialog open={sourceOpen} onOpenChange={setSourceOpen}>
-        <DialogContent className="max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{current.source?.label}</DialogTitle>
-            <DialogDescription>
-              The exact source this card was built from.
-            </DialogDescription>
-          </DialogHeader>
-
-          {current.source?.excerpt ? (
-            <blockquote className="border-l-2 pl-3 text-sm italic break-words">
-              {current.source.excerpt}
-            </blockquote>
-          ) : null}
-
-          <div className="bg-muted/50 space-y-2 rounded p-3 text-sm">
-            {current.source?.title ? (
-              <p className="font-medium">{current.source.title}</p>
-            ) : null}
-            <p className="whitespace-pre-wrap">{current.source?.text}</p>
-            {current.source?.speakerNotes ? (
-              <p className="text-muted-foreground whitespace-pre-wrap text-xs">
-                Speaker notes: {current.source.speakerNotes}
-              </p>
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <SourceViewer
+        slideId={current.source?.slideId ?? null}
+        excerpt={current.source?.excerpt}
+        open={sourceOpen}
+        onOpenChange={setSourceOpen}
+      />
     </div>
   );
 }

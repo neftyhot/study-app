@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Clock, FileText, Layers, Loader2, Send } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { SourceRangePicker } from "@/components/generate/source-range-picker";
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  STRICTNESS_LABELS,
+  STRICTNESS_LEVELS,
+  type Strictness,
+} from "@/lib/grade/strictness";
 import {
   abandon,
   answerQuestion,
@@ -80,6 +85,7 @@ export function PracticeRunner({
   cardCount,
   paper,
   initialQuestions,
+  defaultStrictness,
 }: {
   examId: string;
   /** Files with cards behind them, plus "your own cards" when there are any. */
@@ -89,6 +95,8 @@ export function PracticeRunner({
   cardCount: number;
   paper: PaperView | null;
   initialQuestions: Question[];
+  /** The Settings choice, which each new test starts from. */
+  defaultStrictness: Strictness;
 }) {
   const router = useRouter();
   const [questions, setQuestions] = useState(initialQuestions);
@@ -102,6 +110,7 @@ export function PracticeRunner({
   const [count, setCount] = useState("20");
   const [duration, setDuration] = useState("none");
   const [rephrase, setRephrase] = useState(true);
+  const [strictness, setStrictness] = useState<Strictness>(defaultStrictness);
   const [choices, setChoices] = useState<Record<string, FileChoice>>(() =>
     defaultChoices(sources),
   );
@@ -175,6 +184,7 @@ export function PracticeRunner({
       ranges,
       topics: topicsInPlay,
       rephrase,
+      strictness,
     });
     setBusy(false);
 
@@ -353,6 +363,33 @@ export function PracticeRunner({
                 knowing the answer. Needs a model, and takes a moment.
               </p>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-sm">Grading difficulty</Label>
+            <div
+              role="radiogroup"
+              aria-label="Grading difficulty"
+              className="flex flex-wrap gap-2"
+            >
+              {STRICTNESS_LEVELS.map((level) => (
+                <Button
+                  key={level}
+                  type="button"
+                  role="radio"
+                  aria-checked={strictness === level}
+                  size="sm"
+                  variant={strictness === level ? "default" : "outline"}
+                  disabled={busy}
+                  onClick={() => setStrictness(level)}
+                >
+                  {STRICTNESS_LABELS[level].label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {STRICTNESS_LABELS[strictness].blurb} Applies to this test only.
+            </p>
           </div>
 
           <Button disabled={busy || cardCount === 0} onClick={() => void handleStart()}>

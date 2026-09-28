@@ -28,7 +28,13 @@ export function primerRun(examId: string, depth: PrimerDepth): PrimerRun | null 
 }
 
 /** Starts writing in the background; false if one is already going. */
-export function startPrimerRun(db: Db, llm: LlmProvider, examId: string, depth: PrimerDepth): boolean {
+export function startPrimerRun(
+  db: Db,
+  llm: LlmProvider,
+  examId: string,
+  depth: PrimerDepth,
+  options: { skipLogistics?: boolean } = {},
+): boolean {
   if (primerRun(examId, depth)?.running) return false;
   const id = key(examId, depth);
   const run: PrimerRun = {
@@ -42,6 +48,7 @@ export function startPrimerRun(db: Db, llm: LlmProvider, examId: string, depth: 
   runs.set(id, run);
 
   generatePrimer(db, llm, examId, depth, {
+    skipLogistics: options.skipLogistics,
     onProgress: (progress) => Object.assign(run, progress),
   })
     .catch((error: unknown) => {

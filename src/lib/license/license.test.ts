@@ -451,6 +451,38 @@ describe("the gate", () => {
     expect(gate.refuseRevoked(dir, passed)).toBe(passed);
   });
 
+  it("wants a bought key confirmed online within the allowance", () => {
+    const now = Date.now();
+    const passed = { valid: true, payload: { id: "key-1", type: "lifetime" } };
+    const required = { confirmRequired: true };
+
+    // No server configured: nothing to ask, nothing refused.
+    expect(gate.refuseUnconfirmed(dir, passed, now, {})).toBe(passed);
+
+    // The first look starts the clock instead of locking anyone out.
+    expect(gate.refuseUnconfirmed(dir, passed, now, required)).toBe(passed);
+    expect(store.readRevocationCheckedAt(dir)).toBe(now);
+
+    const limit = now + gate.CONFIRM_DAYS * DAY;
+    expect(gate.refuseUnconfirmed(dir, passed, limit, required)).toBe(passed);
+    expect(gate.confirmationDue(dir, limit)).toBe(true);
+    const late = gate.refuseUnconfirmed(dir, passed, limit + 60_000, required);
+    expect(late).toMatchObject({ valid: false, reason: REASON.unconfirmed });
+    expect(messageFor(late.reason)).toMatch(/Connect to the internet/);
+
+    // Any answer from the server restarts the allowance; admin keys never wait.
+    store.recordRevocationCheck(dir, limit);
+    expect(gate.refuseUnconfirmed(dir, passed, limit + 60_000, required)).toBe(passed);
+    const admin = { valid: true, payload: { id: "a", type: "admin" } };
+    expect(gate.refuseUnconfirmed(dir, admin, limit * 2, required)).toBe(admin);
+  });
+
+  it("only moves the confirmation clock forward", () => {
+    store.recordRevocationCheck(dir, 2000);
+    store.recordRevocationCheck(dir, 1000);
+    expect(store.readRevocationCheckedAt(dir)).toBe(2000);
+  });
+
   it("keeps a revoked key's reason once the trial is over", () => {
     const first = Date.now();
     gate.evaluate(dir, first);

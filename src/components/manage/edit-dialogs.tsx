@@ -7,7 +7,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type ComponentProps } from "react";
 import { Loader2, Pencil } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {

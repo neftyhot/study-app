@@ -2,7 +2,7 @@
 
 import { useState, useSyncExternalStore } from "react";
 import { Loader2, LogOut } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { getSetupSnapshot, type SetupSnapshot } from "@/lib/settings-actions";

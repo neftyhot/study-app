@@ -19,6 +19,17 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
   "gemini-3.1-flash-lite": { inputPerMillion: 0.25, outputPerMillion: 1.5 },
   "gemini-3.5-flash-lite": { inputPerMillion: 0.3, outputPerMillion: 2.5 },
   "gemini-2.5-flash": { inputPerMillion: 0.3, outputPerMillion: 2.5 },
+  // Introductory price through December 2026; $1.50 / $7.50 after.
+  "gemini-3.8-flash": { inputPerMillion: 0.75, outputPerMillion: 3.75 },
+  "gemini-3.1-pro-preview": { inputPerMillion: 2, outputPerMillion: 12 },
+  // OpenAI and Anthropic list prices, for the Settings model tiers.
+  "gpt-6-luna": { inputPerMillion: 0.1, outputPerMillion: 0.5 },
+  "gpt-6-sol": { inputPerMillion: 2, outputPerMillion: 10 },
+  "gpt-6-astra": { inputPerMillion: 10, outputPerMillion: 50 },
+  "claude-haiku-4-5-20251001": { inputPerMillion: 1, outputPerMillion: 5 },
+  "claude-sonnet-5": { inputPerMillion: 2, outputPerMillion: 10 },
+  "claude-opus-5-5": { inputPerMillion: 4, outputPerMillion: 20 },
+  "claude-fable-5-1": { inputPerMillion: 10, outputPerMillion: 50 },
 };
 
 export function priceFor(model: string): ModelPrice | undefined {

@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path";
+
 import Link from "next/link";
 
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
@@ -26,6 +28,7 @@ import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/statu
 import { readAppearance, readGradingStrictness } from "@/lib/settings";
 import { db } from "@/db";
 import { installId } from "@/lib/telemetry";
+import { DeleteStatistics } from "@/components/settings/delete-statistics";
 import { getSetupSnapshot } from "@/lib/settings-actions";
 
 export default async function SettingsPage() {
@@ -89,7 +92,7 @@ export default async function SettingsPage() {
           <CardDescription>
             Your cards, files and answers stay on this computer. Usage
             statistics (counts, time in the app and AI usage — never content)
-            are sent to the developer every 15 minutes; this is required to use
+            are sent to the developer about once an hour; this is required to use
             Megan Study.
           </CardDescription>
         </CardHeader>
@@ -159,6 +162,9 @@ export default async function SettingsPage() {
                     {installId(db)}
                   </code>
                 </dd>
+                <dd className="pt-1">
+                  <DeleteStatistics />
+                </dd>
               </div>
               <div className="space-y-1">
                 <dt className="font-medium">Where your data lives</dt>
@@ -168,6 +174,23 @@ export default async function SettingsPage() {
                       {path}
                     </span>
                   ))}
+                  <span className="block pt-1">
+                    The app keeps a copy of your database each day for the last
+                    week, in{" "}
+                    <span className="font-mono text-xs break-all">
+                      {join(dirname(resolveDbPath()), "backups")}
+                    </span>
+                    .
+                  </span>
+                  {process.env.STUDY_APP_CRASH_LOG ? (
+                    <span className="block pt-1">
+                      If the app crashes, the details are written to{" "}
+                      <span className="font-mono text-xs break-all">
+                        {process.env.STUDY_APP_CRASH_LOG}
+                      </span>
+                      . Nothing is sent; attach it if you report a problem.
+                    </span>
+                  ) : null}
                   <span className="block pt-1">
                     Everything stays on this computer. Use “Export” in a
                     deck&apos;s ••• menu to take a copy elsewhere.

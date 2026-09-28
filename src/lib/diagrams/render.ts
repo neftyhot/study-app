@@ -17,6 +17,7 @@ import JSZip from "jszip";
 
 import type { Db } from "@/db/client";
 import { sourceFiles, sourceSlides } from "@/db/schema";
+import { deckPictures, WHOLE_SLIDE, wholeSlidePicture } from "@/lib/ingest/slide-render";
 import { absolutePathFor, storedPath } from "@/lib/ingest/storage";
 
 /** Big enough to read a small label, small enough to send over localhost. */
@@ -46,7 +47,14 @@ export async function slideImage(db: Db, slideId: string): Promise<SlideImage> {
 
   const { slide, file } = row;
 
-  if (slide.imagePath) {
+  // A PowerPoint slide cached as its largest picture is redrawn whole once
+  // the deck can be drawn; the picture stays the fallback.
+  const upgradable =
+    file.fileType === "pptx" &&
+    !slide.imagePath?.endsWith(WHOLE_SLIDE) &&
+    (await deckPictures(db, file)) !== null;
+
+  if (slide.imagePath && !upgradable) {
     try {
       return { path: slide.imagePath, data: await readFile(absolutePathFor(slide.imagePath)) };
     } catch {
@@ -62,14 +70,20 @@ export async function slideImage(db: Db, slideId: string): Promise<SlideImage> {
 
   const work = (async () => {
     const source = await readFile(absolutePathFor(file.rawPath));
+    const whole =
+      file.fileType === "pptx"
+        ? await wholeSlidePicture(db, file, slide, renderPdfPage)
+        : null;
     const image =
       file.fileType === "pdf"
         ? await renderPdfPage(source, slide.index)
-        : file.fileType === "pptx"
-          ? await extractPptxImage(source, slide.index)
-          : file.fileType === "image"
-            ? source
-            : null;
+        : whole
+          ? whole
+          : file.fileType === "pptx"
+            ? await extractPptxImage(source, slide.index)
+            : file.fileType === "image"
+              ? source
+              : null;
 
     if (!image) {
       throw new RenderError(
@@ -77,7 +91,7 @@ export async function slideImage(db: Db, slideId: string): Promise<SlideImage> {
       );
     }
 
-    const path = storedPath("rendered", file.examId, `${slide.id}.png`);
+    const path = storedPath("rendered", file.examId, `${slide.id}${whole ? WHOLE_SLIDE : ".png"}`);
     const absolute = absolutePathFor(path);
     await mkdir(dirname(absolute), { recursive: true });
     await writeFile(absolute, image);

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Cpu, Loader2, TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

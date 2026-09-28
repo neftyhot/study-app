@@ -118,6 +118,29 @@ describe("askTutor", () => {
     expect(requests[0].turns).toHaveLength(MAX_TURNS);
     expect(requests[0].turns.at(-1)?.text).toBe(`turn ${many.length - 1}`);
   });
+
+  it("keeps the opening page and the newest pictures, and drops the ones between", async () => {
+    const { provider: llm, requests } = provider({ reply: "ok", beyondMaterial: false });
+    const turns = Array.from({ length: 10 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "model") as "user" | "model",
+      text: `turn ${i}`,
+      images: [IMAGE],
+    }));
+
+    await askTutor(llm, turns);
+
+    const sent = requests[0].turns.map((turn) => turn.images?.length ?? 0);
+    expect(sent).toEqual([1, 0, 0, 0, 0, 0, 1, 1, 1, 1]);
+  });
+
+  it("puts the deck's material in the system prompt", async () => {
+    const { provider: llm, requests } = provider({ reply: "ok", beyondMaterial: false });
+
+    await askTutor(llm, [{ role: "user", text: "?" }], "[Lecture 3 — Slide 4] ADH");
+
+    expect(requests[0].system).toContain("THE STUDENT'S MATERIAL");
+    expect(requests[0].system).toContain("[Lecture 3 — Slide 4] ADH");
+  });
 });
 
 describe("extractCards", () => {

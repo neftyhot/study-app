@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import {
   BookOpen,
   ClipboardCheck,
+  FolderOpen,
   Layers,
   MessageCircleQuestion,
   Upload,
@@ -272,6 +273,16 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       )}
 
       <div className="flex flex-wrap gap-2">
+        {stats.sourceFiles > 0 ? (
+          <Hint label="Add, remove or replace the slides and notes this deck is built from">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/exams/${examId}/sources`}>
+                <FolderOpen className="size-4" />
+                Your files ({stats.sourceFiles})
+              </Link>
+            </Button>
+          </Hint>
+        ) : null}
         {drills.length > 0 ? (
           <Hint label="Label the parts of diagrams from your slides">
             <Button asChild variant="outline" size="sm">

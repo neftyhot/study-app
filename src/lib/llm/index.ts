@@ -3,16 +3,17 @@ import {
   readApiKey,
   readDownload,
   readLocalModel,
+  readModelTier,
   readProvider,
+  type ApiProviderId,
   type ProviderId,
 } from "@/lib/settings";
 
 import { createAnthropicProvider } from "./anthropic";
-import {
-  createGeminiProvider,
-  DEFAULT_GEMINI_BULK_MODEL,
-  DEFAULT_GEMINI_MODEL,
-} from "./gemini";
+import { providerChain } from "./fallback";
+import { createGeminiProvider } from "./gemini";
+import { modelFor } from "./models";
+import { modelChain } from "./tiers";
 import { createLocalProvider } from "./local";
 import { createOpenAiProvider } from "./openai";
 import { meterProvider, type AuthMode } from "@/lib/usage";
@@ -30,6 +31,9 @@ export { createAnthropicProvider, DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 export { createOpenAiProvider, DEFAULT_OPENAI_MODEL } from "./openai";
 export { createLocalProvider, unloadLocalModel } from "./local";
 export * from "./catalog";
+export * from "./tiers";
+export { classifyFailure, providerChain } from "./fallback";
+export { DEFAULT_GEMINI_PRIMER_MODEL, modelFor, refreshRemoteModels } from "./models";
 export {
   startModelDownload,
   clearDownload,
@@ -55,12 +59,6 @@ export {
  */
 export type ProviderRole = "bulk" | "interactive" | "primer";
 
-/**
- * The Primer is one long read of the whole deck, so it goes to the cheapest
- * model that follows a schema; the bulk model covers a key the lite tier
- * refuses.
- */
-export const DEFAULT_GEMINI_PRIMER_MODEL = "gemini-2.5-flash-lite";
 
 /**
  * The model a bulk run will use, without constructing a provider — so the
@@ -69,7 +67,7 @@ export const DEFAULT_GEMINI_PRIMER_MODEL = "gemini-2.5-flash-lite";
 export function bulkModelName(): string | null {
   const provider = readProvider();
   if (provider !== "gemini") return null;
-  return process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL;
+  return modelFor("geminiBulk");
 }
 
 export function getProvider(
@@ -107,25 +105,33 @@ function resolveProvider(
       };
     }
 
-    case "anthropic":
+    case "anthropic": {
+      const apiKey = readApiKey("anthropic");
       return {
-        provider: createAnthropicProvider({ apiKey: readApiKey("anthropic") }),
+        provider: chainFor("anthropic", modelFor("anthropic"), role, (model) =>
+          createAnthropicProvider({ apiKey, model }),
+        ),
         authMode: keySource("ANTHROPIC_API_KEY"),
       };
+    }
 
-    case "openai":
+    case "openai": {
+      const apiKey = readApiKey("openai");
       return {
-        provider: createOpenAiProvider({ apiKey: readApiKey("openai") }),
+        provider: chainFor("openai", modelFor("openai"), role, (model) =>
+          createOpenAiProvider({ apiKey, model }),
+        ),
         authMode: keySource("OPENAI_API_KEY"),
       };
+    }
 
     case "gemini":
     default: {
       const credentials = geminiCredentials();
-      const gemini = createGeminiProvider({
-        ...credentials,
-        ...geminiModels(role),
-      });
+      const gemini = chainFor("gemini", geminiModel(role), role, (model) =>
+        // The chain does the falling back, so each link is one model only.
+        createGeminiProvider({ ...credentials, model }),
+      );
       return {
         provider: gemini,
         authMode:
@@ -137,24 +143,31 @@ function resolveProvider(
   }
 }
 
-function geminiModels(role: ProviderRole): {
-  model?: string;
-  fallbackModel?: string;
-} {
+function geminiModel(role: ProviderRole): string {
   switch (role) {
     case "bulk":
-      return {
-        model: process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL,
-        fallbackModel: process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL,
-      };
+      return modelFor("geminiBulk");
     case "primer":
-      return {
-        model: process.env.GEMINI_PRIMER_MODEL ?? DEFAULT_GEMINI_PRIMER_MODEL,
-        fallbackModel: process.env.GEMINI_BULK_MODEL ?? DEFAULT_GEMINI_BULK_MODEL,
-      };
+      return modelFor("geminiPrimer");
     default:
-      return {};
+      return modelFor("gemini");
   }
+}
+
+/**
+ * The student's chosen model, then that provider's cheaper models, so a
+ * retired model, a plan that lacks it or a spent quota degrades the answer
+ * rather than failing it. Deck generation waits out per-minute limits
+ * (generate/retry.ts) instead of finishing on a weaker model.
+ */
+function chainFor(
+  provider: ApiProviderId,
+  chosen: string,
+  role: ProviderRole,
+  build: (model: string) => LlmProvider,
+): LlmProvider {
+  const models = modelChain(provider, readModelTier(provider), chosen);
+  return providerChain(models.map(build), { fallBackOnRate: role !== "bulk" });
 }
 
 function keySource(variable: string): AuthMode {

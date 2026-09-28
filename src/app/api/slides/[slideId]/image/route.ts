@@ -8,7 +8,7 @@
 import { db } from "@/db";
 import { RenderError, slideImage } from "@/lib/diagrams/render";
 
-export const maxDuration = 60;
+export const maxDuration = 200;
 
 export async function GET(
   _request: Request,
@@ -22,9 +22,10 @@ export async function GET(
     return new Response(image.data as BodyInit, {
       headers: {
         "content-type": "image/png",
-        // The picture of a page never changes once rendered, and the app is
-        // local, so this is cached hard rather than revalidated.
-        "cache-control": "private, max-age=31536000, immutable",
+        // A slide's picture can improve after the fact (the whole slide
+        // replacing its largest image once the deck is drawn), and a local
+        // read is cheap, so the browser always asks again.
+        "cache-control": "private, no-cache",
       },
     });
   } catch (error) {

@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { PrivacyPolicyText } from "@/components/privacy/privacy-policy";
 import { usePurchase } from "@/components/settings/purchase-license";

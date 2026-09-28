@@ -17,7 +17,7 @@ import {
   type StructuredRequest,
 } from "./types";
 
-export const DEFAULT_OPENAI_MODEL = "gpt-4.1";
+export const DEFAULT_OPENAI_MODEL = "gpt-6-sol";
 
 /**
  * Rewrites a schema for strict mode.

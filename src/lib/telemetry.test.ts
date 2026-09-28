@@ -10,12 +10,12 @@ describe("isReportDue", () => {
     expect(isReportDue(null, null, "1/1/10", now)).toBe(true);
   });
 
-  it("sends every 15 minutes even when nothing changed", () => {
+  it("sends hourly even when nothing changed", () => {
     expect(isReportDue(ago(REPORT_EVERY_MS - 1000), "1/1/10", "1/1/10", now)).toBe(false);
     expect(isReportDue(ago(REPORT_EVERY_MS), "1/1/10", "1/1/10", now)).toBe(true);
   });
 
-  it("sends a minute after the card count changes", () => {
+  it("sends ten minutes after the card count changes", () => {
     expect(isReportDue(ago(CHANGE_MIN_GAP_MS - 1000), "1/1/89", "1/2/230", now)).toBe(false);
     expect(isReportDue(ago(CHANGE_MIN_GAP_MS), "1/1/89", "1/2/230", now)).toBe(true);
   });

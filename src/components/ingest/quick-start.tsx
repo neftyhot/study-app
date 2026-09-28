@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState, type DragEvent } from "react";
 import { FileUp, Loader2, Sparkles, X } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -37,11 +37,11 @@ const NEW_SUBJECT = "__new__";
 type Picked = { file: File; role: Role };
 
 /**
- * The home screen's one big action: drop slides, press Generate Study Set.
+ * The home screen's one big action: drop slides, press Make Deck.
  *
- * Makes the subject and deck, uploads each file under its role, starts card
- * generation, and lands on the deck — the same steps a student could take by
- * hand, done in order.
+ * Makes the subject and deck, uploads each file under its role, and lands on
+ * the setup screen, where the student picks how many cards and from which
+ * files before anything is generated.
  */
 export function QuickStart({
   courses,
@@ -128,22 +128,9 @@ export function QuickStart({
         return;
       }
 
-      setBusy("Starting your flashcards…");
-      const response = await fetch(`/api/exams/${exam.id}/generate`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode: "append" }),
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        toast.error(
-          payload.error ??
-            "Your files are in, but the flashcards couldn't start. Try again from the deck.",
-        );
-      } else {
-        toast.success("Making your study set. It keeps going if you look around.");
-      }
-      router.push(`/exams/${exam.id}`);
+      // Nothing is generated yet: the setup screen asks how many cards and
+      // from which files first.
+      router.push(`/exams/${exam.id}/setup`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Something went wrong");
       if (examId) router.push(`/exams/${examId}`);
@@ -291,7 +278,7 @@ export function QuickStart({
           ) : (
             <Sparkles className="size-5" />
           )}
-          {busy ?? "Generate Study Set"}
+          {busy ?? "Make Deck"}
         </Button>
       </CardContent>
     </Card>

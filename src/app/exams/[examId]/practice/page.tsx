@@ -20,6 +20,7 @@ import {
   timeRemaining,
 } from "@/lib/exam/session";
 import { OWN_CARDS } from "@/lib/exam/paper";
+import { readGradingStrictness } from "@/lib/settings";
 import type { SourceOption } from "@/lib/generate/selection";
 import {
   getExam,
@@ -108,6 +109,7 @@ export default async function PracticePage(
         sources={sources}
         topics={topics}
         cardCount={stats.flashcards}
+        defaultStrictness={readGradingStrictness()}
         paper={
           open
             ? {

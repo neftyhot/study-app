@@ -6,10 +6,9 @@
  * does.
  *
  * API keys are stored in the local database in the user's own application-data
- * directory. They are not encrypted — doing that properly needs an OS keychain,
- * and pretending otherwise would be worse than saying so — but they never cross
- * to the browser: callers get only whether a key is present and its last four
- * characters.
+ * directory, encrypted with the OS keychain in the desktop app (see
+ * `secret-box.ts`). They never cross to the browser: callers get only whether a
+ * key is present and its last four characters.
  */
 import { eq } from "drizzle-orm";
 
@@ -18,6 +17,7 @@ import { appSettings } from "@/db/schema";
 import {
   DEFAULT_APPEARANCE,
   isThemePreference,
+  migrateThemeId,
   sanitizeAppearance,
   type Appearance,
   type ThemePreference,
@@ -28,9 +28,12 @@ import {
   isStrictness,
   type Strictness,
 } from "@/lib/grade/strictness";
+import { isModelLevel, type ModelLevel } from "@/lib/llm/tiers";
 import { PRIVACY_POLICY_VERSION } from "@/lib/privacy-policy";
+import { canSeal, isSealed, seal, unseal } from "@/lib/secret-box";
 import {
   PROVIDERS,
+  type ApiProviderId,
   type DownloadState,
   type KeyStatus,
   type ProviderId,
@@ -96,6 +99,21 @@ export function writeSetting(key: string, value: string, db?: Db) {
     .run();
 }
 
+/* ------------------------------------------------------------ Model tier */
+
+const tierKey = (provider: ApiProviderId) => `model_tier_${provider}`;
+
+/** Standard unless the student chose the thinking model for this provider. */
+export function readModelTier(provider: ApiProviderId, db?: Db): ModelLevel {
+  const value = readSetting(tierKey(provider), db);
+  return isModelLevel(value) ? value : "standard";
+}
+
+export function writeModelTier(provider: ApiProviderId, tier: ModelLevel, db?: Db) {
+  if (!isModelLevel(tier)) return;
+  writeSetting(tierKey(provider), tier, db);
+}
+
 /* -------------------------------------------------------------- Grading */
 
 const STRICTNESS_KEY = "grading_strictness";
@@ -136,7 +154,7 @@ const THEME_KEY = "theme";
 
 /** The saved style, or null when none has been saved here yet. */
 export function readTheme(db?: Db): ThemePreference | null {
-  const value = readSetting(THEME_KEY, db);
+  const value = migrateThemeId(readSetting(THEME_KEY, db));
   return isThemePreference(value) ? value : null;
 }
 
@@ -156,7 +174,19 @@ export function readApiKey(
   // The environment wins, so a developer's .env.local still overrides
   // whatever a packaged app happens to have saved.
   const fromEnv = process.env[ENV_KEY[provider]]?.trim();
-  return fromEnv || readSetting(KEY_SETTING[provider], db) || undefined;
+  if (fromEnv) return fromEnv;
+  const stored = readSetting(KEY_SETTING[provider], db);
+  if (!stored) return undefined;
+  const key = unseal(stored);
+  // A key saved before encryption existed is sealed the first time it's read.
+  if (key && !isSealed(stored) && canSeal()) {
+    try {
+      writeSetting(KEY_SETTING[provider], seal(key), db);
+    } catch {
+      // Still usable as it is; try again next read.
+    }
+  }
+  return key || undefined;
 }
 
 export function writeApiKey(
@@ -164,7 +194,7 @@ export function writeApiKey(
   key: string,
   db?: Db,
 ) {
-  writeSetting(KEY_SETTING[provider], key, db);
+  writeSetting(KEY_SETTING[provider], seal(key.trim()), db);
 }
 
 export function apiKeyStatus(

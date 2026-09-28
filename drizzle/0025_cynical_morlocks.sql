@@ -1,0 +1,1 @@
+ALTER TABLE `primer_sections` ADD `extra_examples` text;

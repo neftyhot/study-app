@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Loader2, Undo2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";

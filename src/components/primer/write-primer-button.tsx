@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import type { PrimerRun } from "@/lib/primer/runs";
+import { useSkipLogistics } from "@/lib/skip-logistics-pref";
 
 const STAGE_LABEL: Record<PrimerRun["stage"], string> = {
   explaining: "Reading the slides",
@@ -29,6 +32,8 @@ export function WritePrimerButton({
   const [run, setRun] = useState<PrimerRun | null>(null);
   const [starting, setStarting] = useState(false);
   const [watching, setWatching] = useState(false);
+  const [skipLogistics, setSkipLogistics] = useSkipLogistics();
+  const toggleId = `skip-logistics-${depth}-${rewrite ? "rewrite" : "write"}`;
 
   const fetchRun = useCallback(async () => {
     const response = await fetch(`/api/exams/${examId}/primer?depth=${depth}`, { cache: "no-store" });
@@ -72,7 +77,7 @@ export function WritePrimerButton({
       const response = await fetch(`/api/exams/${examId}/primer`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ depth }),
+        body: JSON.stringify({ depth, skipLogistics }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok && response.status !== 409) {
@@ -104,9 +109,22 @@ export function WritePrimerButton({
   }
 
   return (
-    <Button variant={rewrite ? "outline" : "default"} disabled={starting} onClick={() => void start()}>
-      {starting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-      {rewrite ? "Rewrite" : "Write study guide"}
-    </Button>
+    <div className="flex flex-col items-start gap-2">
+      <Button variant={rewrite ? "outline" : "default"} disabled={starting} onClick={() => void start()}>
+        {starting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
+        {rewrite ? "Rewrite" : "Write study guide"}
+      </Button>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={toggleId}
+          checked={skipLogistics}
+          disabled={starting}
+          onCheckedChange={(value) => setSkipLogistics(value === true)}
+        />
+        <Label htmlFor={toggleId} className="text-muted-foreground text-xs font-normal">
+          Ignore announcements and syllabus info
+        </Label>
+      </div>
+    </div>
   );
 }

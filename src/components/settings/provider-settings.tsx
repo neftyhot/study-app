@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { ExperimentalLocalSection } from "@/components/settings/experimental-local";
 import { GoogleSignIn } from "@/components/settings/google-sign-in";
 import { ModelPicker } from "@/components/settings/model-picker";
+import { ModelLevelCard } from "@/components/settings/upgrade-guide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,6 +135,19 @@ export function ProviderSettings({
             </Card>
           ) : null}
           <ApiKeySection snapshot={state} onChange={setState} />
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Model</CardTitle>
+              <CardDescription>
+                Standard suits most courses. Thinking reasons more carefully
+                through hard material, and needs billing on your{" "}
+                {PROVIDER_LABELS[state.provider]} account.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ModelLevelCard snapshot={state} onChange={setState} />
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -274,7 +288,8 @@ function ApiKeySection({
           />
           <p className="text-muted-foreground text-xs">
             Stored in this app&apos;s local database on this machine, and sent
-            only to {PROVIDER_LABELS[provider]}. It is not encrypted at rest.
+            only to {PROVIDER_LABELS[provider]}. The desktop app encrypts it
+            with your computer&apos;s keychain.
           </p>
         </div>
 

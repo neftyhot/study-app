@@ -1,6 +1,6 @@
 {
   "name": "megan-study",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -22,6 +22,7 @@
     "electron:build": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder",
     "electron:pack": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder --dir",
     "build:win": "next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=x64 && node scripts/compile-main.mjs --platform=win32 --arch=x64 && electron-builder --win --x64",
+    "build:win-arm64": "next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=arm64 && node scripts/compile-main.mjs --platform=win32 --arch=arm64 && electron-builder --win --arm64",
     "electron:compile": "node scripts/compile-main.mjs",
     "license-manager:dev": "electron tools/license-manager/main.js",
     "license-manager:build": "electron-builder --config tools/license-manager/electron-builder.yml --mac --arm64",
@@ -31,6 +32,7 @@
     "coverage:bench": "tsx --env-file=.env.local scripts/coverage-bench.ts"
   },
   "dependencies": {
+    "@aiden0z/pptx-renderer": "^1.3.0",
     "@anthropic-ai/sdk": "^0.127.0",
     "@google/genai": "^2.23.0",
     "@napi-rs/canvas": "^1.0.9",
@@ -121,6 +123,9 @@
       ],
       "category": "public.app-category.education"
     },
+    "dmg": {
+      "artifactName": "Megan-Study-${version}-${arch}.${ext}"
+    },
     "win": {
       "target": [
         {
@@ -145,10 +150,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Megan Study",
-      "artifactName": "MeganStudy-Setup-${version}.${ext}"
+      "artifactName": "MeganStudy-Setup-${version}-${arch}.${ext}"
     },
     "portable": {
-      "artifactName": "MeganStudy-Portable-${version}.${ext}"
+      "artifactName": "MeganStudy-Portable-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": [

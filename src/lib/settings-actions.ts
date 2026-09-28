@@ -24,14 +24,18 @@ import {
   markSetupComplete,
   readDownload,
   readLocalModel,
+  readModelTier,
   readProvider,
   writeApiKey,
+  writeModelTier,
   writeAppearance,
   writeGradingStrictness,
   writeProvider,
   writeTheme,
+  type ApiProviderId,
   type ProviderId,
 } from "@/lib/settings";
+import { isModelLevel, type ModelLevel } from "@/lib/llm/tiers";
 import { isStrictness } from "@/lib/grade/strictness";
 
 export type SetupSnapshot = {
@@ -45,6 +49,8 @@ export type SetupSnapshot = {
   /** Installed memory, so the wizard can recommend a size that will run. */
   totalRamGb: number;
   recommendedModelId: string;
+  /** Standard or Thinking, for each hosted provider. */
+  levels: Record<ApiProviderId, ModelLevel>;
 };
 
 export async function getSetupSnapshot(): Promise<SetupSnapshot> {
@@ -59,7 +65,21 @@ export async function getSetupSnapshot(): Promise<SetupSnapshot> {
     answerable: isAnswerable(db),
     totalRamGb,
     recommendedModelId: recommendedModel(totalRamGb).id,
+    levels: {
+      gemini: readModelTier("gemini", db),
+      openai: readModelTier("openai", db),
+      anthropic: readModelTier("anthropic", db),
+    },
   };
+}
+
+export async function setModelLevel(provider: ApiProviderId, level: ModelLevel) {
+  if (!isModelLevel(level) || !["gemini", "openai", "anthropic"].includes(provider)) {
+    throw new Error("Unknown model choice.");
+  }
+  writeModelTier(provider, level, db);
+  revalidatePath("/settings");
+  return getSetupSnapshot();
 }
 
 export async function saveApiKey(

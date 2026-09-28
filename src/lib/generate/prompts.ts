@@ -16,6 +16,7 @@ import {
   type DensityMode,
 } from "./density";
 import type { GenerationDetail } from "./schemas";
+import { SKIP_LOGISTICS_RULE } from "@/lib/logistics";
 
 /** Stable, short token the model cites instead of a UUID. */
 export function citationToken(slide: Pick<SourceSlide, "index">) {
@@ -308,6 +309,8 @@ export type PromptOptions = {
    * repeat that gets through.
    */
   covered?: string[];
+  /** Leave announcements and course admin out. See lib/logistics.ts. */
+  skipLogistics?: boolean;
 };
 
 /** How many existing questions a prompt lists, at most. */
@@ -315,6 +318,10 @@ export const MAX_COVERED = 200;
 
 function applicationSection(options?: PromptOptions): string {
   return options?.includeApplication ? `\n${APPLICATION_RULES}\n` : "";
+}
+
+function logisticsSection(options?: PromptOptions): string {
+  return options?.skipLogistics ? `\n${SKIP_LOGISTICS_RULE}\n` : "";
 }
 
 function coveredSection(options?: PromptOptions): string {
@@ -337,7 +344,7 @@ export function fullCoveragePrompt(
 Work concept by concept. For each concept, produce the full set of atomic
 cards its facets call for, then any integration cards that connect it to other
 concepts in this material.
-${applicationSection(options)}${coveredSection(options)}
+${applicationSection(options)}${logisticsSection(options)}${coveredSection(options)}
 SLIDES
 ${renderSlides(slides)}`;
 }
@@ -379,7 +386,7 @@ Set each card's objective to the token of the objective it answers, e.g. "O2".
 These are only the objectives these slides are likely to answer, and other
 slides will be asked about the rest. If the slides do not contain what an
 objective asks for, do not invent it — make no card for it.
-${applicationSection(options)}${coveredSection(options)}
+${applicationSection(options)}${logisticsSection(options)}${coveredSection(options)}
 
 STUDY-GUIDE OBJECTIVES
 ${list}

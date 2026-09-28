@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { Copy, Layers, Loader2, RefreshCw, Sparkles } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/lib/notify";
 
 import { setIncludeApplication, setScopeMode } from "@/lib/actions";
 import {
@@ -19,6 +19,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useSkipLogistics } from "@/lib/skip-logistics-pref";
 import {
   Dialog,
   DialogContent,
@@ -115,7 +116,13 @@ export function GeneratePanel({
   bulkModel = null,
   measured,
   isAdmin = false,
+  variant = "panel",
 }: {
+  /**
+   * "setup" is the first screen after a new deck is made: nothing has been
+   * generated yet, and starting a run goes on to the deck to watch it.
+   */
+  variant?: "panel" | "setup";
   examId: string;
   scopeMode: "files" | "objectives";
   slideCount: number;
@@ -195,6 +202,7 @@ export function GeneratePanel({
     };
   }, [running, examId, router]);
   const [application, setApplication] = useState(includeApplication);
+  const [skipLogistics, setSkipLogistics] = useSkipLogistics();
   const [options, setOptions] = useState<OptionsState>(() => ({
     density,
     ratio: densityRatio ?? ratioFor(density, densityRatio),
@@ -210,7 +218,7 @@ export function GeneratePanel({
       const response = await fetch(`/api/exams/${examId}/generate`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ mode, ...selection() }),
+        body: JSON.stringify({ mode, skipLogistics, ...selection() }),
       });
       const payload = await response.json();
 
@@ -243,6 +251,7 @@ export function GeneratePanel({
       }
 
       toast.success("Generating — this keeps running if you navigate away");
+      if (variant === "setup") router.push(`/exams/${examId}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Generation failed");
     } finally {
@@ -287,7 +296,9 @@ export function GeneratePanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Generate flashcards</CardTitle>
+        <CardTitle className="text-base">
+          {variant === "setup" ? "Make your flashcards" : "Generate flashcards"}
+        </CardTitle>
         <CardDescription>
           Every card is checked against its slide before being saved — a card
           whose excerpt is not in your material is discarded, not stored.
@@ -323,7 +334,9 @@ export function GeneratePanel({
               ? `Making cards… ${job.batchIndex} of ${job.batchCount}`
               : busy || running
                 ? "Making cards…"
-                : "Generate"}
+                : variant === "setup"
+                  ? "Make flashcards"
+                  : "Generate"}
           </Button>
         </div>
 
@@ -353,6 +366,24 @@ export function GeneratePanel({
               directional (&quot;what happens when Y rises?&quot;), and scenario
               cards on top of the factual ones. They still have to quote your
               material.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-2">
+          <Checkbox
+            id="skip-logistics"
+            checked={skipLogistics}
+            disabled={disabled}
+            onCheckedChange={(value) => setSkipLogistics(value === true)}
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor="skip-logistics" className="text-sm font-normal">
+              Ignore announcements and syllabus info
+            </Label>
+            <p className="text-muted-foreground text-xs">
+              No cards about due dates, exam times, office hours, grading or
+              other class admin — even when a slide mentions them.
             </p>
           </div>
         </div>

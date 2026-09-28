@@ -17,14 +17,15 @@ export const THEME_IDS = [
   "dark",
   "bubble",
   "midnight",
-  "sepia",
+  "blossom",
+  "rosewood",
+  "lavender",
+  "plum",
   "mint",
-  "sage",
   "forest",
   "paper",
   "slate",
   "solarized",
-  "nord",
   "contrast",
 ] as const;
 export type ThemeId = (typeof THEME_IDS)[number];
@@ -96,15 +97,46 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     cardStyle: "shadow",
     palette: { background: "#0a092d", foreground: "#f6f7fb", card: "#2e3856", primary: "#6a78ff" },
   },
-  sepia: {
-    id: "sepia",
-    label: "Sepia",
-    blurb: "Warm paper, for long reading.",
+
+  blossom: {
+    id: "blossom",
+    label: "Blossom",
+    blurb: "Soft cherry-blossom pink, with rounded cards.",
     dark: false,
-    radius: 0.5,
-    font: "serif",
+    radius: 1,
+    font: "rounded",
+    cardStyle: "shadow",
+    palette: { background: "#fdf2f6", foreground: "#3d1a2b", card: "#ffffff", primary: "#c42a68" },
+  },
+  rosewood: {
+    id: "rosewood",
+    label: "Rosewood",
+    blurb: "Deep berry with a bright pink accent, for night.",
+    dark: true,
+    radius: 1,
+    font: "rounded",
+    cardStyle: "shadow",
+    palette: { background: "#240c19", foreground: "#fbe9f1", card: "#3a1729", primary: "#ff7eb6" },
+  },
+  lavender: {
+    id: "lavender",
+    label: "Lavender",
+    blurb: "Pale lilac and violet ink, calm and clean.",
+    dark: false,
+    radius: 0.75,
+    font: "sans",
     cardStyle: "outline",
-    palette: { background: "#f4ecd8", foreground: "#3b2f1e", card: "#fbf6ea", primary: "#8a5a2b" },
+    palette: { background: "#f6f3fd", foreground: "#2a2143", card: "#fdfcff", primary: "#6a45d6" },
+  },
+  plum: {
+    id: "plum",
+    label: "Plum",
+    blurb: "Rich dark purple with a soft violet glow.",
+    dark: true,
+    radius: 1,
+    font: "rounded",
+    cardStyle: "shadow",
+    palette: { background: "#1b1228", foreground: "#f0eafb", card: "#2c1f40", primary: "#b995ff" },
   },
   mint: {
     id: "mint",
@@ -116,16 +148,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     cardStyle: "shadow",
     palette: { background: "#effaf4", foreground: "#12352a", card: "#ffffff", primary: "#0d8a5c" },
   },
-  sage: {
-    id: "sage",
-    label: "Sage",
-    blurb: "Muted herb green, calm for long sessions.",
-    dark: false,
-    radius: 0.75,
-    font: "sans",
-    cardStyle: "outline",
-    palette: { background: "#eef1e8", foreground: "#26352a", card: "#f8faf4", primary: "#4f6e44" },
-  },
+
   forest: {
     id: "forest",
     label: "Forest",
@@ -166,16 +189,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     cardStyle: "outline",
     palette: { background: "#fdf6e3", foreground: "#073642", card: "#fffbef", primary: "#165580" },
   },
-  nord: {
-    id: "nord",
-    label: "Nord Night",
-    blurb: "Arctic blue-grey with frost accents.",
-    dark: true,
-    radius: 0.625,
-    font: "sans",
-    cardStyle: "outline",
-    palette: { background: "#2e3440", foreground: "#eceff4", card: "#3b4252", primary: "#88c0d0" },
-  },
+
   contrast: {
     id: "contrast",
     label: "High Contrast",
@@ -189,11 +203,22 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
 };
 
 /** Themes held to WCAG AAA: 7:1 for every text colour, not just 4.5:1. */
-export const AAA_THEME_IDS = ["paper", "slate", "solarized", "nord", "contrast"] as const satisfies readonly ThemeId[];
+export const AAA_THEME_IDS = ["paper", "slate", "solarized", "contrast"] as const satisfies readonly ThemeId[];
 export const AAA_TEXT_CONTRAST = 7;
 
 export function isThemeId(value: unknown): value is ThemeId {
   return typeof value === "string" && (THEME_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Styles that were merged into a near-twin. A saved or stored old id reads as
+ * the style that replaced it, so nobody is dropped back to Light.
+ */
+export const LEGACY_THEMES: Record<string, ThemeId> = { sepia: "paper", sage: "mint", nord: "slate" };
+
+/** A stored style id, with retired ids moved to their replacement. */
+export function migrateThemeId(value: unknown): unknown {
+  return typeof value === "string" && value in LEGACY_THEMES ? LEGACY_THEMES[value] : value;
 }
 
 /** What the student picked: a style, or "follow my computer". */
@@ -425,7 +450,8 @@ export function sanitizeAppearance(raw: unknown): Appearance {
   const colors: Appearance["colors"] = {};
 
   if (input.colors && typeof input.colors === "object") {
-    for (const [theme, value] of Object.entries(input.colors as Record<string, unknown>)) {
+    for (const [stored, value] of Object.entries(input.colors as Record<string, unknown>)) {
+      const theme = migrateThemeId(stored);
       if (!isThemeId(theme) || !value || typeof value !== "object") continue;
       const picked: ColorOverrides = {};
       for (const key of ["background", "foreground", "card", "primary"] as const) {

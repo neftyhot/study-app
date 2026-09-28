@@ -15,27 +15,27 @@ import {
   type ThinkingEffort,
 } from "./types";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+/**
+ * The model everything on Gemini runs on: the tutor, grading, diagrams and
+ * bulk card generation alike.
+ *
+ * Every Flash model is free on the Gemini free tier, and one student studying
+ * one deck stays well inside its daily limits, so there is nothing to save by
+ * sending the bulk work to Flash-Lite. A key billed per token pays more for
+ * this (see pricing.ts); GEMINI_MODEL and GEMINI_BULK_MODEL override it, and
+ * the developer's server can name another without a release (models.ts).
+ */
+export const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
+/** Bulk card generation: the same Flash model, not Flash-Lite. */
+export const DEFAULT_GEMINI_BULK_MODEL = DEFAULT_GEMINI_MODEL;
 
 /**
- * The model bulk card generation runs on.
- *
- * Bulk extraction is copying structure out of slides the model is shown, not
- * reasoning about them, and it is where nearly all of a deck's tokens go —
- * so it runs on the cheapest model that still honours a response schema.
- * Everything a student waits on interactively (the tutor, diagrams, a single
- * card's explanation, grading) stays on `DEFAULT_GEMINI_MODEL`.
- *
- * Why not gemini-2.5-flash-lite, which is cheaper still ($0.10/$0.40)?
- * Google closed it to API keys created after its successor shipped: it
- * answers 404 "no longer available to new users", which is what every
- * student installing the app today would get. 3.1 Flash-Lite is the cheapest
- * model a new key can call ($0.25/$1.50 per million tokens), and measured on
- * a real chapter it cost about a fifth of gemini-2.5-flash per run.
- *
- * GEMINI_BULK_MODEL overrides it, for an older key that can still reach 2.5.
+ * Where a request goes when the chosen model is closed to this key: gone for
+ * new users (404), or given no free-tier quota at all ("limit: 0"). 2.5 Flash
+ * is now closed to new keys; 3.5 Flash is on every key's free tier.
  */
-export const DEFAULT_GEMINI_BULK_MODEL = "gemini-3.1-flash-lite";
+export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
 
 export function createGeminiProvider(options?: {
   apiKey?: string;
@@ -76,6 +76,10 @@ export function createGeminiProvider(options?: {
     try {
       return await request(attempted);
     } catch (error) {
+      // A thinking level this model refuses: remember it and ask again on
+      // the same model, which then gets the nearest level it does accept.
+      if (noteRefusedThinking(attempted, error)) return call(request);
+
       const fallback = options?.fallbackModel;
       if (!fallback || fallback === attempted || !isModelUnavailable(error)) {
         throw error;
@@ -120,6 +124,7 @@ export function createGeminiProvider(options?: {
               responseJsonSchema: request.schema,
               temperature: request.temperature ?? 0.4,
               maxOutputTokens: request.maxOutputTokens,
+              ...thinkingConfig(model, request.thinking),
             },
           }),
         );
@@ -272,19 +277,60 @@ export function thinkingConfig(
     return { thinkingConfig: { thinkingBudget: budgets[thinking] } };
   }
 
-  const levels = {
-    minimal: ThinkingLevel.MINIMAL,
-    low: ThinkingLevel.LOW,
-    medium: ThinkingLevel.MEDIUM,
-    high: ThinkingLevel.HIGH,
-  };
-  return { thinkingConfig: { thinkingLevel: levels[thinking] } };
+  const level = acceptedLevel(model, thinking);
+  return level ? { thinkingConfig: { thinkingLevel: level } } : {};
 }
 
-/** A 404 for the model itself, as opposed to any other failed request. */
+const LEVELS = [
+  ThinkingLevel.MINIMAL,
+  ThinkingLevel.LOW,
+  ThinkingLevel.MEDIUM,
+  ThinkingLevel.HIGH,
+] as const;
+
+/** Levels a model has turned down this session, learned from its 400s. */
+const refusedLevels = new Map<string, Set<string>>();
+
+/**
+ * The asked-for level, or the next one up that this model accepts. Pro
+ * models have no MINIMAL (they always think a little), so asking one for
+ * minimal gets low. Undefined leaves the model on its own default.
+ */
+function acceptedLevel(
+  model: string,
+  thinking: Exclude<ThinkingEffort, "default">,
+): ThinkingLevel | undefined {
+  const refused = new Set(refusedLevels.get(model));
+  if (/-pro\b/.test(model)) refused.add(ThinkingLevel.MINIMAL);
+  const start = { minimal: 0, low: 1, medium: 2, high: 3 }[thinking];
+  return LEVELS.slice(start).find((level) => !refused.has(level));
+}
+
+/**
+ * Records a "Thinking level X is not supported for this model" refusal.
+ * True when the request is worth sending again with a different level.
+ */
+export function noteRefusedThinking(model: string, error: unknown): boolean {
+  const match = /Thinking level (\w+) is not supported/i.exec(describe(error));
+  if (!match) return false;
+  const level = match[1].toUpperCase();
+  const refused = refusedLevels.get(model) ?? new Set<string>();
+  if (refused.has(level)) return false;
+  refused.add(level);
+  refusedLevels.set(model, refused);
+  console.warn(`[gemini] ${model} refuses thinking level ${level}; trying another.`);
+  return true;
+}
+
+/**
+ * The model itself is closed to this key, as opposed to any other failed
+ * request: a 404 for the model, or a quota of zero (a model the free tier
+ * does not cover). An ordinary 429, a quota that is merely used up, is not.
+ */
 export function isModelUnavailable(error: unknown): boolean {
   const text = describe(error);
-  return /"code":\s*404|NOT_FOUND/.test(text) && /model/i.test(text);
+  if (/"code":\s*404|NOT_FOUND/.test(text) && /model/i.test(text)) return true;
+  return /"code":\s*429|RESOURCE_EXHAUSTED/.test(text) && /limit:\s*0\b/.test(text);
 }
 
 function describe(error: unknown) {
