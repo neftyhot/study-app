@@ -186,7 +186,9 @@ export async function checkForUpdateAction(): Promise<UpdateInfo | null> {
   let result: UpdateInfo | null = null;
   try {
     const release = await latestRelease();
-    if (release && compareVersions(release.version, APP_VERSION) > 0) {
+    // A refused check is not "no update": ask again next time, not in 30 minutes.
+    if (!release) return null;
+    if (compareVersions(release.version, APP_VERSION) > 0) {
       result = { version: release.version, url: release.url, download: pickDownload(release.assets) };
     }
   } catch {

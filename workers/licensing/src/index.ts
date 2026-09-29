@@ -533,39 +533,78 @@ async function handleLatest(env: Env): Promise<Response> {
   const cached = await readCache<LatestRelease>(env.LICENSES, LATEST_CACHE_KEY);
   if (cached && Date.now() - cached.at < LATEST_CACHE_MS) return json(cached.value);
 
-  try {
-    const response = await fetch(LATEST_URL, {
-      headers: {
-        "User-Agent": "study-app-licensing",
-        Accept: "application/vnd.github+json",
-      },
-    });
-    if (!response.ok) throw new Error(`GitHub ${response.status}`);
-    const release = (await response.json()) as {
-      tag_name?: unknown;
-      html_url?: unknown;
-      published_at?: unknown;
-      assets?: { name?: unknown; browser_download_url?: unknown }[];
-    };
-    if (typeof release.tag_name !== "string" || typeof release.html_url !== "string") {
-      throw new Error("GitHub release without a tag");
+  const errors: string[] = [];
+  // The API first; github.com's own pages when it refuses. Workers share
+  // Cloudflare's IPs, which often spend GitHub's anonymous API limit for us.
+  for (const source of [latestFromApi, latestFromPages]) {
+    try {
+      const value = await source();
+      await env.LICENSES.put(LATEST_CACHE_KEY, JSON.stringify({ at: Date.now(), value }));
+      return json(value);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
     }
-    const value: LatestRelease = {
-      version: release.tag_name.replace(/^v/, ""),
-      tag: release.tag_name,
-      url: release.html_url,
-      publishedAt: typeof release.published_at === "string" ? release.published_at : null,
-      assets: (Array.isArray(release.assets) ? release.assets : [])
-        .filter((asset) => typeof asset?.name === "string" && typeof asset.browser_download_url === "string")
-        .map((asset) => ({ name: asset.name as string, url: asset.browser_download_url as string })),
-    };
-    await env.LICENSES.put(LATEST_CACHE_KEY, JSON.stringify({ at: Date.now(), value }));
-    return json(value);
-  } catch (error) {
-    console.error(`[licensing] latest release: ${error instanceof Error ? error.message : String(error)}`);
-    if (cached) return json(cached.value);
-    return json({ error: "unavailable" }, 502);
   }
+  console.error(`[licensing] latest release: ${errors.join("; ")}`);
+  if (cached) return json(cached.value);
+  return json({ error: "unavailable" }, 502);
+}
+
+const GITHUB_HEADERS = { "User-Agent": "study-app-licensing", Accept: "application/vnd.github+json" };
+
+async function latestFromApi(): Promise<LatestRelease> {
+  const response = await fetch(LATEST_URL, { headers: GITHUB_HEADERS });
+  if (!response.ok) throw new Error(`GitHub API ${response.status}`);
+  const release = (await response.json()) as {
+    tag_name?: unknown;
+    html_url?: unknown;
+    published_at?: unknown;
+    assets?: { name?: unknown; browser_download_url?: unknown }[];
+  };
+  if (typeof release.tag_name !== "string" || typeof release.html_url !== "string") {
+    throw new Error("GitHub release without a tag");
+  }
+  return {
+    version: release.tag_name.replace(/^v/, ""),
+    tag: release.tag_name,
+    url: release.html_url,
+    publishedAt: typeof release.published_at === "string" ? release.published_at : null,
+    assets: (Array.isArray(release.assets) ? release.assets : [])
+      .filter((asset) => typeof asset?.name === "string" && typeof asset.browser_download_url === "string")
+      .map((asset) => ({ name: asset.name as string, url: asset.browser_download_url as string })),
+  };
+}
+
+const RELEASES_PAGE = "https://github.com/neftyhot/study-app/releases";
+
+/** /releases/latest redirects to the tag; its asset list is a plain HTML fragment. */
+async function latestFromPages(): Promise<LatestRelease> {
+  const redirect = await fetch(`${RELEASES_PAGE}/latest`, {
+    headers: { "User-Agent": "study-app-licensing" },
+    redirect: "manual",
+  });
+  const tag = redirect.headers.get("location")?.match(/\/releases\/tag\/([^/?#]+)$/)?.[1];
+  if (!tag) throw new Error(`GitHub pages ${redirect.status}`);
+  const page = await fetch(`${RELEASES_PAGE}/expanded_assets/${tag}`, {
+    headers: { "User-Agent": "study-app-licensing" },
+  });
+  if (!page.ok) throw new Error(`GitHub assets ${page.status}`);
+  const html = await page.text();
+  const names = new Set<string>();
+  for (const match of html.matchAll(/href="\/neftyhot\/study-app\/releases\/download\/[^/"]+\/([^"]+)"/g)) {
+    names.add(decodeURIComponent(match[1]));
+  }
+  if (!names.size) throw new Error("GitHub release without assets");
+  return {
+    version: decodeURIComponent(tag).replace(/^v/, ""),
+    tag: decodeURIComponent(tag),
+    url: `${RELEASES_PAGE}/tag/${tag}`,
+    publishedAt: null,
+    assets: [...names].map((name) => ({
+      name,
+      url: `${RELEASES_PAGE}/download/${tag}/${encodeURIComponent(name)}`,
+    })),
+  };
 }
 
 /* --------------------------------------------------------------- Delivery */
