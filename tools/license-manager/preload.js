@@ -24,5 +24,7 @@ contextBridge.exposeInMainWorld("authority", {
     feedback: () => ipcRenderer.invoke("insights:feedback"),
     deleteFeedback: (key) => ipcRenderer.invoke("insights:delete-feedback", key),
     exportFeedback: () => ipcRenderer.invoke("insights:export-feedback"),
+    status: () => ipcRenderer.invoke("insights:status"),
+    setStatus: (status) => ipcRenderer.invoke("insights:set-status", status),
   },
 });

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChangeFormatDialog } from "@/components/primer/change-format-dialog";
 import { PrimerGenerator } from "@/components/primer/primer-generator";
 import { PrimerDocument } from "@/components/primer/primer-sections";
 import { WritePrimerButton } from "@/components/primer/write-primer-button";
@@ -91,13 +92,22 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
               {primer.chapters.length} topic{primer.chapters.length === 1 ? "" : "s"} ·{" "}
               {primer.sections.length} concepts · {depthLabel(depth)} · {formatLabel(format)}
             </p>
-            <WritePrimerButton
-              examId={examId}
-              depth={depth}
-              format={format}
-              rewrite
-              href={versionHref(depth, format)}
-            />
+            <div className="flex flex-wrap items-start gap-2">
+              <ChangeFormatDialog
+                key={`${depth}:${format}`}
+                examId={examId}
+                depth={depth}
+                format={format}
+                written={writtenKeys}
+              />
+              <WritePrimerButton
+                examId={examId}
+                depth={depth}
+                format={format}
+                rewrite
+                href={versionHref(depth, format)}
+              />
+            </div>
           </div>
           {primer.guide.overview ? (
             <section className="space-y-2">
@@ -127,19 +137,7 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
       ) : null}
 
       {hasSlides ? (
-        primer ? (
-          <details className="rounded-lg border p-4">
-            <summary className="cursor-pointer font-medium">Write a different version</summary>
-            <div className="pt-4">
-              <PrimerGenerator
-                examId={examId}
-                initialDepth={depth}
-                initialFormat={format}
-                written={writtenKeys}
-              />
-            </div>
-          </details>
-        ) : (
+        primer ? null : (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">

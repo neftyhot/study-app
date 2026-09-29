@@ -6,6 +6,15 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.5.0",
+    date: "2026-09-29",
+    notes: [
+      "Change a study guide's format after it's written: press “Change format” at the top of the guide. The new version sits next to the old one, so you can switch between them.",
+      "If something goes wrong with the service, Megan Study can now switch AI features off for a while and tell you why, instead of failing on every try. Your courses, flashcards, study guides and exams always stay open to study.",
+      "The privacy policy is easier to read, with a short summary and numbered sections, and explains the new service status check. You'll be asked to agree to it again.",
+    ],
+  },
+  {
     version: "1.4.0",
     date: "2026-09-29",
     notes: [

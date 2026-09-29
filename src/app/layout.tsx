@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
+import { StatusBanner, StatusScreen, StatusWatcher } from "@/components/layout/app-status";
 import { SiteHeader } from "@/components/layout/site-header";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
 import { readLicenseStatus, TRIAL_DAYS } from "@/lib/license/status";
@@ -13,6 +14,16 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { db } from "@/db";
 import { APP_VERSION } from "@/lib/app-info";
+import {
+  aiBlockReason,
+  aiRestricted,
+  blockingScreen,
+  FEATURE_LABELS,
+  readAppStatus,
+  refreshAppStatus,
+  statusSignature,
+  type AppStatus,
+} from "@/lib/app-status";
 import { appearanceCss, THEME_IDS, themeBootScript } from "@/lib/appearance";
 import { CHANGELOG } from "@/lib/changelog";
 import { hasAcceptedPrivacy, readAppearance, readTheme } from "@/lib/settings";
@@ -57,6 +68,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   const savedTheme = readTheme(db);
   const license = readLicenseStatus();
   const bootScript = themeBootScript(savedTheme);
+  const status = readAppStatus(db);
+  // Ask the server in the background; StatusWatcher refreshes if it changed.
+  void refreshAppStatus(db);
+  const screen = blockingScreen(status, db);
+  const banner = statusBanner(status);
 
   return (
     <html
@@ -88,9 +104,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <TooltipProvider>
           {/* Nothing else — header, pages, time tracking — until the privacy
               policy is agreed to; see privacy-policy.ts. */}
-          {hasAcceptedPrivacy(db) ? (
+          {hasAcceptedPrivacy(db) && screen ? (
+            <>
+              <StatusScreen
+                screen={screen}
+                message={status.message}
+                minVersion={status.minVersion}
+                until={status.until}
+              />
+              <StatusWatcher signature={statusSignature(status)} />
+            </>
+          ) : hasAcceptedPrivacy(db) ? (
             <>
               <SiteHeader />
+              {banner ? <StatusBanner text={banner.text} tone={banner.tone} /> : null}
+              <StatusWatcher signature={statusSignature(status)} />
               <WhatsNew
                 version={APP_VERSION}
                 notes={CHANGELOG.find((entry) => entry.version === APP_VERSION)?.notes ?? []}
@@ -116,4 +144,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </body>
     </html>
   );
+}
+
+/** What the strip under the header says, if anything: AI being off comes first. */
+function statusBanner(status: AppStatus): { text: string; tone: "off" | "note" } | null {
+  if (aiRestricted(status)) {
+    const reason = aiBlockReason(status);
+    if (reason) return { text: reason, tone: "off" };
+    const off = Object.keys(status.features).map((key) => FEATURE_LABELS[key as keyof typeof FEATURE_LABELS]);
+    const note = status.message.trim();
+    return {
+      text: `${note ? `${note} ` : ""}Switched off for now: ${off.join(", ")}. Everything else still works.`,
+      tone: "off",
+    };
+  }
+  const note = status.message.trim();
+  return note ? { text: note, tone: "note" } : null;
 }

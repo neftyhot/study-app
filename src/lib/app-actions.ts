@@ -5,6 +5,14 @@ import { APP_VERSION, compareVersions, RELEASES_REPO, serverUrl } from "@/lib/ap
 import { readSetting, writeSetting } from "@/lib/settings";
 import { recordTime } from "@/lib/stats";
 import { refreshRemoteModels } from "@/lib/llm/models";
+import {
+  MAINTENANCE_ACK_KEY,
+  needsUpdate,
+  readAppStatus,
+  refreshAppStatus,
+  statusSignature,
+  UPDATE_ACK_KEY,
+} from "@/lib/app-status";
 import { deleteServerStatistics, maybeSendReport } from "@/lib/telemetry";
 
 /** The window reporting how long it has been open, focused or not. */
@@ -14,6 +22,29 @@ export async function recordTimeAction(focused: number, background: number) {
   void maybeSendReport(db);
   // At most daily: newer model names, so retired ones don't strand old installs.
   void refreshRemoteModels(db);
+  // Every couple of minutes: the developer's maintenance and AI switches.
+  void refreshAppStatus(db);
+}
+
+/* ------------------------------------------------------------- App status */
+
+/** The client watcher's poll: refreshes if due, and says whether anything changed. */
+export async function appStatusAction(): Promise<{ signature: string }> {
+  return { signature: statusSignature(await refreshAppStatus(db)) };
+}
+
+/**
+ * "Continue without AI" on the maintenance or update-required screen. Kept
+ * against this status, so a new maintenance notice is shown again.
+ */
+export async function continueWithoutAiAction(screen: "maintenance" | "update"): Promise<{ ok: boolean }> {
+  const status = readAppStatus(db);
+  if (screen === "maintenance" && status.mode === "maintenance") {
+    writeSetting(MAINTENANCE_ACK_KEY, String(status.updatedAt), db);
+  } else if (screen === "update" && needsUpdate(status) && status.minVersion) {
+    writeSetting(UPDATE_ACK_KEY, status.minVersion, db);
+  }
+  return { ok: true };
 }
 
 /** Settings → Privacy: erase this install's statistics from the server. */

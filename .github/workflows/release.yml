@@ -72,8 +72,6 @@ jobs:
   build-macos-x64:
     runs-on: macos-15-intel
     needs: create-draft
-    # Apple silicon only for now; turn back on for the next full release.
-    if: false
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -116,8 +114,6 @@ jobs:
   build-windows:
     runs-on: windows-latest
     needs: create-draft
-    # Apple silicon only for now; turn back on for the next full release.
-    if: false
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -154,8 +150,6 @@ jobs:
   build-windows-arm64:
     runs-on: windows-11-arm
     needs: create-draft
-    # Apple silicon only for now; turn back on for the next full release.
-    if: false
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

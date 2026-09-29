@@ -725,3 +725,54 @@ describe("remote config", () => {
     expect(await (await get("/config")).json()).toEqual(expected);
   });
 });
+
+describe("app status", () => {
+  const TOKEN = "admin-token-for-tests-0123456789";
+
+  function put(body: unknown, token: string | null = TOKEN) {
+    return worker.fetch(
+      new Request("https://licensing.example/admin/status", {
+        method: "PUT",
+        body: JSON.stringify(body),
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      }),
+      { ...env, ADMIN_TOKEN: TOKEN },
+    );
+  }
+
+  it("is normal until set, cacheable for a minute only", async () => {
+    const response = await get("/status");
+    expect(await response.json()).toMatchObject({ mode: "normal", message: "", minVersion: null, features: {}, until: null });
+    expect(response.headers.get("cache-control")).toBe("public, max-age=60");
+  });
+
+  it("stores a sanitised status, for the admin only", async () => {
+    expect((await put({ mode: "maintenance" }, null)).status).toBe(401);
+    expect((await put({ mode: "maintenance" }, "wrong-token")).status).toBe(401);
+
+    const until = Date.now() + 60 * 60 * 1000;
+    const stored = await (
+      await put({
+        mode: "ai_paused",
+        message: `  Back soon.${"x".repeat(600)}`,
+        minVersion: "1.5.0",
+        features: { tutor: false, decks: true, somethingElse: false },
+        until,
+        extra: 1,
+      })
+    ).json();
+    expect(stored).toMatchObject({ mode: "ai_paused", minVersion: "1.5.0", features: { tutor: false }, until });
+    expect(stored.message).toHaveLength(500);
+    expect(stored.message.startsWith("Back soon.")).toBe(true);
+    expect(stored.extra).toBeUndefined();
+    expect(await (await get("/status")).json()).toEqual(stored);
+  });
+
+  it("falls back to normal for anything it does not understand", async () => {
+    const stored = await (
+      await put({ mode: "panic", minVersion: "latest", until: Date.now() - 1000, features: "all" })
+    ).json();
+    expect(stored).toMatchObject({ mode: "normal", minVersion: null, until: null, features: {} });
+    expect((await put("{not json" as unknown)).status).toBe(200);
+  });
+});

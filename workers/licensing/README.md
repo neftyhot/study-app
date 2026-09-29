@@ -16,6 +16,7 @@ automatic delivery does not happen.
 | `GET /revoked/:licenseId` | The app | `{ revoked }` |
 | `GET /latest` | The app | Newest GitHub release: `{ version, tag, url, publishedAt, assets: [{ name, url }] }`, cached ~10 min; a stale copy if GitHub is down |
 | `GET /config` | The app | Remote model defaults (`{ models: { gemini, geminiBulk, geminiPrimer, anthropic, openai } }`, any may be missing), or `{}`; cacheable 10 min |
+| `GET /status` | The app | `{ mode, message, minVersion, features, until, updatedAt }`: `mode` is `normal`, `ai_paused` or `maintenance`; `features` lists switched-off AI features (`decks`, `guides`, `tutor`, `grading`, `explain`, `search`) as `false`; `until` (epoch ms) ends the mode by itself. Cacheable 1 min |
 | `POST /telemetry` | The app | An install's running totals, about hourly; unchanged reports are not rewritten |
 | `DELETE /telemetry/:installId` | The app's Settings | Erases that install's record (GDPR); `{ ok: true }` even if there was none |
 | `POST /feedback` | The app's Settings | A suggestion |
@@ -24,9 +25,21 @@ automatic delivery does not happen.
 | `GET /admin/purchases` | License Manager | Keys minted here: `{ token, licenseId, email, issuedAt, revoked }` (`revoked`: by a refund, dispute or reissue) |
 | `PUT /admin/revocations` | License Manager | Replaces the manager's revoked-id list |
 | `PUT /admin/config` | Developer | Sets `/config`; unknown slots and odd model ids are dropped; returns what was stored |
+| `PUT /admin/status` | License Manager (App status tab) | Sets `/status`; unknown values fall back to normal; returns what was stored |
 | `POST /admin/reissue` | Developer | `{ licenseId or sessionId, machineId }` → a new key for the new machine; the old one is revoked |
 
 `/admin/*` needs `Authorization: Bearer <ADMIN_TOKEN>` (or `ADMIN_TOKEN_NEXT`).
+
+If the License Manager is not to hand, the app status can be set directly —
+for example, pausing AI for two hours:
+
+```sh
+curl -X PUT https://study-app-licensing.<you>.workers.dev/admin/status \
+  -H "Authorization: Bearer $ADMIN_TOKEN" -H "content-type: application/json" \
+  -d "{\"mode\":\"ai_paused\",\"message\":\"AI is off for a little while.\",\"until\":$(( ($(date +%s) + 7200) * 1000 ))}"
+```
+
+`-d '{"mode":"normal"}'` turns everything back on.
 
 Tests: `npm test` at the repository root runs `src/worker.test.ts`, which
 feeds signed webhook events through this exact file and checks the key that

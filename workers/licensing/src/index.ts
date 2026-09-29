@@ -17,6 +17,9 @@
  *                          it, and the old one revoked.
  *   GET  /latest           The newest GitHub release, cached ~10 min.
  *   GET  /config           Remote model defaults (PUT /admin/config sets them).
+ *   GET  /status           Maintenance mode, AI pause, feature switches and
+ *                          minimum version (PUT /admin/status sets them;
+ *                          status.ts).
  *   GET  /revoked/:id      Whether a key has been revoked in the License
  *                          Manager (PUT /admin/revocations sets the list).
  *   POST /feedback         A feature suggestion from the app's settings.
@@ -47,6 +50,7 @@ import {
   type ListResult,
   type PutOptions,
 } from "./insights";
+import { handleStatus, handleStatusUpdate } from "./status";
 
 export type KVLike = {
   get(key: string): Promise<string | null>;
@@ -116,6 +120,15 @@ const worker = {
 
     if (request.method === "GET" && url.pathname === "/config") {
       return handleConfig(env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/status") {
+      return handleStatus(env);
+    }
+
+    if (request.method === "PUT" && url.pathname === "/admin/status") {
+      if (!authorized(request, env)) return new Response("Unauthorized", { status: 401 });
+      return handleStatusUpdate(request, env);
     }
 
     if (request.method === "GET" && url.pathname === "/latest") {

@@ -66,6 +66,14 @@
       .spacer { flex: 1; }
       .paths { color: var(--muted); font-size: 11px; }
       .paths code { color: var(--fg); overflow-wrap: anywhere; }
+      textarea {
+        width: 100%; min-height: 70px; padding: 8px 10px; border-radius: 6px; font: inherit; resize: vertical;
+        background: var(--bg); color: var(--fg); border: 1px solid var(--border);
+      }
+      .checks { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+      .checks label { display: flex; gap: 6px; align-items: center; color: var(--fg); margin: 0; }
+      .checks input { width: auto; }
+      .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
       .actions { display: flex; gap: 6px; justify-content: flex-end; }
       nav.tabs { display: flex; gap: 4px; margin-top: 12px; -webkit-app-region: no-drag; }
       nav.tabs button { border-radius: 999px; }
@@ -93,6 +101,7 @@
         <button type="button" role="tab" data-show="licences" aria-selected="true">Licences</button>
         <button type="button" role="tab" data-show="stats" aria-selected="false">Dev stats</button>
         <button type="button" role="tab" data-show="suggestions" aria-selected="false">Suggestions</button>
+        <button type="button" role="tab" data-show="status" aria-selected="false">App status</button>
       </nav>
     </header>
 
@@ -244,6 +253,51 @@
               <button id="fb-export" type="button" class="primary">Save as text file…</button>
             </div>
             <div id="fb-list"></div>
+          </div>
+        </section>
+      </div>
+
+      <div data-tab="status" hidden>
+        <section class="panel">
+          <h2>App status — switches for every install</h2>
+          <div class="body" style="display: grid; gap: 14px">
+            <p class="note" style="margin: 0">
+              Installs check about every two minutes. Studying what is already made always keeps working;
+              these only turn AI off. An install that can't reach the server keeps the last status it heard.
+            </p>
+            <div class="grid">
+              <div>
+                <label for="st-mode">Mode</label>
+                <select id="st-mode">
+                  <option value="normal">Normal — everything on</option>
+                  <option value="ai_paused">AI paused — banner, no AI calls</option>
+                  <option value="maintenance">Maintenance — full-screen notice, no AI</option>
+                </select>
+              </div>
+              <div>
+                <label for="st-until">Ends by itself at (optional)</label>
+                <input id="st-until" type="datetime-local" />
+              </div>
+              <div>
+                <label for="st-min">Minimum version for AI (optional)</label>
+                <input id="st-min" placeholder="e.g. 1.4.1" autocomplete="off" />
+              </div>
+            </div>
+            <div>
+              <label for="st-message">Message to students (optional, shown as a banner or on the notice)</label>
+              <textarea id="st-message" maxlength="500" placeholder="e.g. AI is off while we fix a billing problem. Back tonight."></textarea>
+            </div>
+            <div>
+              <label>Switch off single features</label>
+              <div class="checks" id="st-features"></div>
+            </div>
+            <div class="row">
+              <button id="st-save" class="primary" type="button">Save for everyone</button>
+              <button id="st-refresh" type="button">Reload</button>
+              <button id="st-clear" type="button">Back to normal</button>
+              <span class="spacer"></span>
+              <span id="st-status" class="paths"></span>
+            </div>
           </div>
         </section>
       </div>
@@ -453,6 +507,7 @@
           clearAlert();
           if (name === "stats" && !loaded.stats) loadStats();
           if (name === "suggestions" && !loaded.suggestions) loadFeedback();
+          if (name === "status") loadStatus();
         }),
       );
 
@@ -560,6 +615,81 @@
         const result = await window.authority.insights.exportFeedback();
         if (!result.ok) return fail(result.error);
         if (result.data.saved) $("fb-status").textContent = `Saved ${result.data.count} to ${result.data.path}`;
+      });
+
+
+      /* ------------------------------------------------ App status */
+
+      const FEATURES = [
+        ["decks", "Making flashcards"],
+        ["guides", "Study guides"],
+        ["tutor", "Tutor"],
+        ["grading", "Grading and hints"],
+        ["explain", "Card explanations"],
+        ["search", "Search"],
+      ];
+      $("st-features").innerHTML = FEATURES.map(
+        ([key, label]) => `<label><input type="checkbox" data-feature="${key}" /> ${escapeHtml(label)} off</label>`,
+      ).join("");
+
+      function localInput(ms) {
+        if (!ms) return "";
+        const d = new Date(ms - new Date(ms).getTimezoneOffset() * 60000);
+        return d.toISOString().slice(0, 16);
+      }
+
+      function showStatus(status) {
+        $("st-mode").value = status.mode || "normal";
+        $("st-message").value = status.message || "";
+        $("st-min").value = status.minVersion || "";
+        $("st-until").value = localInput(status.until);
+        document.querySelectorAll("[data-feature]").forEach((box) => {
+          box.checked = status.features?.[box.dataset.feature] === false;
+        });
+        $("st-status").textContent = status.updatedAt
+          ? `Last changed ${new Date(status.updatedAt).toLocaleString()}`
+          : "Never changed — everything is on.";
+      }
+
+      async function loadStatus() {
+        $("st-status").textContent = "Loading…";
+        const result = await window.authority.insights.status();
+        if (!result.ok) {
+          $("st-status").textContent = "";
+          return fail(result.error);
+        }
+        showStatus(result.data);
+      }
+
+      async function saveStatus(status) {
+        clearAlert();
+        $("st-status").textContent = "Saving…";
+        const result = await window.authority.insights.setStatus(status);
+        if (!result.ok) {
+          $("st-status").textContent = "";
+          return fail(result.error);
+        }
+        showStatus(result.data);
+        $("st-status").textContent = "Saved. Installs pick it up within a few minutes.";
+      }
+
+      $("st-save").addEventListener("click", () => {
+        const mode = $("st-mode").value;
+        const features = {};
+        document.querySelectorAll("[data-feature]").forEach((box) => {
+          if (box.checked) features[box.dataset.feature] = false;
+        });
+        const minVersion = $("st-min").value.trim();
+        if (minVersion && !/^\d+\.\d+\.\d+$/.test(minVersion)) return fail("Minimum version looks like 1.4.1.");
+        const until = $("st-until").value ? new Date($("st-until").value).getTime() : null;
+        if (until !== null && until <= Date.now()) return fail("The end time is in the past.");
+        if (mode === "maintenance" && !confirm("Put every install into maintenance? Students will see a full-screen notice.")) return;
+        saveStatus({ mode, message: $("st-message").value, minVersion: minVersion || null, features, until });
+      });
+      $("st-refresh").addEventListener("click", () => { clearAlert(); loadStatus(); });
+      $("st-clear").addEventListener("click", () => {
+        if (!confirm("Turn everything back on and clear the message?")) return;
+        saveStatus({ mode: "normal" });
       });
 
       window.authority.insights.config().then((result) => {

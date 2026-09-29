@@ -17,8 +17,9 @@ import { modelChain } from "./tiers";
 import { createLocalProvider } from "./local";
 import { createOpenAiProvider } from "./openai";
 import { meterProvider, type AuthMode } from "@/lib/usage";
+import { aiBlockReason, readAppStatus, refreshAppStatus } from "@/lib/app-status";
 
-import { LlmError, type LlmProvider } from "./types";
+import { LlmError, type ChatRequest, type LlmProvider, type StructuredRequest } from "./types";
 
 export * from "./types";
 export {
@@ -77,7 +78,44 @@ export function getProvider(
   const { provider, authMode } = resolveProvider(override, role);
   // Every call is offered to the usage log, which records it only if the
   // student has opted in.
-  return meterProvider(provider, authMode);
+  return guardProvider(meterProvider(provider, authMode));
+}
+
+/**
+ * Checks the developer's remote switches (lib/app-status.ts) before every
+ * call, not once per provider: a long deck run stops at its next batch when
+ * AI is paused part-way through.
+ */
+export function guardProvider(provider: LlmProvider): LlmProvider {
+  const check = (feature: StructuredRequest["feature"]) => {
+    void refreshAppStatus().catch(() => undefined);
+    const reason = aiBlockReason(readAppStatus(), feature);
+    if (reason) throw new LlmError(reason);
+  };
+
+  const guarded: LlmProvider = {
+    get name() {
+      return provider.name;
+    },
+    get model() {
+      return provider.model;
+    },
+    get vision() {
+      return provider.vision;
+    },
+    async generateStructured<T>(request: StructuredRequest) {
+      check(request.feature);
+      return provider.generateStructured<T>(request);
+    },
+  };
+  const chat = provider.generateChat?.bind(provider);
+  if (chat) {
+    guarded.generateChat = async <T>(request: ChatRequest) => {
+      check(request.feature);
+      return chat<T>(request);
+    };
+  }
+  return guarded;
 }
 
 function resolveProvider(

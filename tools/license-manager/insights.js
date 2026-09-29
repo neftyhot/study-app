@@ -104,6 +104,20 @@ function registerInsights(ipcMain, context) {
     ),
   );
 
+  // The app-wide switches (workers/licensing/src/status.ts). Reading is public;
+  // saving needs the admin token, and the Worker returns what it stored.
+  ipcMain.handle("insights:status", wrap(() => admin(dir, "/status", { cache: "no-store" })));
+  ipcMain.handle(
+    "insights:set-status",
+    wrap((_event, status) =>
+      admin(dir, "/admin/status", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(status ?? {}),
+      }),
+    ),
+  );
+
   ipcMain.handle(
     "insights:export-feedback",
     wrap(async () => {
