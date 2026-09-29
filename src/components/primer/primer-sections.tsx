@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import type { PrimerFormat } from "@/db/schema";
 import { cn } from "@/lib/utils";
 import type { CitedSentence, CounterExample } from "@/lib/primer/types";
 
@@ -37,6 +38,88 @@ export type PrimerChapterView = {
   sections: PrimerSectionView[];
 };
 
+/** What the breakdown is called in each format. */
+export const BREAKDOWN_HEADING: Record<PrimerFormat, string> = {
+  explained: "How it works",
+  bullets: "Key facts",
+  qa: "Test yourself",
+  compare: "Don't confuse it with",
+};
+
+/**
+ * The part of a concept that differs by format: prose, bullets, questions
+ * with hidden answers, or contrasts.
+ */
+export function Breakdown({
+  format,
+  sentences,
+  slides,
+}: {
+  format: PrimerFormat;
+  sentences: CitedSentence[];
+  slides: CitationSlides;
+}) {
+  if (sentences.length === 0) return null;
+  let body: React.ReactNode;
+  switch (format) {
+    case "bullets":
+      body = (
+        <ul className="list-disc space-y-1 pl-5 marker:text-muted-foreground">
+          {sentences.map((sentence, i) => (
+            <li key={i}>
+              <CitedText sentences={[sentence]} slides={slides} />
+            </li>
+          ))}
+        </ul>
+      );
+      break;
+    case "qa":
+      body = (
+        <div className="space-y-2">
+          {sentences.map((sentence, i) => (
+            <details key={i} className="group rounded-md border px-3 py-2">
+              <summary className="flex cursor-pointer list-none items-start gap-2 font-medium">
+                <ChevronRight className="text-muted-foreground mt-1 size-4 shrink-0 transition-transform group-open:rotate-90" />
+                <span>
+                  {sentence.label ?? `Question ${i + 1}`}
+                  <span className="text-muted-foreground ml-2 text-xs font-normal group-open:hidden">
+                    Check answer
+                  </span>
+                </span>
+              </summary>
+              <div className="mt-2 pl-6">
+                <CitedText sentences={[sentence]} slides={slides} />
+              </div>
+            </details>
+          ))}
+        </div>
+      );
+      break;
+    case "compare":
+      body = (
+        <dl className="space-y-2">
+          {sentences.map((sentence, i) => (
+            <div key={i} className="rounded-md border px-3 py-2">
+              {sentence.label ? <dt className="font-semibold">{sentence.label}</dt> : null}
+              <dd>
+                <CitedText sentences={[sentence]} slides={slides} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      );
+      break;
+    default:
+      body = <CitedText sentences={sentences} slides={slides} />;
+  }
+  return (
+    <div className="space-y-1">
+      <h4 className="text-sm font-semibold">{BREAKDOWN_HEADING[format]}</h4>
+      {body}
+    </div>
+  );
+}
+
 const chapterAnchor = (i: number) => `topic-${i + 1}`;
 const conceptAnchor = (i: number, j: number) => `concept-${i + 1}-${j + 1}`;
 
@@ -50,9 +133,11 @@ const conceptAnchor = (i: number, j: number) => `concept-${i + 1}-${j + 1}`;
 export function PrimerDocument({
   chapters,
   slides,
+  format = "explained",
 }: {
   chapters: PrimerChapterView[];
   slides: CitationSlides;
+  format?: PrimerFormat;
 }) {
   const [open, setOpen] = useState<Set<number>>(() => new Set([0]));
   const allOpen = open.size === chapters.length;
@@ -176,6 +261,7 @@ export function PrimerDocument({
                       number={`${i + 1}.${j + 1}`}
                       section={section}
                       slides={slides}
+                      format={format}
                     />
                   ))}
                 </div>
@@ -198,11 +284,13 @@ function Concept({
   number,
   section,
   slides,
+  format,
 }: {
   anchor: string;
   number: string;
   section: PrimerSectionView;
   slides: CitationSlides;
+  format: PrimerFormat;
 }) {
   return (
     <article id={anchor} className="scroll-mt-6 space-y-3">
@@ -211,12 +299,7 @@ function Concept({
         {section.conceptName}
       </h3>
       <CitedText sentences={section.definition} slides={slides} />
-      {section.breakdown.length > 0 ? (
-        <div className="space-y-1">
-          <h4 className="text-sm font-semibold">How it works</h4>
-          <CitedText sentences={section.breakdown} slides={slides} />
-        </div>
-      ) : null}
+      <Breakdown format={format} sentences={section.breakdown} slides={slides} />
       {section.example.length > 0 ? (
         <div className={cn("bg-muted/40 space-y-1 rounded-md border-l-4 border-l-primary px-4 py-3")}>
           <h4 className="text-sm font-semibold">Example</h4>

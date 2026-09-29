@@ -29,6 +29,7 @@ const gate = require("./license/gate.cjs");
 const purchase = require("./license/purchase.cjs");
 const { registerGoogleAuth } = require("./google-auth.cjs");
 const updater = require("./updater.cjs");
+const { installSystemFetch } = require("./network.cjs");
 const { backupDatabase, backupDir } = require("./backup.cjs");
 const { crashLogPath, installCrashLog, logCrash } = require("./crash-log.cjs");
 
@@ -335,6 +336,9 @@ async function launchApp(license) {
 }
 
 app.whenReady().then(async () => {
+  // Before anything reaches out: lets requests through school proxies and
+  // HTTPS filters that Node's own fetch cannot pass (network.cjs).
+  installSystemFetch();
   const { userData } = configureDataDirectories();
   installCrashLog(app, userData);
   process.env.STUDY_APP_CRASH_LOG = crashLogPath(userData);

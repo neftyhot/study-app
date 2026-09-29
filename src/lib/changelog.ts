@@ -6,6 +6,19 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.4.0",
+    date: "2026-09-29",
+    notes: [
+      "Study guides come in four formats: Explained (the one you had), Key facts (bullet points of what you need to know), Q&A self-test (questions with the answer hidden until you check) and Compare & contrast (each idea next to the ones it gets confused with).",
+      "Study guides are shorter and easier to face. Summary keeps up to 5 points per topic, Balanced up to 10 and First Principles up to 25, keeping the most important ones instead of adding more topics.",
+      "Before writing a guide you see a preview of each format and length, on a made-up example topic so you can tell what it will look like.",
+      "Choose whether every concept gets an example up front. You can still add one to any concept afterwards with “Show an example”.",
+      "Examples are more specific: real numbers and the working for subjects like accounting, and named cases for everything else.",
+      "You can keep several versions of a guide, like a Summary in Key facts and a Balanced one explained, and switch between them at the top of the page.",
+      "Fixed updates and AI features failing with “fetch failed” on some school and work Wi-Fi networks.",
+    ],
+  },
+  {
     version: "1.3.2",
     date: "2026-09-29",
     notes: [

@@ -67,6 +67,35 @@ async function latestRelease() {
   }
 }
 
+/**
+ * Downloads the update, trying up to three times: a school or café network
+ * that drops a large download part-way often lets the next attempt through.
+ */
+async function downloadTo(url, file) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const download = await fetch(url, { headers: { "user-agent": "MeganStudy-Updater" } });
+      if (!download.ok || !download.body) throw new Error(`The download failed (HTTP ${download.status}).`);
+      await pipeline(Readable.fromWeb(download.body), fs.createWriteStream(file));
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
+
+/** A failure a student can act on, rather than Node's bare "fetch failed". */
+function explain(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/fetch failed|ECONN|ETIMEDOUT|ENOTFOUND|certificate|ERR_/i.test(message)) {
+    return `This network blocked the download. Try again on another Wi-Fi or a phone hotspot, or download it from github.com/${REPO}/releases/latest.`;
+  }
+  return message;
+}
+
 /** The running app's bundle: …/Megan Study.app, or its former name. */
 function bundlePath(app) {
   return path.resolve(app.getPath("exe"), "..", "..", "..");
@@ -111,9 +140,7 @@ async function installUpdate(app) {
   let mount = null;
 
   try {
-    const download = await fetch(dmg.url, { headers: { "user-agent": "MeganStudy-Updater" } });
-    if (!download.ok || !download.body) throw new Error("The download failed.");
-    await pipeline(Readable.fromWeb(download.body), fs.createWriteStream(file));
+    await downloadTo(dmg.url, file);
 
     const { stdout } = await run("hdiutil", ["attach", file, "-nobrowse", "-readonly"]);
     mount = (stdout.match(/\/Volumes\/.*$/m) ?? [])[0]?.trim() ?? null;
@@ -133,7 +160,7 @@ async function installUpdate(app) {
     fs.renameSync(bundle, old);
     fs.renameSync(staged, bundle);
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    return { ok: false, error: explain(error) };
   } finally {
     if (mount) await run("hdiutil", ["detach", mount, "-quiet"]).catch(() => undefined);
     fs.rmSync(work, { recursive: true, force: true });

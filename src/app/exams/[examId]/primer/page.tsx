@@ -4,30 +4,43 @@ import { notFound } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { PrimerGenerator } from "@/components/primer/primer-generator";
 import { PrimerDocument } from "@/components/primer/primer-sections";
 import { WritePrimerButton } from "@/components/primer/write-primer-button";
 import { db } from "@/db";
 import { cn } from "@/lib/utils";
 import {
   PRIMER_DEPTHS,
+  PRIMER_FORMATS,
   getPrimer,
   isPrimerDepth,
+  isPrimerFormat,
   loadPrimerSlides,
-  primerDepthsWritten,
+  primerGuidesWritten,
 } from "@/lib/primer";
 import { getExam } from "@/lib/queries";
 
 export default async function PrimerPage(props: PageProps<"/exams/[examId]/primer">) {
   const { examId } = await props.params;
-  const { depth: rawDepth } = await props.searchParams;
+  const { depth: rawDepth, format: rawFormat } = await props.searchParams;
   const exam = await getExam(examId);
   if (!exam) notFound();
 
-  const depth = isPrimerDepth(rawDepth) ? rawDepth : "balanced";
-  const primer = getPrimer(db, examId, depth);
-  const written = new Set(primerDepthsWritten(db, examId));
+  const written = primerGuidesWritten(db, examId);
+  // With no choice in the address, open the first guide written, if any.
+  const first = written[0];
+  const depth = isPrimerDepth(rawDepth) ? rawDepth : (first?.depth ?? "balanced");
+  const format = isPrimerFormat(rawFormat)
+    ? rawFormat
+    : isPrimerDepth(rawDepth)
+      ? "explained"
+      : (first?.format ?? "explained");
+  const primer = getPrimer(db, examId, depth, format);
   const hasSlides = primer !== null || loadPrimerSlides(db, examId).length > 0;
-  const current = PRIMER_DEPTHS.find((d) => d.id === depth)!;
+  const depthLabel = (id: string) => PRIMER_DEPTHS.find((d) => d.id === id)?.label ?? id;
+  const formatLabel = (id: string) => PRIMER_FORMATS.find((f) => f.id === id)?.label ?? id;
+  const versionHref = (d: string, f: string) => `/exams/${examId}/primer?depth=${d}&format=${f}`;
+  const writtenKeys = written.map((g) => `${g.depth}:${g.format}`);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -50,35 +63,41 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
         </p>
       </div>
 
-      <nav aria-label="Depth" className="flex flex-wrap gap-2">
-        {PRIMER_DEPTHS.map((option) => (
-          <Link
-            key={option.id}
-            href={`/exams/${examId}/primer?depth=${option.id}`}
-            aria-current={option.id === depth ? "page" : undefined}
-            className={cn(
-              "rounded-md border px-3 py-1.5 text-sm",
-              option.id === depth
-                ? "bg-primary text-primary-foreground border-primary"
-                : "hover:bg-accent",
-            )}
-          >
-            {option.label}
-            {written.has(option.id) && option.id !== depth ? (
-              <span className="text-muted-foreground ml-1.5 text-xs">✓</span>
-            ) : null}
-          </Link>
-        ))}
-      </nav>
+      {written.length > 0 ? (
+        <nav aria-label="Your study guides" className="flex flex-wrap gap-2">
+          {written.map((g) => {
+            const active = g.depth === depth && g.format === format;
+            return (
+              <Link
+                key={`${g.depth}:${g.format}`}
+                href={versionHref(g.depth, g.format)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "rounded-md border px-3 py-1.5 text-sm",
+                  active ? "bg-primary text-primary-foreground border-primary" : "hover:bg-accent",
+                )}
+              >
+                {depthLabel(g.depth)} · {formatLabel(g.format)}
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
 
       {primer ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
             <p className="text-muted-foreground text-sm">
               {primer.chapters.length} topic{primer.chapters.length === 1 ? "" : "s"} ·{" "}
-              {primer.sections.length} concepts · {current.label}: {current.blurb}
+              {primer.sections.length} concepts · {depthLabel(depth)} · {formatLabel(format)}
             </p>
-            <WritePrimerButton examId={examId} depth={depth} rewrite />
+            <WritePrimerButton
+              examId={examId}
+              depth={depth}
+              format={format}
+              rewrite
+              href={versionHref(depth, format)}
+            />
           </div>
           {primer.guide.overview ? (
             <section className="space-y-2">
@@ -87,6 +106,7 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
             </section>
           ) : null}
           <PrimerDocument
+            format={format}
             slides={primer.slides}
             chapters={primer.chapters.map((chapter, i) => ({
               key: chapter.id ?? `loose-${i}`,
@@ -104,24 +124,52 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
             }))}
           />
         </>
+      ) : null}
+
+      {hasSlides ? (
+        primer ? (
+          <details className="rounded-lg border p-4">
+            <summary className="cursor-pointer font-medium">Write a different version</summary>
+            <div className="pt-4">
+              <PrimerGenerator
+                examId={examId}
+                initialDepth={depth}
+                initialFormat={format}
+                written={writtenKeys}
+              />
+            </div>
+          </details>
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">
+                {written.length > 0 ? "Write another version" : "Write your study guide"}
+              </CardTitle>
+              <CardDescription>
+                Pick how you want it broken down and how long it should be. The preview shows
+                what each choice looks like.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PrimerGenerator
+                examId={examId}
+                initialDepth={depth}
+                initialFormat={format}
+                written={writtenKeys}
+              />
+            </CardContent>
+          </Card>
+        )
       ) : (
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">No {current.label} study guide yet</CardTitle>
-            <CardDescription>{current.blurb}</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {hasSlides ? (
-              <WritePrimerButton examId={examId} depth={depth} rewrite={false} />
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                Upload a slideshow first —{" "}
-                <Link className="underline" href={`/exams/${examId}/sources`}>
-                  manage sources
-                </Link>
-                .
-              </p>
-            )}
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-sm">
+              Upload a slideshow first —{" "}
+              <Link className="underline" href={`/exams/${examId}/sources`}>
+                manage sources
+              </Link>
+              .
+            </p>
           </CardContent>
         </Card>
       )}

@@ -15,6 +15,11 @@ export interface CitedSentence {
   source_document_index: number | null;
   source_slide_number: number | null;
   source_excerpt: string | null;
+  /**
+   * A heading for this one line, in the formats that pair things up: the
+   * question in a Q&A guide, the thing it is set against in a comparison.
+   */
+  label?: string;
 }
 
 /** "What this isn't": the near-miss a student is likely to confuse it with. */

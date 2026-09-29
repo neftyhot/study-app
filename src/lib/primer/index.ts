@@ -24,29 +24,24 @@ import {
   sourceFiles,
   sourceSlides,
   type PrimerDepth,
+  type PrimerFormat,
   type PrimerSection,
   type PrimerTopic,
 } from "@/db/schema";
 import type { JsonSchema, LlmProvider } from "@/lib/llm";
 
 import type { CitedSentence, CounterExample } from "./types";
+import { TOPIC_CAP } from "./formats";
 import { SKIP_LOGISTICS_RULE } from "@/lib/logistics";
 
 export type { CitedSentence, CounterExample } from "./types";
-
-export const PRIMER_DEPTHS: { id: PrimerDepth; label: string; blurb: string }[] = [
-  { id: "summary", label: "Summary", blurb: "The key takeaways, nothing more." },
-  { id: "balanced", label: "Balanced", blurb: "A textbook walkthrough of each concept." },
-  {
-    id: "foundational",
-    label: "First Principles (Foundational)",
-    blurb: "Starts from zero: plain words, analogies, every step spelled out.",
-  },
-];
-
-export function isPrimerDepth(value: unknown): value is PrimerDepth {
-  return PRIMER_DEPTHS.some((depth) => depth.id === value);
-}
+export {
+  PRIMER_DEPTHS,
+  PRIMER_FORMATS,
+  TOPIC_CAP,
+  isPrimerDepth,
+  isPrimerFormat,
+} from "./formats";
 
 /* ------------------------------------------------------------------------ */
 /* Source material                                                          */
@@ -186,36 +181,85 @@ const SENTENCES = (description: string): JsonSchema => ({
   items: SENTENCE_SCHEMA,
 });
 
-export const PRIMER_SCHEMA: JsonSchema = {
-  type: "object",
-  properties: {
-    concepts: {
-      type: "array",
-      description:
-        "Every concept these slides teach, in the order they introduce them. Together they must cover every slide with content.",
-      items: {
-        type: "object",
-        properties: {
-          conceptName: { type: "string", description: "A short, specific name for the idea." },
-          topic: {
-            type: "string",
-            description:
-              "The broader subject heading of the lecture this concept falls under, 2-5 words, reused word for word by concepts that share it.",
-          },
-          definition: SENTENCES("What it is, in plain language."),
-          breakdown: SENTENCES("How it works and why: the mechanism and the causes."),
-          example: SENTENCES("One concrete example of it in action."),
-        },
-        required: ["conceptName", "topic", "definition", "breakdown", "example"],
-        additionalProperties: false,
-      },
+/** A sentence with a heading of its own: a question, or what it is set against. */
+const LABELLED = (description: string, label: string): JsonSchema => ({
+  type: "array",
+  description,
+  items: {
+    ...SENTENCE_SCHEMA,
+    properties: {
+      label: { type: "string", description: label },
+      ...(SENTENCE_SCHEMA.properties as Record<string, JsonSchema>),
     },
+    required: ["label", ...(SENTENCE_SCHEMA.required as string[])],
   },
-  required: ["concepts"],
-  additionalProperties: false,
+});
+
+/** What each format asks for in place of "how it works". */
+const BREAKDOWN: Record<PrimerFormat, JsonSchema> = {
+  explained: SENTENCES("How it works and why: the mechanism and the causes."),
+  bullets: SENTENCES(
+    "The facts a student must know about it, one fact per item, each short enough to be a bullet point.",
+  ),
+  qa: LABELLED(
+    "Self-test questions on it. The label is the question; the text is its answer.",
+    "A question a student could be asked about this concept on the exam.",
+  ),
+  compare: LABELLED(
+    "How it differs from the ideas it is most often confused with. The label names the other idea; the text says the difference.",
+    "The other idea, in a few words, e.g. \"vs. Inflation\".",
+  ),
 };
 
+/**
+ * The response shape for one format. Without examples the example field is
+ * left out altogether, so the model spends nothing writing one.
+ */
+export function primerSchema(format: PrimerFormat = "explained", withExamples = true): JsonSchema {
+  return {
+    type: "object",
+    properties: {
+      concepts: {
+        type: "array",
+        description:
+          "Every concept these slides teach, in the order they introduce them. Together they must cover every slide with content.",
+        items: {
+          type: "object",
+          properties: {
+            conceptName: { type: "string", description: "A short, specific name for the idea." },
+            topic: {
+              type: "string",
+              description:
+                "The broader subject heading of the lecture this concept falls under, 2-5 words, reused word for word by concepts that share it.",
+            },
+            definition: SENTENCES(
+              format === "explained" ? "What it is, in plain language." : "What it is, in one plain sentence.",
+            ),
+            breakdown: BREAKDOWN[format],
+            ...(withExamples
+              ? { example: SENTENCES("One specific, concrete example of it in action.") }
+              : {}),
+          },
+          required: [
+            "conceptName",
+            "topic",
+            "definition",
+            "breakdown",
+            ...(withExamples ? ["example"] : []),
+          ],
+          additionalProperties: false,
+        },
+      },
+    },
+    required: ["concepts"],
+    additionalProperties: false,
+  };
+}
+
+export const PRIMER_SCHEMA: JsonSchema = primerSchema();
+
 type RawSentence = {
+  label?: string | null;
   text?: string;
   source_document_index?: number | null;
   source_slide_number?: number | null;
@@ -228,7 +272,7 @@ type PrimerResponse = {
     topic?: string;
     definition: RawSentence[];
     breakdown: RawSentence[];
-    example: RawSentence[];
+    example?: RawSentence[];
   }[];
 };
 
@@ -248,6 +292,46 @@ queue at a shop) and say where the analogy stops holding. Prefer many short
 sentences to a few long ones.`,
 };
 
+/** How many breakdown items each non-paragraph format asks for, by depth. */
+const FORMAT_COUNTS: Record<Exclude<PrimerFormat, "explained">, Record<PrimerDepth, string>> = {
+  bullets: { summary: "2 to 3", balanced: "4 to 6", foundational: "6 to 10" },
+  qa: { summary: "2", balanced: "3 or 4", foundational: "5 to 8" },
+  compare: { summary: "1", balanced: "2 or 3", foundational: "3 to 5" },
+};
+
+function formatInstructions(format: PrimerFormat, depth: PrimerDepth): string {
+  if (format === "explained") return "";
+  const plain =
+    depth === "foundational"
+      ? " Still define every technical word in everyday language the first time it appears."
+      : "";
+  const count = FORMAT_COUNTS[format][depth];
+  switch (format) {
+    case "bullets":
+      return `FORMAT: KEY FACTS
+Break each concept into the facts a student needs, not a paragraph. The
+definition is one plain sentence. The breakdown is ${count} bullet points,
+each one fact: a rule, a cause, a number, a condition, a step, a term. Each
+bullet is short (under about 20 words) and makes sense read on its own. No
+filler, no "it is important to note".${plain}`;
+    case "qa":
+      return `FORMAT: Q&A SELF-TEST
+Break each concept into questions a student could be asked about it. The
+definition is one plain sentence. The breakdown is ${count} question-and-answer
+pairs: the label is the question, the text is its answer in one or two
+sentences. Mix the kinds of question: what it is, why it happens, what
+changes when something else changes, and (where the subject has numbers) a
+small calculation with the working in the answer.${plain}`;
+    case "compare":
+      return `FORMAT: COMPARE & CONTRAST
+Break each concept down by setting it against the ideas it is most easily
+confused with, from this lecture where possible. The definition is one plain
+sentence. The breakdown is ${count} contrast${count === "1" ? "" : "s"}: the label names the
+other idea ("vs. Fixed costs"), the text says the one difference that tells
+them apart and how to spot which is which.${plain}`;
+  }
+}
+
 export const PRIMER_SYSTEM = `You write one stretch of a study guide for a student about to learn from these lecture slides. Other stretches of the same lecture are written separately and joined afterwards, so explain what is on these slides and nothing else.
 
 Each slide is tagged [SN.M]: slideshow N, slide M.
@@ -260,14 +344,25 @@ Each slide is tagged [SN.M]: slideshow N, slide M.
   comparison, a formula. Do not merge unrelated ideas to save space, and do
   not split one idea across several concepts. Expect roughly one concept for
   every one or two slides of content.
+- Keep each concept to its most useful points. A student should not have to
+  wade through restated or minor details to find what matters for the exam.
 - Cover the concepts in the order the slides introduce them. Never reorder
   alphabetically or by importance.
 - Give each concept the broader topic it belongs to, as a short heading. Use
   the same wording for concepts that share a topic.
 - For each concept give its name, a plain-language definition, a breakdown of
-  how it works and why (mechanism and causality, not a list of facts), and one
-  concrete example. Keep the specifics the slides give: numbers, names, steps,
-  conditions.
+  how it works and why (mechanism and causality, not a list of facts), and,
+  when asked for, one example. Keep the specifics the slides give: numbers,
+  names, steps, conditions. If a FORMAT is given below, it decides what the
+  breakdown holds.
+- Examples are specific, never generic. In a subject built on numbers
+  (accounting, finance, economics, statistics, chemistry, physics, maths), use
+  real figures and work the calculation through: "Revenue $50,000, cost of
+  goods sold $30,000, so gross profit is $20,000 and the margin 40%", not "a
+  company earns revenue and has costs". In other subjects name a specific
+  case: a named disease, law, event, organism, character or situation, with
+  the detail that shows the concept at work. Never put made-up numbers on a
+  subject that does not use numbers.
 - Every sentence stands alone as one sentence.
 - Cite the slide a sentence rests on with its N and M, and copy a short
   phrase from that slide exactly as written as the excerpt. If a sentence
@@ -278,7 +373,14 @@ Each slide is tagged [SN.M]: slideshow N, slide M.
 export function primerPrompt(
   depth: PrimerDepth,
   sourceText: string,
-  context: { part?: number; parts?: number; gapFill?: boolean; skipLogistics?: boolean } = {},
+  context: {
+    part?: number;
+    parts?: number;
+    gapFill?: boolean;
+    skipLogistics?: boolean;
+    format?: PrimerFormat;
+    withExamples?: boolean;
+  } = {},
 ): string {
   const where =
     context.parts && context.parts > 1
@@ -290,7 +392,12 @@ export function primerPrompt(
       : "\n\nThese slides were left out of the first pass. Write at least one concept for every one of them."
     : "";
   const logistics = context.skipLogistics ? `\n\n${SKIP_LOGISTICS_RULE}` : "";
-  return `${DEPTH_INSTRUCTIONS[depth]}${where}${gap}${logistics}\n\nSLIDES\n${sourceText}`;
+  const format = formatInstructions(context.format ?? "explained", depth);
+  const examples =
+    context.withExamples === false
+      ? "\n\nDo not write examples: the student asked for none."
+      : "";
+  return `${DEPTH_INSTRUCTIONS[depth]}${format ? `\n\n${format}` : ""}${examples}${where}${gap}${logistics}\n\nSLIDES\n${sourceText}`;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -332,22 +439,34 @@ export const OUTLINE_SCHEMA: JsonSchema = {
   additionalProperties: false,
 };
 
-export const OUTLINE_SYSTEM = `You organise the concepts of a lecture into the chapters of a study guide.
+/** At most this many topics, however long the lecture. */
+export const MAX_TOPICS = 12;
+
+export function outlineSystem(cap: number): string {
+  return `You organise the concepts of a lecture into the chapters of a study guide.
 
 You get every concept, numbered, with the section heading it came from and its definition.
 
 - Group them into topics a student would recognise as chapters of the course,
-  usually 4 to 12 topics of 3 to 15 concepts each. Fewer for a short lecture.
+  usually 4 to ${MAX_TOPICS} topics, never more than ${MAX_TOPICS}. Fewer for a short lecture.
+- A topic holds AT MOST ${cap} concepts. Where a topic has more, keep the ${cap}
+  a student most needs for the exam (core definitions, mechanisms, anything
+  the lecture stresses) and leave the rest out. Never create extra topics
+  just to fit the concepts you left out.
 - Order the topics so that anything a topic relies on is taught in an earlier
   topic: foundations and vocabulary first, then the mechanisms built on them,
   then applications, comparisons and exceptions. Where there is no dependency,
   keep the lecture's order.
 - Within a topic, order the concepts the same way: each one should only need
   the ones before it.
-- Every concept id appears in exactly one topic. Never drop one, even if it
-  looks minor or repeats another.
+- A concept id appears in at most one topic. Leave one out only because its
+  topic is full, and then leave out the least important.
 - The overview says what the lecture is about and how the topics lead into
   one another, for a student who has not seen it yet.`;
+}
+
+/** The outline instructions with no cap to speak of, for callers that want every concept kept. */
+export const OUTLINE_SYSTEM = outlineSystem(TOPIC_CAP.foundational);
 
 export type OutlineConcept = { conceptName: string; topic: string; summary: string };
 
@@ -374,7 +493,7 @@ export type Outline = {
  * Topics by the section headings the batches gave, in lecture order: the
  * outline to fall back on when the organising call fails.
  */
-export function fallbackOutline(concepts: OutlineConcept[]): Outline {
+export function fallbackOutline(concepts: OutlineConcept[], cap = Infinity): Outline {
   const topics: Outline["topics"] = [];
   const byTitle = new Map<string, Outline["topics"][number]>();
   concepts.forEach((concept, i) => {
@@ -386,18 +505,23 @@ export function fallbackOutline(concepts: OutlineConcept[]): Outline {
       byTitle.set(key, topic);
       topics.push(topic);
     }
-    topic.conceptIds.push(i);
+    if (topic.conceptIds.length < cap) topic.conceptIds.push(i);
   });
   return { overview: "", topics };
 }
 
 /**
- * Makes the model's outline safe to store: each concept exactly once, none
- * lost. A concept the model left out goes into the topic that holds the
- * concept just before it in the lecture, right after it — where a reader of
- * the slides would have met it.
+ * Makes the model's outline safe to store: each concept at most once, and no
+ * topic over `cap`. A concept the model left out goes into the topic that
+ * holds the concept just before it in the lecture, right after it — where a
+ * reader of the slides would have met it — if that topic has room. With no
+ * cap, nothing is lost.
  */
-export function completeOutline(raw: OutlineResponse, concepts: OutlineConcept[]): Outline {
+export function completeOutline(
+  raw: OutlineResponse,
+  concepts: OutlineConcept[],
+  cap = Infinity,
+): Outline {
   const count = concepts.length;
   const seen = new Set<number>();
   const topics: Outline["topics"] = [];
@@ -411,22 +535,30 @@ export function completeOutline(raw: OutlineResponse, concepts: OutlineConcept[]
       ids.push(id);
     }
     if (!title || ids.length === 0) continue;
-    topics.push({ title, intro: topic.intro?.trim() ?? "", conceptIds: ids });
+    topics.push({ title, intro: topic.intro?.trim() ?? "", conceptIds: ids.slice(0, cap) });
+    // A concept cut off here counts as left out: it may still fit elsewhere.
+    for (const id of ids.slice(cap)) seen.delete(id);
+    if (topics.length >= MAX_TOPICS) break;
   }
 
-  if (topics.length === 0) return fallbackOutline(concepts);
+  if (topics.length === 0) return fallbackOutline(concepts, cap);
 
+  const placedIds = new Set(topics.flatMap((t) => t.conceptIds));
   for (let id = 0; id < count; id++) {
-    if (seen.has(id)) continue;
-    let placed = false;
-    for (let before = id - 1; before >= 0 && !placed; before--) {
-      if (!seen.has(before)) continue;
-      const topic = topics.find((t) => t.conceptIds.includes(before))!;
-      topic.conceptIds.splice(topic.conceptIds.indexOf(before) + 1, 0, id);
-      placed = true;
+    if (placedIds.has(id)) continue;
+    let home: Outline["topics"][number] | undefined;
+    let after = -1;
+    for (let before = id - 1; before >= 0; before--) {
+      if (!placedIds.has(before)) continue;
+      home = topics.find((t) => t.conceptIds.includes(before))!;
+      after = before;
+      break;
     }
-    if (!placed) topics[0].conceptIds.unshift(id);
-    seen.add(id);
+    if (!home) home = topics[0];
+    if (home.conceptIds.length >= cap) continue;
+    if (after === -1) home.conceptIds.unshift(id);
+    else home.conceptIds.splice(home.conceptIds.indexOf(after) + 1, 0, id);
+    placedIds.add(id);
   }
 
   return { overview: raw.overview?.trim() ?? "", topics };
@@ -455,12 +587,14 @@ export function normaliseSentence(
 ): CitedSentence | null {
   const text = raw.text?.trim();
   if (!text) return null;
+  const label = raw.label?.trim();
+  const labelled = label ? { label } : {};
 
   const doc = raw.source_document_index ?? 0;
   const page = raw.source_slide_number ?? 0;
   const slide = doc > 0 && page > 0 ? slides.get(slideKey(doc, page)) : undefined;
   if (!slide) {
-    return { text, source_document_index: null, source_slide_number: null, source_excerpt: null };
+    return { text, source_document_index: null, source_slide_number: null, source_excerpt: null, ...labelled };
   }
 
   const excerpt = raw.source_excerpt?.trim() ?? "";
@@ -471,6 +605,7 @@ export function normaliseSentence(
     source_document_index: slide.documentIndex,
     source_slide_number: slide.slideNumber,
     source_excerpt: verbatim ? excerpt : null,
+    ...labelled,
   };
 }
 
@@ -561,7 +696,8 @@ export function mergeConcepts(concepts: Concept[]): Concept[] {
 }
 
 /**
- * Writes the Primer for one depth, replacing any earlier one at that depth.
+ * Writes the Primer for one depth and format, replacing any earlier one of
+ * the same kind.
  *
  * Three passes. The slides are explained a batch at a time, so the guide
  * covers the whole lecture instead of the few ideas one reply has room for.
@@ -582,10 +718,18 @@ export async function generatePrimer(
     concurrency?: number;
     /** Leave announcements and course admin out. Default on. */
     skipLogistics?: boolean;
+    /** How each concept is broken down. Default "explained". */
+    format?: PrimerFormat;
+    /** Write an example for every concept. Default on. */
+    withExamples?: boolean;
     onProgress?: (progress: PrimerProgress) => void;
   } = {},
 ): Promise<string> {
   const skipLogistics = options.skipLogistics !== false;
+  const format = options.format ?? "explained";
+  const withExamples = options.withExamples !== false;
+  const cap = TOPIC_CAP[depth];
+  const schema = primerSchema(format, withExamples);
   const slides = loadPrimerSlides(db, examId);
   const batches = primerBatches(slides, options.batchSize ?? PRIMER_BATCH_SLIDES);
   if (batches.length === 0) {
@@ -604,8 +748,13 @@ export async function generatePrimer(
     const { data } = await llm.generateStructured<PrimerResponse>({
       feature: "primer",
       system: PRIMER_SYSTEM,
-      prompt: primerPrompt(depth, primerSourceText(batch), { ...context, skipLogistics }),
-      schema: PRIMER_SCHEMA,
+      prompt: primerPrompt(depth, primerSourceText(batch), {
+        ...context,
+        skipLogistics,
+        format,
+        withExamples,
+      }),
+      schema,
       temperature: 0.3,
       thinking: "minimal",
     });
@@ -615,7 +764,7 @@ export async function generatePrimer(
         topic: concept.topic?.trim() ?? "",
         definition: sentences(concept.definition, bySlide),
         breakdown: sentences(concept.breakdown, bySlide),
-        example: sentences(concept.example, bySlide),
+        example: withExamples ? sentences(concept.example, bySlide) : [],
       }))
       .filter((concept) => concept.conceptName && concept.definition.length > 0);
   };
@@ -669,28 +818,34 @@ export async function generatePrimer(
   try {
     const { data } = await llm.generateStructured<OutlineResponse>({
       feature: "primer",
-      system: OUTLINE_SYSTEM,
+      system: outlineSystem(cap),
       prompt: outlinePrompt(outlineInput),
       schema: OUTLINE_SCHEMA,
       temperature: 0.2,
       thinking: "minimal",
     });
-    outline = completeOutline(data, outlineInput);
+    outline = completeOutline(data, outlineInput, cap);
   } catch {
     // The concepts are the guide; the chapters only arrange them. Better
     // chapters by lecture heading than no guide.
-    outline = fallbackOutline(outlineInput);
+    outline = fallbackOutline(outlineInput, cap);
   }
   done++;
   report("saving");
 
   return db.transaction((tx) => {
     tx.delete(primerGuides)
-      .where(and(eq(primerGuides.examId, examId), eq(primerGuides.depth, depth)))
+      .where(
+        and(
+          eq(primerGuides.examId, examId),
+          eq(primerGuides.depth, depth),
+          eq(primerGuides.format, format),
+        ),
+      )
       .run();
     const guide = tx
       .insert(primerGuides)
-      .values({ examId, depth, model: llm.model, overview: outline.overview || null })
+      .values({ examId, depth, format, model: llm.model, overview: outline.overview || null })
       .returning()
       .get();
     let orderIndex = 0;
@@ -766,6 +921,7 @@ export type PrimerView = {
   guide: {
     id: string;
     depth: PrimerDepth;
+    format: PrimerFormat;
     model: string | null;
     createdAt: string;
     overview: string | null;
@@ -777,11 +933,22 @@ export type PrimerView = {
   slides: Record<string, CitationSlide>;
 };
 
-export function getPrimer(db: Db, examId: string, depth: PrimerDepth): PrimerView | null {
+export function getPrimer(
+  db: Db,
+  examId: string,
+  depth: PrimerDepth,
+  format: PrimerFormat = "explained",
+): PrimerView | null {
   const guide = db
     .select()
     .from(primerGuides)
-    .where(and(eq(primerGuides.examId, examId), eq(primerGuides.depth, depth)))
+    .where(
+      and(
+        eq(primerGuides.examId, examId),
+        eq(primerGuides.depth, depth),
+        eq(primerGuides.format, format),
+      ),
+    )
     .get();
   if (!guide) return null;
 
@@ -827,6 +994,7 @@ export function getPrimer(db: Db, examId: string, depth: PrimerDepth): PrimerVie
     guide: {
       id: guide.id,
       depth: guide.depth,
+      format: guide.format,
       model: guide.model,
       createdAt: guide.createdAt,
       overview: guide.overview,
@@ -837,14 +1005,16 @@ export function getPrimer(db: Db, examId: string, depth: PrimerDepth): PrimerVie
   };
 }
 
-/** Which depths already have a guide, so the selector can say so. */
-export function primerDepthsWritten(db: Db, examId: string): PrimerDepth[] {
+/** Which depth and format pairs already have a guide, so the selector can say so. */
+export function primerGuidesWritten(
+  db: Db,
+  examId: string,
+): { depth: PrimerDepth; format: PrimerFormat }[] {
   return db
-    .select({ depth: primerGuides.depth })
+    .select({ depth: primerGuides.depth, format: primerGuides.format })
     .from(primerGuides)
     .where(eq(primerGuides.examId, examId))
-    .all()
-    .map((row) => row.depth);
+    .all();
 }
 
 /* ------------------------------------------------------------------------ */
@@ -879,8 +1049,13 @@ applying the concept wrongly because of that misconception, then why it is
 wrong, tied to how the concept actually works. Keep each part to two or three
 sentences. Never contradict the explanation you are given.`;
 
+/** Sentences as one run of prose, each labelled one prefixed with its label. */
+function joinSentences(list: CitedSentence[]): string {
+  return list.map((s) => (s.label ? `${s.label} ${s.text}` : s.text)).join(" ");
+}
+
 export function counterExamplePrompt(section: Pick<PrimerSection, "conceptName" | "definition" | "breakdown" | "example">): string {
-  const join = (list: CitedSentence[]) => list.map((s) => s.text).join(" ");
+  const join = joinSentences;
   return [
     `CONCEPT: ${section.conceptName}`,
     `DEFINITION: ${join(section.definition)}`,
@@ -943,7 +1118,7 @@ export const EXAMPLE_SCHEMA: JsonSchema = {
     example: {
       type: "string",
       description:
-        "One new concrete example of the concept in action, as a short paragraph of 2-4 sentences.",
+        "One new specific, concrete example of the concept in action, as a short paragraph of 2-4 sentences.",
     },
   },
   required: ["example"],
@@ -956,13 +1131,19 @@ export const EXAMPLE_SYSTEM = `You give a student one more concrete example of a
   different setting, different numbers, or a different angle on the mechanism.
 - Walk through it so the concept's mechanism is visible, in 2-4 plain
   sentences.
+- Be specific, never generic. In a subject built on numbers (accounting,
+  finance, economics, statistics, chemistry, physics, maths), use real
+  figures and work the calculation through. In other subjects name a specific
+  case (a named disease, law, event, organism, character or situation) with
+  the detail that shows the concept at work. Never put made-up numbers on a
+  subject that does not use numbers.
 - Never contradict the explanation you are given.`;
 
 export function examplePrompt(
   section: Pick<PrimerSection, "conceptName" | "definition" | "breakdown" | "example">,
   seen: string[],
 ): string {
-  const join = (list: CitedSentence[]) => list.map((s) => s.text).join(" ");
+  const join = joinSentences;
   const already = [join(section.example), ...seen].filter(Boolean);
   return [
     `CONCEPT: ${section.conceptName}`,

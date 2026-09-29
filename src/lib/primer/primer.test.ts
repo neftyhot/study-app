@@ -17,8 +17,10 @@ import { courses, exams, primerGuides, primerSections, sourceFiles, sourceSlides
 import type { LlmProvider, StructuredRequest } from "@/lib/llm";
 
 import {
+  MAX_TOPICS,
   OUTLINE_SCHEMA,
   PrimerError,
+  TOPIC_CAP,
   completeOutline,
   counterExample,
   fallbackOutline,
@@ -29,7 +31,9 @@ import {
   getPrimer,
   loadPrimerSlides,
   normaliseSentence,
-  primerDepthsWritten,
+  primerGuidesWritten,
+  primerPrompt,
+  primerSchema,
   slideKey,
   type CitedSentence,
 } from "./index";
@@ -228,7 +232,7 @@ describe("writing a primer", () => {
     };
     await generatePrimer(db, fakeProvider(second).provider, examId, "summary");
 
-    expect(primerDepthsWritten(db, examId).sort()).toEqual(["balanced", "summary"]);
+    expect(primerGuidesWritten(db, examId).map((g) => g.depth).sort()).toEqual(["balanced", "summary"]);
     expect(getPrimer(db, examId, "summary")!.sections.map((x) => x.conceptName)).toEqual(["Only"]);
     expect(db.select().from(primerGuides).all()).toHaveLength(2);
     expect(db.select().from(primerSections).all()).toHaveLength(3);
@@ -448,14 +452,15 @@ describe("covering the whole lecture", () => {
     const { provider, calls } = fakeProvider(answer, "fake-lite", outline);
     const progress: string[] = [];
 
-    await generatePrimer(db, provider, examId, "balanced", { onProgress: (p) => progress.push(p.stage) });
+    // First Principles, so both topics have room for every concept.
+    await generatePrimer(db, provider, examId, "foundational", { onProgress: (p) => progress.push(p.stage) });
 
     // 3 batches of ≤10 slides, 1 gap pass, 1 organising call.
     expect(calls).toHaveLength(5);
     expect(progress).toContain("filling_gaps");
     expect(progress.at(-1)).toBe("saving");
 
-    const primer = getPrimer(db, examId, "balanced")!;
+    const primer = getPrimer(db, examId, "foundational")!;
     expect(primer.guide.overview).toBe("The lecture in brief.");
     expect(primer.chapters.map((c) => [c.title, c.sections.length])).toEqual([
       ["Groundwork", 10],
@@ -476,5 +481,93 @@ describe("covering the whole lecture", () => {
     const primer = getPrimer(db, examId, "balanced")!;
     expect(primer.chapters.map((c) => c.title)).toEqual(["Anatomy"]);
     expect(primer.guide.overview).toBeNull();
+  });
+});
+
+describe("formats and limits", () => {
+  const many = (n: number, topic = "One") =>
+    Array.from({ length: n }, (_, i) => ({ conceptName: `C${i}`, topic, summary: "" }));
+
+  it("caps each depth at 5, 10 and 25 points per topic", () => {
+    expect(TOPIC_CAP).toEqual({ summary: 5, balanced: 10, foundational: 25 });
+  });
+
+  it("keeps at most `cap` concepts in a topic and never adds topics to fit the rest", () => {
+    const concepts = many(12);
+    const raw = { topics: [{ title: "All", conceptIds: concepts.map((_, i) => i) }] };
+    const outline = completeOutline(raw, concepts, 5);
+    expect(outline.topics).toEqual([{ title: "All", intro: "", conceptIds: [0, 1, 2, 3, 4] }]);
+
+    const fallback = fallbackOutline(concepts, 5);
+    expect(fallback.topics).toHaveLength(1);
+    expect(fallback.topics[0].conceptIds).toEqual([0, 1, 2, 3, 4]);
+  });
+
+  it("re-adds a forgotten concept only where its topic has room", () => {
+    const concepts = many(4);
+    const outline = completeOutline(
+      { topics: [{ title: "T", conceptIds: [0, 1] }, { title: "U", conceptIds: [3] }] },
+      concepts,
+      2,
+    );
+    // 2 belongs after 1, but "T" is full; it is left out rather than overflowing.
+    expect(outline.topics.map((t) => t.conceptIds)).toEqual([[0, 1], [3]]);
+  });
+
+  it("stops at the most topics a guide may have", () => {
+    const concepts = many(MAX_TOPICS + 3);
+    const raw = { topics: concepts.map((_, i) => ({ title: `T${i}`, conceptIds: [i] })) };
+    expect(completeOutline(raw, concepts, 5).topics).toHaveLength(MAX_TOPICS);
+  });
+
+  it("leaves the example out of the schema when examples are off", () => {
+    const item = (schema: ReturnType<typeof primerSchema>) =>
+      (schema as { properties: { concepts: { items: { properties: object; required: string[] } } } })
+        .properties.concepts.items;
+    expect(item(primerSchema("explained", true)).required).toContain("example");
+    expect(item(primerSchema("bullets", false)).required).not.toContain("example");
+    expect(Object.keys(item(primerSchema("qa", false)).properties)).not.toContain("example");
+  });
+
+  it("asks for each format's own breakdown, and for no examples when turned off", () => {
+    expect(primerPrompt("summary", "x", { format: "explained" })).not.toMatch(/Do not write examples/);
+    expect(primerPrompt("summary", "x", { format: "qa", withExamples: false })).toMatch(/Do not write examples/);
+    expect(primerPrompt("balanced", "x", { format: "bullets" })).not.toBe(primerPrompt("balanced", "x"));
+    expect(primerPrompt("balanced", "x", { format: "compare" })).not.toBe(
+      primerPrompt("balanced", "x", { format: "qa" }),
+    );
+  });
+
+  it("keeps a sentence's label, and drops a blank one", () => {
+    expect(normaliseSentence({ text: "It falls.", label: " What happens? " }, new Map())?.label).toBe("What happens?");
+    expect(normaliseSentence({ text: "It falls.", label: "  " }, new Map())).not.toHaveProperty("label");
+  });
+
+  it("stores each format separately, and skips examples when asked", async () => {
+    upload("lecture1.pptx", "2026-01-01 00:00:00", [{ text: "The heart has four chambers." }]);
+    const answer = {
+      concepts: [
+        {
+          conceptName: "Chambers",
+          definition: [s("Four chambers.")],
+          breakdown: [{ ...s("Four."), label: "How many chambers?" }],
+          example: [s("Should be ignored.")],
+        },
+      ],
+    };
+    await generatePrimer(db, fakeProvider(answer).provider, examId, "balanced");
+    const { provider, calls } = fakeProvider(answer);
+    await generatePrimer(db, provider, examId, "balanced", { format: "qa", withExamples: false });
+
+    expect(calls[0].prompt).toMatch(/Do not write examples/);
+    expect(primerGuidesWritten(db, examId)).toHaveLength(2);
+    const explained = getPrimer(db, examId, "balanced")!;
+    const qa = getPrimer(db, examId, "balanced", "qa")!;
+    expect(explained.guide.format).toBe("explained");
+    expect(explained.sections[0].example).toHaveLength(1);
+    expect(qa.guide.format).toBe("qa");
+    expect(qa.sections[0].example).toEqual([]);
+    expect(qa.sections[0].breakdown[0].label).toBe("How many chambers?");
+    expect(getPrimer(db, examId, "balanced", "bullets")).toBeNull();
   });
 });

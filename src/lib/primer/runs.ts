@@ -8,7 +8,7 @@
 import type { Db } from "@/db/client";
 import type { LlmProvider } from "@/lib/llm";
 
-import type { PrimerDepth } from "@/db/schema";
+import type { PrimerDepth, PrimerFormat } from "@/db/schema";
 
 import { generatePrimer, type PrimerProgress } from "./index";
 
@@ -21,10 +21,15 @@ export type PrimerRun = PrimerProgress & {
 const store = globalThis as typeof globalThis & { __primerRuns?: Map<string, PrimerRun> };
 const runs = (store.__primerRuns ??= new Map());
 
-const key = (examId: string, depth: PrimerDepth) => `${examId}:${depth}`;
+const key = (examId: string, depth: PrimerDepth, format: PrimerFormat) =>
+  `${examId}:${depth}:${format}`;
 
-export function primerRun(examId: string, depth: PrimerDepth): PrimerRun | null {
-  return runs.get(key(examId, depth)) ?? null;
+export function primerRun(
+  examId: string,
+  depth: PrimerDepth,
+  format: PrimerFormat = "explained",
+): PrimerRun | null {
+  return runs.get(key(examId, depth, format)) ?? null;
 }
 
 /** Starts writing in the background; false if one is already going. */
@@ -33,10 +38,11 @@ export function startPrimerRun(
   llm: LlmProvider,
   examId: string,
   depth: PrimerDepth,
-  options: { skipLogistics?: boolean } = {},
+  options: { skipLogistics?: boolean; format?: PrimerFormat; withExamples?: boolean } = {},
 ): boolean {
-  if (primerRun(examId, depth)?.running) return false;
-  const id = key(examId, depth);
+  const format = options.format ?? "explained";
+  if (primerRun(examId, depth, format)?.running) return false;
+  const id = key(examId, depth, format);
   const run: PrimerRun = {
     stage: "explaining",
     done: 0,
@@ -49,6 +55,8 @@ export function startPrimerRun(
 
   generatePrimer(db, llm, examId, depth, {
     skipLogistics: options.skipLogistics,
+    format,
+    withExamples: options.withExamples,
     onProgress: (progress) => Object.assign(run, progress),
   })
     .catch((error: unknown) => {

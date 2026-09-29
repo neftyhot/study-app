@@ -22,24 +22,40 @@ const STAGE_LABEL: Record<PrimerRun["stage"], string> = {
 export function WritePrimerButton({
   examId,
   depth,
+  format = "explained",
   rewrite,
+  href,
+  withExamples: controlledExamples,
+  onWithExamplesChange,
 }: {
   examId: string;
   depth: string;
+  format?: string;
   rewrite: boolean;
+  /** Where the finished guide is shown; the page refreshes in place if omitted. */
+  href?: string;
+  /** Examples on or off, when the parent shows the choice elsewhere too. */
+  withExamples?: boolean;
+  onWithExamplesChange?: (next: boolean) => void;
 }) {
   const router = useRouter();
   const [run, setRun] = useState<PrimerRun | null>(null);
   const [starting, setStarting] = useState(false);
   const [watching, setWatching] = useState(false);
   const [skipLogistics, setSkipLogistics] = useSkipLogistics();
-  const toggleId = `skip-logistics-${depth}-${rewrite ? "rewrite" : "write"}`;
+  const [ownExamples, setOwnExamples] = useState(true);
+  const withExamples = controlledExamples ?? ownExamples;
+  const setWithExamples = onWithExamplesChange ?? setOwnExamples;
+  const toggleId = `skip-logistics-${depth}-${format}-${rewrite ? "rewrite" : "write"}`;
+  const examplesId = `examples-${depth}-${format}-${rewrite ? "rewrite" : "write"}`;
 
   const fetchRun = useCallback(async () => {
-    const response = await fetch(`/api/exams/${examId}/primer?depth=${depth}`, { cache: "no-store" });
+    const response = await fetch(`/api/exams/${examId}/primer?depth=${depth}&format=${format}`, {
+      cache: "no-store",
+    });
     const payload = (await response.json().catch(() => ({}))) as { run?: PrimerRun | null };
     return payload.run ?? null;
-  }, [examId, depth]);
+  }, [examId, depth, format]);
 
   // Pick up a run already going, e.g. after navigating away and back.
   useEffect(() => {
@@ -65,11 +81,12 @@ export function WritePrimerButton({
       if (latest?.error) toast.error(latest.error);
       else {
         toast.success(rewrite ? "Study guide rewritten." : "Study guide ready.");
+        if (href) router.push(href);
         router.refresh();
       }
     }, 1500);
     return () => clearInterval(timer);
-  }, [watching, fetchRun, rewrite, router]);
+  }, [watching, fetchRun, rewrite, router, href]);
 
   async function start() {
     setStarting(true);
@@ -77,7 +94,7 @@ export function WritePrimerButton({
       const response = await fetch(`/api/exams/${examId}/primer`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ depth, skipLogistics }),
+        body: JSON.stringify({ depth, format, skipLogistics, withExamples }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok && response.status !== 409) {
@@ -123,6 +140,17 @@ export function WritePrimerButton({
         />
         <Label htmlFor={toggleId} className="text-muted-foreground text-xs font-normal">
           Ignore announcements and syllabus info
+        </Label>
+      </div>
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id={examplesId}
+          checked={withExamples}
+          disabled={starting}
+          onCheckedChange={(value) => setWithExamples(value === true)}
+        />
+        <Label htmlFor={examplesId} className="text-muted-foreground text-xs font-normal">
+          Write an example for every concept (you can still add one to any concept later)
         </Label>
       </div>
     </div>

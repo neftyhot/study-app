@@ -998,9 +998,18 @@ export const primerDepths = ["summary", "balanced", "foundational"] as const;
 export type PrimerDepth = (typeof primerDepths)[number];
 
 /**
+ * How a primer breaks each concept down. "explained" is short paragraphs
+ * (what it is, how it works, an example); "bullets" is the facts to know as a
+ * list; "qa" is questions to test yourself with; "compare" sets each concept
+ * against what it is confused with.
+ */
+export const primerFormats = ["explained", "bullets", "qa", "compare"] as const;
+export type PrimerFormat = (typeof primerFormats)[number];
+
+/**
  * A reading guide for an exam, to go through before drilling its cards.
- * One per exam and depth: regenerating at a depth replaces that depth's guide
- * and leaves the others alone.
+ * One per exam, depth and format: regenerating one replaces that guide and
+ * leaves the others alone.
  */
 export const primerGuides = sqliteTable(
   "primer_guides",
@@ -1010,13 +1019,14 @@ export const primerGuides = sqliteTable(
       .notNull()
       .references(() => exams.id, { onDelete: "cascade" }),
     depth: text("depth", { enum: primerDepths }).notNull(),
+    format: text("format", { enum: primerFormats }).notNull().default("explained"),
     /** The model that wrote it, so a surprising guide can be traced. */
     model: text("model"),
     /** What the whole deck teaches and the route through it, in a paragraph or two. */
     overview: text("overview"),
     createdAt: createdAt(),
   },
-  (t) => [uniqueIndex("primer_guides_exam_depth_idx").on(t.examId, t.depth)],
+  (t) => [uniqueIndex("primer_guides_exam_depth_format_idx").on(t.examId, t.depth, t.format)],
 );
 
 /**
