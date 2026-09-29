@@ -21,6 +21,8 @@ files:
   - tools/license-manager/index.html
   - tools/license-manager/handlers.js
   - tools/license-manager/insights.js
+  - tools/license-manager/scaling.js
+  - tools/license-manager/devstats.js
   - package.json
   - "!**/node_modules/**"
 

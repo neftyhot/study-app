@@ -27,4 +27,12 @@ contextBridge.exposeInMainWorld("authority", {
     status: () => ipcRenderer.invoke("insights:status"),
     setStatus: (status) => ipcRenderer.invoke("insights:set-status", status),
   },
+  scaling: {
+    list: () => ipcRenderer.invoke("scaling:list"),
+    metrics: () => ipcRenderer.invoke("scaling:metrics"),
+    setSite: (site) => ipcRenderer.invoke("scaling:set-site", site),
+    check: (ids) => ipcRenderer.invoke("scaling:check", ids),
+    mark: (id, done) => ipcRenderer.invoke("scaling:mark", id, done),
+  },
+  devstats: () => ipcRenderer.invoke("devstats:get"),
 });

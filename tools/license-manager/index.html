@@ -91,6 +91,36 @@
       .suggestion { border-bottom: 1px solid var(--border); padding: 12px 16px; }
       .suggestion:last-child { border-bottom: none; }
       .suggestion p { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+      .ms-head { display: flex; gap: 12px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+      .ms-head h2 { margin: 0; font-size: 13px; font-weight: 600; }
+      .ms-head .bar { width: 120px; }
+      .item { border-bottom: 1px solid var(--border); padding: 12px 16px; display: grid; grid-template-columns: 30px 1fr; gap: 4px 10px; }
+      .item:last-child { border-bottom: none; }
+      .tick {
+        width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 14px; line-height: 1;
+        display: grid; place-items: center; color: var(--muted);
+      }
+      .tick.done { background: var(--good); border-color: var(--good); color: #052e12; font-weight: 700; }
+      .tick.busy { opacity: 0.5; }
+      .item .title { font-weight: 500; }
+      .item .meta { color: var(--muted); font-size: 11px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .item .result { font-size: 12px; margin-top: 4px; grid-column: 2; }
+      .result.pass { color: var(--good); }
+      .result.fail, .result.error { color: var(--bad); }
+      .result.manual, .result.not-yet { color: var(--warn); }
+      .item details { grid-column: 2; margin-top: 4px; }
+      .item summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+      .item ol, .item ul { margin: 6px 0; padding-left: 20px; }
+      .item li { margin: 3px 0; overflow-wrap: anywhere; }
+      .item h4 { margin: 10px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      .tag.buy { border-color: var(--warn); color: var(--warn); }
+      .tag.publish, .tag.send { border-color: var(--good); color: var(--good); }
+      .tag.auto { border-color: var(--muted); color: var(--muted); }
+      .confirm-box { grid-column: 2; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--warn); border-radius: 6px; }
+      .confirm-box p { margin: 0 0 8px; }
+      .fun .v { font-size: 24px; }
+      .fun .emoji { font-size: 18px; float: right; }
+      .fun .h { overflow-wrap: anywhere; }
     </style>
   </head>
   <body>
@@ -99,9 +129,11 @@
       <p>Signs offline licences for the student app. Runs only on this machine.</p>
       <nav class="tabs" role="tablist">
         <button type="button" role="tab" data-show="licences" aria-selected="true">Licences</button>
-        <button type="button" role="tab" data-show="stats" aria-selected="false">Dev stats</button>
+        <button type="button" role="tab" data-show="stats" aria-selected="false">Usage</button>
         <button type="button" role="tab" data-show="suggestions" aria-selected="false">Suggestions</button>
         <button type="button" role="tab" data-show="status" aria-selected="false">App status</button>
+        <button type="button" role="tab" data-show="scaling" aria-selected="false">Scaling</button>
+        <button type="button" role="tab" data-show="codebase" aria-selected="false">Codebase</button>
       </nav>
     </header>
 
@@ -299,6 +331,50 @@
               <span id="st-status" class="paths"></span>
             </div>
           </div>
+        </section>
+      </div>
+      <div data-tab="scaling" hidden>
+        <section class="panel">
+          <h2>Scaling checklist — what to buy, publish, set up and send, in order</h2>
+          <div class="body" style="display: grid; gap: 12px">
+            <p class="note" style="margin: 0">
+              Click a circle to check that item. Items marked <span class="tag auto">auto</span> are checked from here
+              (GitHub, Cloudflare, Stripe links, DNS, the repository). The rest can't be seen from this computer:
+              clicking them opens the steps and how to verify, then you confirm it yourself.
+            </p>
+            <div class="row">
+              <div style="flex: 1; min-width: 220px">
+                <label for="sc-site">Your website (used by the domain, email and website checks)</label>
+                <input id="sc-site" placeholder="e.g. meganstudy.app" autocomplete="off" />
+              </div>
+              <button id="sc-site-save" type="button" style="align-self: flex-end">Save</button>
+            </div>
+            <div class="row">
+              <button id="sc-check-all" class="primary" type="button">Check everything automatic</button>
+              <span id="sc-status" class="paths"></span>
+              <span class="spacer"></span>
+              <span id="sc-metrics" class="paths"></span>
+            </div>
+          </div>
+        </section>
+        <div id="sc-milestones" style="display: grid; gap: 20px"></div>
+      </div>
+
+      <div data-tab="codebase" hidden>
+        <section class="panel">
+          <h2 class="row" style="display: flex">
+            <span>Megan Study, by the numbers</span>
+            <span class="spacer"></span>
+            <span id="cb-status" class="paths" style="font-weight: 400"></span>
+            <button id="cb-refresh" type="button">Recount</button>
+          </h2>
+          <div class="body">
+            <div id="cb-tiles" class="tiles fun"></div>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>Lines by language</h2>
+          <div class="body" style="padding: 0 6px"><table id="cb-langs"></table></div>
         </section>
       </div>
     </main>
@@ -508,6 +584,8 @@
           if (name === "stats" && !loaded.stats) loadStats();
           if (name === "suggestions" && !loaded.suggestions) loadFeedback();
           if (name === "status") loadStatus();
+          if (name === "scaling" && !loaded.scaling) loadScaling();
+          if (name === "codebase" && !loaded.codebase) loadCodebase();
         }),
       );
 
@@ -708,6 +786,243 @@
         $("insights-conn").textContent = "Saved.";
         loaded.stats = loaded.suggestions = false;
       });
+
+      /* ------------------------------------------------ Scaling checklist */
+
+      let scaling = null;
+      const lastResults = {};
+      const openConfirm = new Set();
+
+      function list(tag, rows) {
+        return `<${tag}>${rows.map((r) => `<li>${escapeHtml(r)}</li>`).join("")}</${tag}>`;
+      }
+
+      function renderScaling(metrics) {
+        if (metrics) {
+          const parts = [];
+          if (metrics.active7 != null) parts.push(`${fmt(metrics.active7)} weekly actives`);
+          if (metrics.installs != null) parts.push(`${fmt(metrics.installs)} installs`);
+          if (metrics.sales != null) parts.push(`${fmt(metrics.sales)} sales`);
+          $("sc-metrics").textContent = parts.length ? `Now: ${parts.join(" · ")}` : "";
+          scaling.metrics = metrics;
+        }
+        $("sc-site").value = scaling.site || "";
+        const now = scaling.metrics || {};
+        const host = $("sc-milestones");
+        host.innerHTML = "";
+
+        for (const ms of scaling.milestones) {
+          const items = scaling.items.filter((i) => i.milestone === ms.id);
+          const done = items.filter((i) => i.saved?.done).length;
+          const section = document.createElement("section");
+          section.className = "panel";
+
+          let when = "Do these first.";
+          if (ms.trigger) {
+            const value = now[ms.trigger.metric];
+            const reached = value != null && value >= ms.trigger.at;
+            when = `Needed at ~${fmt(ms.trigger.at)} ${ms.trigger.label}` +
+              (value == null ? "." : reached ? ` — you're there (${fmt(value)}).` : ` — you have ${fmt(value)}.`);
+          }
+          const percent = Math.round((done / items.length) * 100);
+          section.innerHTML = `
+            <div class="ms-head">
+              <div style="flex: 1">
+                <h2>${escapeHtml(ms.title)}</h2>
+                <div class="paths">${escapeHtml(ms.summary)} ${escapeHtml(when)}</div>
+              </div>
+              <span class="paths">${done} / ${items.length}</span>
+              <div class="bar"><span style="width:${percent}%"></span></div>
+            </div>`;
+
+          for (const item of items) section.appendChild(renderItem(item));
+          host.appendChild(section);
+        }
+      }
+
+      function renderItem(item) {
+        const row = document.createElement("div");
+        row.className = "item";
+        const saved = item.saved;
+        const result = lastResults[item.id];
+
+        const tick = button(saved?.done ? "✓" : "", () => onTick(item, tick), `tick${saved?.done ? " done" : ""}`);
+        tick.title = item.auto ? "Check now" : "Can't be checked from here — shows how, then confirm";
+        row.appendChild(tick);
+
+        const text = document.createElement("div");
+        const doneNote = saved?.done
+          ? `<span>Done ${new Date(saved.at).toLocaleDateString()} · ${saved.how === "auto" ? "verified" : "confirmed by you"}</span>`
+          : "";
+        text.innerHTML = `
+          <div class="title">${escapeHtml(item.title)}</div>
+          <div class="meta">
+            <span class="tag ${escapeHtml(item.kind.replace(" ", "-"))}">${escapeHtml(item.kind)}</span>
+            ${item.auto ? '<span class="tag auto">auto</span>' : '<span class="tag">manual</span>'}
+            <span>${escapeHtml(item.cost)}</span>
+            ${doneNote}
+          </div>`;
+        row.appendChild(text);
+
+        const detail = result?.detail || (saved?.how === "auto" ? saved.detail : "");
+        if (detail) {
+          const line = document.createElement("div");
+          const status = result?.status || (saved?.done ? "pass" : "fail");
+          line.className = `result ${status}`;
+          const prefix = { pass: "✓ ", fail: "✗ ", error: "⚠ ", manual: "• ", "not-yet": "◦ " }[status] || "";
+          line.textContent = prefix + detail;
+          row.appendChild(line);
+        }
+
+        if (openConfirm.has(item.id) && !saved?.done) {
+          const box = document.createElement("div");
+          box.className = "confirm-box";
+          const reason = result?.status === "manual" || result?.status === "not-yet"
+            ? "This can't be fully verified from here."
+            : item.auto
+              ? "The automatic check didn't pass. Follow the steps below, then click the circle again."
+              : "This can't be checked automatically — it happens in someone else's dashboard, bank or inbox.";
+          box.innerHTML = `<p>${escapeHtml(reason)} Do the steps under “How to do it”, confirm it with “How to verify”, then:</p>`;
+          const actions = document.createElement("div");
+          actions.className = "row";
+          if (!item.auto || result?.status === "manual" || result?.status === "not-yet") {
+            actions.appendChild(button("I've verified it — mark done", () => mark(item.id, true), "primary"));
+          }
+          actions.appendChild(button("Not yet", () => { openConfirm.delete(item.id); renderScaling(); }));
+          box.appendChild(actions);
+          row.appendChild(box);
+        }
+
+        const details = document.createElement("details");
+        details.open = openConfirm.has(item.id) && !saved?.done;
+        details.innerHTML = `
+          <summary>Why, how to do it, how to verify</summary>
+          <h4>Why</h4><div>${escapeHtml(item.why)}</div>
+          <h4>How to do it</h4>${list("ol", item.steps)}
+          <h4>How to verify</h4>${list("ul", item.verify)}`;
+        row.appendChild(details);
+        return row;
+      }
+
+      async function onTick(item, tick) {
+        clearAlert();
+        if (item.saved?.done && !item.auto) {
+          if (confirm("Mark this as not done?")) mark(item.id, false);
+          return;
+        }
+        if (!item.auto) {
+          openConfirm.add(item.id);
+          lastResults[item.id] = { status: "manual", detail: "Can't be checked automatically — see the steps and how to verify below." };
+          return renderScaling();
+        }
+        tick.classList.add("busy");
+        tick.textContent = "…";
+        const result = await window.authority.scaling.check([item.id]);
+        if (!result.ok) { renderScaling(); return fail(result.error); }
+        applyCheck(result.data);
+      }
+
+      function applyCheck(data) {
+        Object.assign(lastResults, data.results);
+        for (const [id, r] of Object.entries(data.results)) {
+          if (r.status === "pass") openConfirm.delete(id);
+          else openConfirm.add(id);
+        }
+        scaling = { ...scaling, ...data };
+        renderScaling();
+      }
+
+      async function mark(id, done) {
+        const result = await window.authority.scaling.mark(id, done);
+        if (!result.ok) return fail(result.error);
+        openConfirm.delete(id);
+        delete lastResults[id];
+        scaling = { ...scaling, ...result.data };
+        renderScaling();
+      }
+
+      async function loadScaling() {
+        const result = await window.authority.scaling.list();
+        if (!result.ok) return fail(result.error);
+        loaded.scaling = true;
+        scaling = result.data;
+        renderScaling();
+        window.authority.scaling.metrics().then((m) => { if (m.ok) renderScaling(m.data); });
+      }
+
+      $("sc-check-all").addEventListener("click", async () => {
+        clearAlert();
+        $("sc-check-all").disabled = true;
+        $("sc-status").textContent = "Checking… (GitHub and Cloudflare, can take a little while)";
+        const result = await window.authority.scaling.check();
+        $("sc-check-all").disabled = false;
+        $("sc-status").textContent = "";
+        if (!result.ok) return fail(result.error);
+        // Only the failures open up; manual ones would bury the list.
+        applyCheck(result.data);
+        for (const [id, r] of Object.entries(result.data.results)) if (r.status !== "fail") openConfirm.delete(id);
+        renderScaling();
+        const passed = Object.values(result.data.results).filter((r) => r.status === "pass").length;
+        $("sc-status").textContent = `${passed} of ${Object.keys(result.data.results).length} automatic checks pass.`;
+      });
+
+      $("sc-site-save").addEventListener("click", async () => {
+        clearAlert();
+        const result = await window.authority.scaling.setSite($("sc-site").value);
+        if (!result.ok) return fail(result.error);
+        scaling = { ...scaling, ...result.data };
+        renderScaling();
+      });
+
+      /* ------------------------------------------------ Codebase statboard */
+
+      async function loadCodebase() {
+        $("cb-status").textContent = "Counting…";
+        const result = await window.authority.devstats();
+        $("cb-status").textContent = "";
+        if (!result.ok) return fail(result.error);
+        loaded.codebase = true;
+        const { code, git, pkg, releases } = result.data;
+        const fun = (emoji, label, value, hint) =>
+          tile(label, value, hint).replace('<div class="k">', `<div class="k"><span class="emoji">${emoji}</span>`);
+        const date = (ms) => new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+        const hour = (h) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+        const novels = code.lines / 5000; // a 300-page novel is ~5,000 lines of prose... roughly
+
+        $("cb-tiles").innerHTML = [
+          fun("📜", "Lines of code", fmt(code.lines), `≈ ${novels.toFixed(1)} paperback novels of it`),
+          fun("📁", "Files tracked", fmt(code.files), `v${pkg.version}`),
+          fun("🧪", "Tests", fmt(code.testCases), `in ${fmt(code.testFiles)} test files`),
+          fun("🔨", "Commits", fmt(git.commits), `${(git.commits / git.activeDays).toFixed(1)} per day worked`),
+          fun("🎂", "Project age", `${fmt(git.ageDays)} days`, `first commit ${date(git.firstAt)}`),
+          fun("⚡", "Lines per day", fmt(code.lines / git.ageDays), "since the first commit"),
+          fun("➕", "Lines written, all time", fmt(git.added), `${fmt(git.removed)} deleted along the way`),
+          fun("🧩", "React components", fmt(code.components), `${fmt(code.pages)} pages · ${fmt(code.apiRoutes)} API routes`),
+          fun("🏷️", "Releases", fmt(releases.releases ?? git.tags), releases.error ? `${fmt(git.tags)} tags` : `${fmt(releases.downloads)} downloads`),
+          fun("📦", "Dependencies", fmt(pkg.dependencies), `+ ${fmt(pkg.devDependencies)} dev · ${fmt(pkg.scripts)} npm scripts`),
+          fun("🗄️", "Database migrations", fmt(pkg.migrations)),
+          fun("💬", "Comment lines", fmt(code.commentLines), `${Math.round((code.commentLines / code.lines) * 100)}% of all lines`),
+          fun("🐘", "Biggest file (lines)", fmt(code.largest.lines), code.largest.file),
+          fun("📏", "Longest line (chars)", fmt(code.longestLine.length), code.longestLine.file),
+          fun("🔥", "Busiest day (commits)", fmt(git.busiestDay.commits), git.busiestDay.day),
+          fun("⏰", "Favourite hour", hour(git.busiestHour), `favourite day: ${git.busiestWeekday}`),
+          fun("🦉", "Night-owl commits", fmt(git.nightOwl), "between 10pm and 5am"),
+          fun("🐛", "Bug-fix commits", fmt(git.fixes), `${Math.round((git.fixes / git.commits) * 100)}% of all commits`),
+          fun("📝", "TODOs left", fmt(code.todos), code.todos ? "someday…" : "a clean conscience"),
+          fun("👩‍💻", "Contributors", fmt(git.authors.length), git.authors.join(", ")),
+        ].join("");
+
+        table(
+          "cb-langs",
+          ["Language", "Lines", "Share", ""],
+          code.byLanguage.map(([name, lines]) => {
+            const percent = Math.round((lines / code.lines) * 100);
+            return [escapeHtml(name), fmt(lines), `${percent}%`, `<div class="bar"><span style="width:${percent}%"></span></div>`];
+          }),
+        );
+      }
+
+      $("cb-refresh").addEventListener("click", () => { clearAlert(); loadCodebase(); });
 
       window.authority.state().then((state) => {
         render(state);
