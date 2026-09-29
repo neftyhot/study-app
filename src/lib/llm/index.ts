@@ -1,5 +1,5 @@
-import { googleAccessToken, hasGoogleSession } from "@/lib/auth/google-session";
 import {
+  environmentKeysAllowed,
   readApiKey,
   readDownload,
   readLocalModel,
@@ -127,18 +127,14 @@ function resolveProvider(
 
     case "gemini":
     default: {
-      const credentials = geminiCredentials();
+      // The student's own key, always: readApiKey only honours
+      // GEMINI_API_KEY while developing, never in the packaged app.
+      const apiKey = readApiKey("gemini");
       const gemini = chainFor("gemini", geminiModel(role), role, (model) =>
         // The chain does the falling back, so each link is one model only.
-        createGeminiProvider({ ...credentials, model }),
+        createGeminiProvider({ apiKey, model }),
       );
-      return {
-        provider: gemini,
-        authMode:
-          "accessToken" in credentials
-            ? "google_oauth"
-            : keySource("GEMINI_API_KEY"),
-      };
+      return { provider: gemini, authMode: keySource("GEMINI_API_KEY") };
     }
   }
 }
@@ -171,27 +167,7 @@ function chainFor(
 }
 
 function keySource(variable: string): AuthMode {
-  return process.env[variable]?.trim() ? "env_key" : "api_key";
+  return environmentKeysAllowed() && process.env[variable]?.trim()
+    ? "env_key"
+    : "api_key";
 }
-
-/**
- * How Gemini calls authenticate, first match wins:
- *
- *  1. GEMINI_API_KEY in the environment — a developer's .env.local overrides
- *     everything, as it does for every provider. (The Gemini SDK would send
- *     that key anyway; it reads the variable itself.)
- *  2. A "Sign in with Google" session: the student's own account, no key.
- *  3. A key saved in Settings, kept as the fallback.
- */
-function geminiCredentials():
-  | { apiKey: string }
-  | { accessToken: () => Promise<string> }
-  | { apiKey: undefined } {
-  const fromEnv = process.env.GEMINI_API_KEY?.trim();
-  if (fromEnv) return { apiKey: fromEnv };
-  if (hasGoogleSession()) return { accessToken: sessionToken };
-  return { apiKey: readApiKey("gemini") };
-}
-
-/** One stable function, so the provider reuses one OAuth client. */
-const sessionToken = () => googleAccessToken();

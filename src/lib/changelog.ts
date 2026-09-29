@@ -6,6 +6,15 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.3.1",
+    date: "2026-09-28",
+    notes: [
+      "Gemini now runs on your own free Google AI Studio key. “Sign in with Google” has been removed, and any saved sign-in is deleted and revoked when the app starts. If you used it, the dashboard asks you to add a key: Settings walks you through getting one in about a minute and checks it with Google before saving.",
+      "Your key is sent only to Google and stays encrypted with your computer's keychain.",
+      "The upgrade guide now gives Gemini Pro prices per token, which is how Google bills.",
+    ],
+  },
+  {
     version: "1.3.0",
     date: "2026-09-27",
     notes: [

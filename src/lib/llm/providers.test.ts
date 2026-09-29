@@ -262,7 +262,7 @@ describe("provider selection", () => {
   });
 });
 
-describe("Gemini signed in with Google", () => {
+describe("Gemini on the student's own key", () => {
   const envKeys = ["GEMINI_API_KEY", "GOOGLE_API_KEY"] as const;
   const saved: Partial<Record<(typeof envKeys)[number], string>> = {};
 
@@ -275,13 +275,14 @@ describe("Gemini signed in with Google", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     for (const name of envKeys) {
       if (saved[name] === undefined) delete process.env[name];
       else process.env[name] = saved[name];
     }
   });
 
-  it("sends a bearer token and no API key, fetching the token per call", async () => {
+  function stubFetch() {
     const requests: Request[] = [];
     vi.stubGlobal(
       "fetch",
@@ -295,30 +296,41 @@ describe("Gemini signed in with Google", () => {
         );
       }),
     );
-    const tokens = ["token-1", "token-2"];
-    const accessToken = vi.fn(async () => tokens.shift()!);
+    return requests;
+  }
 
-    const provider = createGeminiProvider({ accessToken });
-    const request = { system: "s", prompt: "p", schema: { type: "object" } };
-    await expect(provider.generateStructured(request)).resolves.toMatchObject({
-      data: { ok: true },
-    });
-    await provider.generateStructured(request);
+  it("sends the key as x-goog-api-key and no bearer token", async () => {
+    const requests = stubFetch();
+    const provider = createGeminiProvider({ apiKey: "student-key" });
+    await expect(
+      provider.generateStructured({ system: "s", prompt: "p", schema: { type: "object" } }),
+    ).resolves.toMatchObject({ data: { ok: true } });
 
-    expect(requests).toHaveLength(2);
-    for (const [index, sent] of requests.entries()) {
-      const url = new URL(sent.url);
-      expect(url.origin).toBe("https://generativelanguage.googleapis.com");
-      expect(url.searchParams.has("key")).toBe(false);
-      expect(sent.headers.get("x-goog-api-key")).toBeNull();
-      expect(sent.headers.get("authorization")).toBe(`Bearer token-${index + 1}`);
-    }
+    expect(requests).toHaveLength(1);
+    const sent = requests[0];
+    expect(new URL(sent.url).origin).toBe("https://generativelanguage.googleapis.com");
+    expect(new URL(sent.url).searchParams.has("key")).toBe(false);
+    expect(sent.headers.get("x-goog-api-key")).toBe("student-key");
+    expect(sent.headers.get("authorization")).toBeNull();
   });
 
-  it("counts as ready to answer with no key saved", () => {
+  it("ignores GEMINI_API_KEY in the packaged app", () => {
+    vi.stubEnv("GEMINI_API_KEY", "developer-key");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(() => createGeminiProvider()).toThrow(/Google AI Studio key/);
+
     writeProvider("gemini", db);
     expect(isAnswerable(db)).toBe(false);
+  });
 
+  it("uses GEMINI_API_KEY in development", () => {
+    vi.stubEnv("GEMINI_API_KEY", "developer-key");
+    vi.stubEnv("NODE_ENV", "development");
+    expect(() => createGeminiProvider()).not.toThrow();
+  });
+
+  it("is not made ready by a leftover Google session", () => {
+    writeProvider("gemini", db);
     saveSession(
       db.$client,
       {
@@ -328,6 +340,9 @@ describe("Gemini signed in with Google", () => {
       },
       { email: "s@gmail.com", accessToken: "a", refreshToken: "r", expiresIn: 3600 },
     );
+    expect(isAnswerable(db)).toBe(false);
+
+    writeApiKey("gemini", "AIza-student", db);
     expect(isAnswerable(db)).toBe(true);
   });
 });
@@ -357,11 +372,11 @@ describe("with nothing configured", () => {
     rmSync(scratch, { recursive: true, force: true });
   });
 
-  it("asks for a Google sign-in or a key, never an offline model", () => {
+  it("asks for a key, never an offline model", () => {
     expect(readProvider(db)).toBe("gemini");
     expect(isAnswerable(db)).toBe(false);
 
-    expect(() => getProvider()).toThrow(/Sign in with Google|API key/);
+    expect(() => getProvider()).toThrow(/API key/);
     expect(() => getProvider()).not.toThrow(/offline/i);
   });
 

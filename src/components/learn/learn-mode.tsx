@@ -566,8 +566,8 @@ function RevealPanel({
           ) : null}
           {reveal.grade.provisional ? (
             <p className="text-muted-foreground text-xs">
-              Matched on keywords, not meaning — set GEMINI_API_KEY for
-              semantic grading.
+              Matched on keywords, not meaning — add an API key in Settings
+              for semantic grading.
             </p>
           ) : null}
         </div>

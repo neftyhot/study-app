@@ -6,10 +6,6 @@ import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
 import {
-  readGoogleSession,
-  type GoogleSessionSummary,
-} from "@/lib/auth/google-session";
-import {
   clearDownload,
   startModelDownload,
   unloadLocalModel,
@@ -41,8 +37,6 @@ import { isStrictness } from "@/lib/grade/strictness";
 export type SetupSnapshot = {
   provider: ProviderId;
   keys: ReturnType<typeof allKeyStatuses>;
-  /** Signed in with Google for Gemini, and as whom. Never a token. */
-  google: GoogleSessionSummary | null;
   download: ReturnType<typeof readDownload>;
   localModelId: string | null;
   answerable: boolean;
@@ -59,7 +53,6 @@ export async function getSetupSnapshot(): Promise<SetupSnapshot> {
   return {
     provider: readProvider(db),
     keys: allKeyStatuses(db),
-    google: readGoogleSession(db),
     download: readDownload(db),
     localModelId: readLocalModel(db).id,
     answerable: isAnswerable(db),
@@ -89,6 +82,36 @@ export async function saveApiKey(
   writeApiKey(provider, key, db);
   revalidatePath("/settings");
   return apiKeyStatus(provider, db);
+}
+
+export type KeyCheck = "ok" | "invalid" | "unreachable";
+
+/**
+ * Asks Google whether a Gemini key works, before it is saved.
+ *
+ * Lists one model rather than generating anything, so the check itself is
+ * free and uses none of the key's quota.
+ */
+export async function checkGeminiKey(key: string): Promise<KeyCheck> {
+  const trimmed = key.trim();
+  if (!trimmed) return "invalid";
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models?pageSize=1",
+      {
+        headers: { "x-goog-api-key": trimmed },
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    if (response.ok) return "ok";
+    // 400 API_KEY_INVALID, 401 or 403 (API disabled, key restricted).
+    if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+      return "invalid";
+    }
+    return "unreachable";
+  } catch {
+    return "unreachable";
+  }
 }
 
 export async function chooseProvider(provider: ProviderId) {

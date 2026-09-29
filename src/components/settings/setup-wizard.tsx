@@ -9,7 +9,7 @@ import {
   ExperimentalLocalSection,
   ResourceWarning,
 } from "@/components/settings/experimental-local";
-import { GoogleSignIn } from "@/components/settings/google-sign-in";
+import { confirmGeminiKey, GeminiKeySteps } from "@/components/settings/gemini-key-steps";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,8 +87,8 @@ export function SetupWizard({
           <Choice
             icon={<Cloud className="size-5" />}
             title="Use Google Gemini (recommended)"
-            body="Sign in with your Google account to use Gemini at no cost — no key to create or paste. Or connect Claude, Gemini, or OpenAI with an API key. Fast, and strong enough to decompose a broad topic exhaustively."
-            footnote="Google sign-in uses your account's free quota; with a key, you pay the provider for what you use. Studying still works offline."
+            body="Paste a free Google AI Studio key — it takes about a minute to make one, and we'll show you how. Or connect Claude or OpenAI with a key. Fast, and strong enough to decompose a broad topic exhaustively."
+            footnote="Gemini keys include a free quota on your own Google account; paid keys bill you directly. Studying still works offline."
             onClick={() => setStep("api")}
             recommended
           />
@@ -150,7 +150,6 @@ export function SetupWizard({
         <ApiStep
           snapshot={state}
           busy={busy}
-          onChange={setState}
           onBack={() => setStep("choose")}
           onSaved={(next) => {
             setState(next);
@@ -214,14 +213,12 @@ function ApiStep({
   snapshot,
   busy,
   setBusy,
-  onChange,
   onBack,
   onSaved,
 }: {
   snapshot: SetupSnapshot;
   busy: boolean;
   setBusy: (busy: boolean) => void;
-  onChange: (snapshot: SetupSnapshot) => void;
   onBack: () => void;
   onSaved: (snapshot: SetupSnapshot) => void;
 }) {
@@ -230,7 +227,6 @@ function ApiStep({
   const [key, setKey] = useState("");
 
   const existing = snapshot.keys.find((item) => item.provider === provider);
-  const signedIn = provider === "gemini" && snapshot.google !== null;
 
   return (
     <Card>
@@ -258,23 +254,7 @@ function ApiStep({
           ))}
         </div>
 
-        {provider === "gemini" ? (
-          <div className="space-y-3">
-            <GoogleSignIn
-              snapshot={snapshot}
-              onChange={onChange}
-              onSignedIn={async () => {
-                setBusy(true);
-                const next = await chooseProvider("gemini");
-                setBusy(false);
-                onSaved(next);
-              }}
-            />
-            <p className="text-muted-foreground text-xs">
-              Or use an API key instead:
-            </p>
-          </div>
-        ) : null}
+        {provider === "gemini" && !existing?.present ? <GeminiKeySteps /> : null}
 
         <div className="space-y-1.5">
           <Label htmlFor="setup-key">API key</Label>
@@ -302,15 +282,21 @@ function ApiStep({
           <Button
             disabled={
               busy ||
-              (key.trim().length === 0 && !existing?.present && !signedIn)
+              (key.trim().length === 0 && !existing?.present)
             }
             onClick={async () => {
               setBusy(true);
-              if (key.trim()) await saveApiKey(provider, key);
-              const next = await chooseProvider(provider);
-              setBusy(false);
-              toast.success(`Using ${PROVIDER_LABELS[provider]}`);
-              onSaved(next);
+              try {
+                if (key.trim()) {
+                  if (provider === "gemini" && !(await confirmGeminiKey(key))) return;
+                  await saveApiKey(provider, key);
+                }
+                const next = await chooseProvider(provider);
+                toast.success(`Using ${PROVIDER_LABELS[provider]}`);
+                onSaved(next);
+              } finally {
+                setBusy(false);
+              }
             }}
           >
             {busy ? <Loader2 className="size-4 animate-spin" /> : null}

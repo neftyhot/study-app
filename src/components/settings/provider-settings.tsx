@@ -5,7 +5,7 @@ import { Check, Cloud, Download, HardDrive, KeyRound, Loader2 } from "lucide-rea
 import { toast } from "sonner";
 
 import { ExperimentalLocalSection } from "@/components/settings/experimental-local";
-import { GoogleSignIn } from "@/components/settings/google-sign-in";
+import { confirmGeminiKey, GeminiKeySteps } from "@/components/settings/gemini-key-steps";
 import { ModelPicker } from "@/components/settings/model-picker";
 import { ModelLevelCard } from "@/components/settings/upgrade-guide";
 import { Badge } from "@/components/ui/badge";
@@ -66,9 +66,9 @@ export function ProviderSettings({
             <Badge>Recommended</Badge>
           </CardTitle>
           <CardDescription>
-            Generating cards and grading typed answers need a model. Sign in
-            with Google to use Gemini on your own account at no cost, or use
-            an API key. Everything else — studying, reviews, browsing,
+            Generating cards and grading typed answers need a model. Paste
+            your own free Google AI Studio key to use Gemini, or a Claude or
+            OpenAI key. Everything else — studying, reviews, browsing,
             editing — works with no model and no network at all.
           </CardDescription>
         </CardHeader>
@@ -93,12 +93,10 @@ export function ProviderSettings({
                     {selected ? <Badge variant="secondary">In use</Badge> : null}
                   </span>
                   <span className="text-muted-foreground mt-1 block text-xs">
-                    {id === "gemini" && state.google
-                      ? `Signed in as ${state.google.email ?? "a Google account"}.`
-                      : key?.present
+                    {key?.present
                         ? `Key ending …${key.hint} saved.`
                         : id === "gemini"
-                          ? "Free with a Google account, or an API key."
+                          ? "Needs your free Google AI Studio key."
                           : "Needs an API key (paid)."}
                   </span>
                 </button>
@@ -112,7 +110,7 @@ export function ProviderSettings({
               : state.answerable
                 ? "Ready to generate and grade."
                 : state.provider === "gemini"
-                  ? "Not ready yet — sign in with Google below, or add an API key."
+                  ? "Not ready yet — paste your Google AI Studio key below."
                   : "Not ready yet — add an API key below."}
           </p>
         </CardContent>
@@ -120,20 +118,6 @@ export function ProviderSettings({
 
       {usingLocal ? null : (
         <>
-          {state.provider === "gemini" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Google account</CardTitle>
-                <CardDescription>
-                  Sign in to run Gemini on your own account&apos;s free quota.
-                  Used ahead of a saved key while you are signed in.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <GoogleSignIn snapshot={state} onChange={setState} />
-              </CardContent>
-            </Card>
-          ) : null}
           <ApiKeySection snapshot={state} onChange={setState} />
           <Card>
             <CardHeader>
@@ -255,15 +239,15 @@ function ApiKeySection({
         <CardTitle className="flex items-center gap-2 text-base">
           <KeyRound className="size-4" />
           {PROVIDER_LABELS[provider]} key
-          {provider === "gemini" ? (
-            <Badge variant="outline">optional</Badge>
-          ) : null}
         </CardTitle>
         <CardDescription>
-          Get one from <span className="font-mono">{KEY_HELP[provider]}</span>.
+          {provider === "gemini"
+            ? "Gemini runs on your own key, so its free quota and any billing are on your Google account."
+            : <>Get one from <span className="font-mono">{KEY_HELP[provider]}</span>.</>}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
+        {provider === "gemini" && !status?.present ? <GeminiKeySteps /> : null}
         {status?.present ? (
           <p className="flex flex-wrap items-center gap-2 text-sm">
             <Check className="size-4" />
@@ -297,11 +281,19 @@ function ApiKeySection({
           disabled={busy || value.trim().length === 0}
           onClick={async () => {
             setBusy(true);
-            await saveApiKey(provider, value);
-            onChange({ ...snapshot, answerable: true });
-            setValue("");
-            setBusy(false);
-            toast.success("Key saved on this device");
+            try {
+              if (provider === "gemini" && !(await confirmGeminiKey(value))) return;
+              const saved = await saveApiKey(provider, value);
+              onChange({
+                ...snapshot,
+                answerable: true,
+                keys: snapshot.keys.map((item) => (item.provider === provider ? saved : item)),
+              });
+              setValue("");
+              toast.success("Key saved on this device");
+            } finally {
+              setBusy(false);
+            }
           }}
         >
           {busy ? <Loader2 className="size-4 animate-spin" /> : null}

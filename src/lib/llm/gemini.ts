@@ -1,8 +1,6 @@
-import { MISSING_SCOPE_MESSAGE } from "@/main/auth/googleOAuth";
 import {
   GoogleGenAI,
   ThinkingLevel,
-  type GoogleGenAIOptions,
   type ThinkingConfig,
 } from "@google/genai";
 
@@ -39,12 +37,6 @@ export const GEMINI_FALLBACK_MODEL = "gemini-3.5-flash";
 
 export function createGeminiProvider(options?: {
   apiKey?: string;
-  /**
-   * Signs requests as a Google account instead of with a key: each call
-   * carries `Authorization: Bearer <token>` and no key at all. Called per
-   * request, so a token that lapses during a long run is replaced.
-   */
-  accessToken?: () => Promise<string>;
   model?: string;
   /**
    * Used instead when `model` turns out not to exist for this key. Google
@@ -53,19 +45,23 @@ export function createGeminiProvider(options?: {
    */
   fallbackModel?: string;
 }): LlmProvider {
-  const accessToken = options?.accessToken;
-  const apiKey = options?.apiKey ?? process.env.GEMINI_API_KEY;
-  if (!accessToken && !apiKey) {
+  // Every call is billed to the student's own key. GEMINI_API_KEY is a
+  // developer's convenience and is never read by the packaged app.
+  const apiKey =
+    options?.apiKey?.trim() ||
+    (process.env.NODE_ENV !== "production"
+      ? process.env.GEMINI_API_KEY?.trim()
+      : undefined);
+  if (!apiKey) {
     throw new LlmError(
-      "No Gemini API key. Sign in with Google or add a key in Settings, or set GEMINI_API_KEY in .env.local.",
+      "No Gemini API key. Paste your free Google AI Studio key in Settings.",
     );
   }
 
   let model =
     options?.model ?? process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
-  const client = accessToken
-    ? oauthClient(accessToken)
-    : new GoogleGenAI({ apiKey });
+  // Sent as the x-goog-api-key header.
+  const client = new GoogleGenAI({ apiKey });
 
   /** Runs a request, moving to the fallback model once if this one is gone. */
   async function call<R>(request: (model: string) => Promise<R>): Promise<R> {
@@ -214,39 +210,6 @@ export function createGeminiProvider(options?: {
   };
 }
 
-const oauthClients = new WeakMap<() => Promise<string>, GoogleGenAI>();
-
-/**
- * A client that authenticates with an OAuth access token.
- *
- * With no key, the SDK asks `googleAuthOptions.authClient` for request
- * headers before every call; this one answers with a bearer token fetched
- * at that moment. It is the SDK's own hook, so every endpoint it reaches —
- * generateContent, uploads, model listing — is signed the same way.
- *
- * One client per token source, because constructing one without a key logs
- * "API key should be set" each time, and providers are built per request.
- */
-function oauthClient(accessToken: () => Promise<string>): GoogleGenAI {
-  let client = oauthClients.get(accessToken);
-  if (!client) {
-    const authClient = {
-      async getRequestHeaders() {
-        return new Headers({ Authorization: `Bearer ${await accessToken()}` });
-      },
-    };
-    client = new GoogleGenAI({
-      googleAuthOptions: {
-        // Only `getRequestHeaders` is ever called on it; the full AuthClient
-        // type would mean depending on google-auth-library to build one.
-        authClient,
-      } as unknown as GoogleGenAIOptions["googleAuthOptions"],
-    });
-    oauthClients.set(accessToken, client);
-  }
-  return client;
-}
-
 /**
  * Output tokens as billed: the answer plus any thinking the model did first.
  *
@@ -335,10 +298,9 @@ export function isModelUnavailable(error: unknown): boolean {
 
 function describe(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  // A Google sign-in whose Gemini permission was unticked on the consent
-  // screen: the raw 403 means nothing to a student, and the fix is theirs.
-  if (/ACCESS_TOKEN_SCOPE_INSUFFICIENT|insufficient authentication scopes/i.test(message)) {
-    return MISSING_SCOPE_MESSAGE.replace("Sign in again", "In Settings, sign out of Google and sign in again");
+  // A mistyped or deleted key: the raw 400 means nothing to a student.
+  if (/API_KEY_INVALID|API key not valid/i.test(message)) {
+    return "Google rejected your Gemini key. Paste a new one from aistudio.google.com/apikey in Settings.";
   }
   return message;
 }

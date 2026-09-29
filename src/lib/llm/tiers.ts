@@ -102,12 +102,12 @@ export const BILLING_GUIDES: Record<ApiProviderId, BillingGuide> = {
     keysUrl: "https://aistudio.google.com/api-keys",
     usageUrl: "https://aistudio.google.com/usage",
     steps: [
-      "Sign in with the same Google account your Gemini key (or Google sign-in) belongs to.",
+      "Sign in with the same Google account your Gemini key belongs to.",
       "You'll see your project, usually called \"Default Gemini Project\", marked Free tier. Click \"Set up billing\" next to it.",
       "Enter your card details. Google asks for a prepayment of at least $5 — that money becomes credit you spend down, it is not a subscription.",
       "When the project shows \"Paid tier\" (Tier 1), come back here. Your existing key keeps working — you don't need a new one.",
     ],
-    cost: "Typical studying costs cents a day. Pro is about $2 per million words read and $12 per million written.",
+    cost: "Typical studying costs cents a day. Pro costs $2 per million tokens read and $12 per million written (a million tokens is roughly 750,000 words).",
     done: "Back in the app, choose \"Thinking\" below. If Pro still isn't available, wait a minute — Google can take a moment to switch tiers.",
   },
   openai: {

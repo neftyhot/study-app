@@ -22,7 +22,6 @@ import {
   type Appearance,
   type ThemePreference,
 } from "@/lib/appearance";
-import { hasGoogleSession } from "@/lib/auth/google-session";
 import {
   DEFAULT_STRICTNESS,
   isStrictness,
@@ -61,6 +60,22 @@ const ENV_KEY: Record<Exclude<ProviderId, "local">, string> = {
   anthropic: "ANTHROPIC_API_KEY",
   openai: "OPENAI_API_KEY",
 };
+
+/**
+ * Whether a key in the environment may be used at all.
+ *
+ * Only while developing: a packaged app runs as production and must bill
+ * every call to the student's own saved key, never to one that happens to
+ * be in the environment it was launched from.
+ */
+export function environmentKeysAllowed(): boolean {
+  return process.env.NODE_ENV !== "production";
+}
+
+function environmentKey(provider: Exclude<ProviderId, "local">): string | undefined {
+  if (!environmentKeysAllowed()) return undefined;
+  return process.env[ENV_KEY[provider]]?.trim() || undefined;
+}
 
 function client(db?: Db): Db {
   return db ?? createClient();
@@ -171,9 +186,9 @@ export function readApiKey(
   provider: Exclude<ProviderId, "local">,
   db?: Db,
 ): string | undefined {
-  // The environment wins, so a developer's .env.local still overrides
-  // whatever a packaged app happens to have saved.
-  const fromEnv = process.env[ENV_KEY[provider]]?.trim();
+  // While developing, the environment wins, so a developer's .env.local
+  // still overrides whatever is saved. Never in the packaged app.
+  const fromEnv = environmentKey(provider);
   if (fromEnv) return fromEnv;
   const stored = readSetting(KEY_SETTING[provider], db);
   if (!stored) return undefined;
@@ -201,7 +216,7 @@ export function apiKeyStatus(
   provider: Exclude<ProviderId, "local">,
   db?: Db,
 ): KeyStatus {
-  const fromEnvironment = Boolean(process.env[ENV_KEY[provider]]?.trim());
+  const fromEnvironment = Boolean(environmentKey(provider));
   const key = readApiKey(provider, db);
 
   return {
@@ -285,6 +300,5 @@ export function acceptPrivacy(db?: Db) {
 export function isAnswerable(db?: Db): boolean {
   const provider = readProvider(db);
   if (provider === "local") return readDownload(db)?.status === "ready";
-  if (provider === "gemini" && hasGoogleSession(db)) return true;
   return Boolean(readApiKey(provider, db));
 }

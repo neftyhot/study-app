@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarDays, ListPlus } from "lucide-react";
+import { CalendarDays, KeyRound, ListPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,13 +23,16 @@ import {
 } from "@/components/manage/create-dialogs";
 import { db } from "@/db";
 import { listCoursesWithExams } from "@/lib/queries";
-import { isSetupComplete } from "@/lib/settings";
+import { isAnswerable, isSetupComplete, readProvider } from "@/lib/settings";
 
 export default async function DashboardPage() {
   // First run lands on the wizard instead of an empty dashboard.
   if (!isSetupComplete(db)) redirect("/welcome");
 
   const courses = await listCoursesWithExams();
+  // Google sign-in is gone; anyone who used it needs a key of their own now.
+  const provider = readProvider(db);
+  const needsKey = provider !== "local" && !isAnswerable(db);
   const courseOptions = courses.map((course) => ({
     id: course.id,
     title: course.title,
@@ -46,6 +49,27 @@ export default async function DashboardPage() {
           take a practice exam.
         </p>
       </div>
+
+      {needsKey ? (
+        <Card className="border-primary">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <KeyRound className="size-4" />
+              {provider === "gemini" ? "Add your Gemini key" : "Add your API key"}
+            </CardTitle>
+            <CardDescription>
+              {provider === "gemini"
+                ? "AI features now run on your own free Google AI Studio key. It takes about a minute — Settings walks you through it."
+                : "AI features need your API key. Paste it in Settings."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild size="sm">
+              <Link href="/settings">Add key in Settings</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <QuickStart courses={courseOptions} />
 
