@@ -110,6 +110,7 @@ export async function askTutor(
       lastError = new LlmError("The model returned an empty answer.");
     } catch (error) {
       lastError = error;
+      if (isRateLimited(error)) throw rateLimitError(error);
       if (!isRetryable(error)) throw error;
     }
     data = undefined;
@@ -129,12 +130,32 @@ export async function askTutor(
   };
 }
 
+/**
+ * The key is over its per-minute allowance. By the time this reaches the
+ * tutor, the provider chain has already tried every model it has; asking
+ * again within seconds only lengthens the wait before the student is told.
+ */
+function isRateLimited(error: unknown) {
+  if (error instanceof LlmError && error.kind === "limit") return true;
+  const text = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? "")}` : String(error);
+  return /\b429\b|RESOURCE_EXHAUSTED|rate.?limit/i.test(text);
+}
+
+function rateLimitError(error: unknown) {
+  if (error instanceof LlmError && error.kind === "limit") return error;
+  return new LlmError(
+    "Your AI key is over its per-minute limit right now. Wait a minute and ask again.",
+    error,
+    "limit",
+  );
+}
+
 /** Worth asking again: a busy or flaky server, or an answer that came back broken. */
 function isRetryable(error: unknown) {
   // Every model in the chain is out of quota; asking again will not help.
   if (error instanceof LlmError && error.kind === "limit") return false;
   const text = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? "")}` : String(error);
-  return /empty answer|no content|malformed JSON|\b(429|500|502|503|504)\b|UNAVAILABLE|overloaded|RESOURCE_EXHAUSTED|timed? ?out|ECONNRESET|fetch failed|socket/i.test(text);
+  return /empty answer|no content|malformed JSON|\b(500|502|503|504)\b|UNAVAILABLE|overloaded|timed? ?out|ECONNRESET|fetch failed|socket/i.test(text);
 }
 
 export type ExtractionRequest = {

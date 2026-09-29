@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   CircleCheck,
   CircleHelp,
@@ -59,6 +59,7 @@ import {
   type Reveal,
 } from "@/lib/learn/actions";
 import type { AssistKind } from "@/lib/assist";
+import type { LearnMode as LearnModeName } from "@/lib/learn/ladder";
 import type { TypedGrade } from "@/lib/learn/typed";
 import { CardEditor } from "@/components/cards/card-editor";
 import { SourceViewer } from "@/components/sources/source-viewer";
@@ -100,9 +101,18 @@ const STAGE_LABELS: Record<string, string> = {
   typed_delayed: "Delayed check",
 };
 
+/** A card the student can choose to begin from. */
+export type StartCard = {
+  id: string;
+  number: number;
+  topic: string | null;
+  question: string;
+};
+
 export function LearnMode({
   examId,
   topics,
+  cards,
   cardCount,
   dueCount,
   initialSessionId,
@@ -110,6 +120,7 @@ export function LearnMode({
 }: {
   examId: string;
   topics: string[];
+  cards: StartCard[];
   cardCount: number;
   dueCount: number;
   initialSessionId: string | null;
@@ -137,6 +148,7 @@ export function LearnMode({
     return (
       <LearnPicker
         topics={topics}
+        cards={cards}
         cardCount={cardCount}
         dueCount={dueCount}
         onStart={async (filter) => {
@@ -889,13 +901,28 @@ function RoundSummary({
   );
 }
 
+const MODE_CHOICES: { mode: LearnModeName; title: string; body: string }[] = [
+  {
+    mode: "longterm",
+    title: "Long-term",
+    body: "Spaced repetition, like Anki: reviews spread out over days and weeks so it sticks for the final.",
+  },
+  {
+    mode: "cram",
+    title: "Cram",
+    body: "Exam in a day or two: tighter repeats, an extra check on anything missed, and every card back tomorrow.",
+  },
+];
+
 function LearnPicker({
   topics,
+  cards,
   cardCount,
   dueCount,
   onStart,
 }: {
   topics: string[];
+  cards: StartCard[];
   cardCount: number;
   dueCount: number;
   onStart: (filter: {
@@ -904,8 +931,13 @@ function LearnPicker({
     shuffled: boolean;
     roundSize: number;
     includeApplication: boolean;
+    mode: LearnModeName;
+    startAt: string | null;
   }) => Promise<void>;
 }) {
+  const [mode, setMode] = useState<LearnModeName>("longterm");
+  const [startAt, setStartAt] = useState<StartCard | null>(null);
+  const [browsing, setBrowsing] = useState(false);
   const [scope, setScope] = useState<StudyScope>("all");
   const [topic, setTopic] = useState(topics[0] ?? "");
   const [roundSizeText, setRoundSizeText] = useState(String(DEFAULT_ROUND_SIZE));
@@ -924,6 +956,28 @@ function LearnPicker({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Study mode">
+          {MODE_CHOICES.map((choice) => (
+            <button
+              key={choice.mode}
+              type="button"
+              role="radio"
+              aria-checked={mode === choice.mode}
+              onClick={() => setMode(choice.mode)}
+              className={`focus-visible:ring-ring rounded-lg border p-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none ${
+                mode === choice.mode
+                  ? "border-primary bg-primary/5"
+                  : "hover:bg-muted/60"
+              }`}
+            >
+              <span className="block text-sm font-medium">{choice.title}</span>
+              <span className="text-muted-foreground mt-1 block text-xs">
+                {choice.body}
+              </span>
+            </button>
+          ))}
+        </div>
+
         <div className="flex flex-col gap-3 sm:flex-row">
           <Select
             value={scope}
@@ -992,6 +1046,17 @@ function LearnPicker({
           </Label>
         </div>
 
+        <StartAtPicker
+          cards={cards}
+          selected={startAt}
+          open={browsing}
+          onOpenChange={setBrowsing}
+          onSelect={(card) => {
+            setStartAt(card);
+            setBrowsing(false);
+          }}
+        />
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={cardCount === 0 || starting}
@@ -1003,6 +1068,8 @@ function LearnPicker({
                 shuffled: false,
                 roundSize,
                 includeApplication: application,
+                mode,
+                startAt: startAt?.id ?? null,
               });
               setStarting(false);
             }}
@@ -1016,4 +1083,97 @@ function LearnPicker({
       </CardContent>
     </Card>
   );
+}
+
+/**
+ * Begin anywhere in the deck: the cards in lecture order, grouped under their
+ * topics, to scroll through and pick the one to start from.
+ */
+function StartAtPicker({
+  cards,
+  selected,
+  open,
+  onOpenChange,
+  onSelect,
+}: {
+  cards: StartCard[];
+  selected: StartCard | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (card: StartCard | null) => void;
+}) {
+  const selectedRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (open) selectedRef.current?.scrollIntoView({ block: "center" });
+  }, [open]);
+
+  if (cards.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {selected ? (
+          <>
+            <span>
+              Starting at{" "}
+              <span className="font-medium">#{selected.number}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                — {truncate(selected.question, 70)}
+              </span>
+            </span>
+            <Button size="sm" variant="ghost" onClick={() => onSelect(null)}>
+              Start from the beginning
+            </Button>
+          </>
+        ) : null}
+        <Button size="sm" variant="outline" onClick={() => onOpenChange(!open)}>
+          {open
+            ? "Close"
+            : selected
+              ? "Choose a different card"
+              : "Start at a specific card"}
+        </Button>
+      </div>
+
+      {open ? (
+        <div className="max-h-80 overflow-y-auto rounded-lg border">
+          {cards.map((card, index) => {
+            const heading =
+              index === 0 || cards[index - 1].topic !== card.topic
+                ? (card.topic ?? "Untitled")
+                : null;
+            const isSelected = selected?.id === card.id;
+            return (
+              <div key={card.id}>
+                {heading ? (
+                  <div className="bg-muted/80 text-muted-foreground sticky top-0 px-3 py-1.5 text-xs font-medium backdrop-blur">
+                    {heading}
+                  </div>
+                ) : null}
+                <button
+                  ref={isSelected ? selectedRef : undefined}
+                  type="button"
+                  onClick={() => onSelect(card)}
+                  className={`flex w-full gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 ${
+                    isSelected ? "bg-primary/10" : "hover:bg-muted/60"
+                  }`}
+                >
+                  <span className="text-muted-foreground w-10 shrink-0 font-mono text-xs leading-5">
+                    #{card.number}
+                  </span>
+                  <span className="min-w-0">{card.question}</span>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function truncate(text: string, length: number) {
+  return text.length > length ? `${text.slice(0, length - 1)}…` : text;
 }

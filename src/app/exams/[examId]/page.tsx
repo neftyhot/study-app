@@ -240,14 +240,16 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
                     ? `Review ${dueCount} due card${dueCount === 1 ? "" : "s"}`
                     : `Flip through all ${stats.flashcards} cards`
                 }
-                primary={stats.flashcards > 0 && (dueCount > 0 || plan.today.fresh > 0)}
+                primary={stats.flashcards > 0 && (dueCount > 0 || plan.totals.unstudied > 0)}
                 disabled={stats.flashcards === 0}
                 more={
                   stats.flashcards === 0
                     ? []
                     : [
-                        ...(plan.today.fresh > 0
-                          ? [{ href: `/exams/${examId}/learn`, label: "Learn new cards" }]
+                        // Shown while anything is unlearned, not only on days
+                        // the plan schedules new cards.
+                        ...(plan.totals.unstudied > 0
+                          ? [{ href: `/exams/${examId}/learn`, label: `Learn new cards (${plan.totals.unstudied} left)` }]
                           : []),
                         { href: `/exams/${examId}/cards`, label: "See every card as a list" },
                       ]
@@ -263,7 +265,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
                 primary={
                   stats.flashcards > 0 &&
                   dueCount === 0 &&
-                  plan.today.fresh === 0
+                  plan.totals.unstudied === 0
                 }
                 disabled={stats.flashcards === 0}
               />

@@ -99,6 +99,95 @@ export function stripQuestionEcho(option: string, question: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
+/**
+ * Whether a trimmed option has lost what made it an answer.
+ *
+ * "DNA polymerase III" asked about as "the DNA polymerase that…" trims to
+ * "III", which is no longer a name for anything. A numeral, a single letter or
+ * a word too short to mean anything on its own is kept as written instead.
+ */
+export function isFragment(text: string): boolean {
+  const words = text
+    .replace(/\([^)]*\)/g, " ")
+    .split(/[^A-Za-z0-9\u0370-\u03FF'-]+/)
+    .filter(Boolean);
+  const meaningful = words.filter(
+    (word) =>
+      !DESIGNATION.test(word) &&
+      word.replace(/[^A-Za-z]/g, "").length >= 3 &&
+      !FILLER.has(word.toLowerCase()),
+  );
+  return meaningful.length === 0;
+}
+
+/** A member's designation within a family: III, 2, B, β, gamma. */
+const DESIGNATION =
+  /^(?:I{1,3}|IV|VI{0,3}|IX|X|[1-9]|[A-Z]|[α-ω]|alpha|beta|gamma|delta|epsilon)$/i;
+
+const FAMILIES: readonly (readonly string[])[] = [
+  ["I", "II", "III", "IV", "V"],
+  ["1", "2", "3", "4", "5"],
+  ["α", "β", "γ", "δ", "ε"],
+  ["alpha", "beta", "gamma", "delta", "epsilon"],
+  ["A", "B", "C", "D", "E"],
+];
+
+/**
+ * Other members of the correct answer's family: "DNA polymerase III" gives
+ * "DNA polymerase I" and "DNA polymerase II".
+ *
+ * When the answer is one of a numbered set, the tempting mistake is a sibling
+ * from that set, not an answer to some other question — and it reads as the
+ * same kind of thing, so nothing marks the right one out.
+ */
+export function familyVariants(answer: string): string[] {
+  const words = answer.trim().replace(/[.;]+$/, "").split(/\s+/);
+  if (words.length < 2 || words.length > 6) return [];
+
+  for (let index = words.length - 1; index >= 0; index -= 1) {
+    const token = words[index].replace(/[,:]$/, "");
+    // A bare capital or numeral opening the answer is more likely a word
+    // ("I", "A") or a count ("3 ATP") than a designation.
+    const greek = /^(?:[α-ω]|alpha|beta|gamma|delta|epsilon)$/i.test(token);
+    if (index === 0 && !greek) continue;
+
+    const family = FAMILIES.find((members) =>
+      members.some((member) => member === token || (greek && member.toLowerCase() === token.toLowerCase())),
+    );
+    if (!family) continue;
+    // "Type A" is a designation; "Vitamin A" is one too, but "in A" is not a
+    // thing anyone names. Single capitals need a capitalized word before them.
+    if (/^[A-E]$/.test(token) && !/^[A-Z]/.test(words[index - 1] ?? "")) continue;
+
+    const current = family.findIndex(
+      (member) => member.toLowerCase() === token.toLowerCase(),
+    );
+    const capital = /^[A-Z]/.test(token) && token.length > 1;
+    const members = family
+      .map((member, position) => ({ member, distance: Math.abs(position - current) }))
+      .filter(({ distance }) => distance > 0)
+      .sort((a, b) => a.distance - b.distance)
+      .map(({ member }) =>
+        capital ? member.charAt(0).toUpperCase() + member.slice(1) : member,
+      );
+
+    return members.map((member) =>
+      [...words.slice(0, index), member + words[index].slice(token.length), ...words.slice(index + 1)].join(" "),
+    );
+  }
+  return [];
+}
+
+/** Content stems of an answer, for ranking distractors by kinship. */
+function contentStems(value: string): Set<string> {
+  return new Set(
+    value
+      .split(/[^A-Za-z0-9]+/)
+      .filter((word) => word.length >= 3 && !FILLER.has(word.toLowerCase()))
+      .map(stem),
+  );
+}
+
 function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:]+$/, "").trim();
 }
@@ -121,6 +210,15 @@ export function buildMcq(
     distractors.push({ text, correct: false, debrief });
   };
 
+  // Siblings of a numbered answer first, but only a couple: a question whose
+  // every option is "DNA polymerase N" tests the numeral, not the concept.
+  for (const variant of familyVariants(card.directAnswer).slice(0, 2)) {
+    add(
+      variant,
+      "A different member of the same family — check which one does this particular job.",
+    );
+  }
+
   for (const misconception of card.misconceptions) {
     add(
       misconception,
@@ -139,8 +237,16 @@ export function buildMcq(
     return ratio >= 0.4 && ratio <= 2.5;
   });
 
+  // Answers of the same kind first: "DNA polymerase I" from another card is a
+  // far better distractor for "DNA polymerase III" than "Okazaki fragments".
+  const kin = contentStems(card.directAnswer);
+  const shared = (other: McqCard) =>
+    [...contentStems(other.directAnswer)].filter((key) => kin.has(key)).length;
+
   const byRelevance = (candidates: readonly McqCard[]) =>
     candidates.slice().sort((a, b) => {
+      const kinship = shared(b) - shared(a);
+      if (kinship !== 0) return kinship;
       const sameTopic =
         Number(b.topic === card.topic) - Number(a.topic === card.topic);
       if (sameTopic !== 0) return sameTopic;
@@ -174,10 +280,18 @@ export function buildMcq(
 
   // Strip every option's echo of the question. If trimming would make two
   // options read the same, keep them all as written instead: a duplicate is
-  // a worse tell than an echo.
-  const trimmed = all.map((option) => ({
+  // a worse tell than an echo. An option that trimming reduces to a fragment
+  // ("III") keeps its name; if that is the right answer, every option does,
+  // so the whole names compete on equal terms.
+  const stripped = all.map((option) =>
+    stripQuestionEcho(option.text, card.question),
+  );
+  const lost = (index: number) =>
+    stripped[index] !== all[index].text.trim() && isFragment(stripped[index]);
+  const keepWhole = lost(0);
+  const trimmed = all.map((option, index) => ({
     ...option,
-    text: stripQuestionEcho(option.text, card.question),
+    text: keepWhole || lost(index) ? option.text : stripped[index],
   }));
   const distinct = new Set(trimmed.map((option) => normalize(option.text)));
 

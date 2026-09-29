@@ -110,7 +110,7 @@ export default async function PlanPage(
             <CardDescription>Nothing to do today. You&apos;re caught up.</CardDescription>
           ) : null}
         </CardHeader>
-        {plan.today.due > 0 || plan.today.fresh > 0 ? (
+        {plan.today.due > 0 || plan.totals.unstudied > 0 ? (
           <CardContent className="space-y-3">
             <ol className="space-y-2 text-sm">
               {plan.today.due > 0 ? (
@@ -130,13 +130,20 @@ export default async function PlanPage(
             </ol>
             <div className="flex flex-wrap gap-2">
               <StartToday examId={examId} due={plan.today.due} />
-              {plan.today.fresh > 0 ? (
+              {/* Learning is never locked: past today's share it is learning ahead. */}
+              {plan.totals.unstudied > 0 ? (
                 <Button
                   asChild
-                  variant={plan.today.due > 0 ? "outline" : "default"}
+                  variant={
+                    plan.today.due > 0 || plan.today.fresh === 0
+                      ? "outline"
+                      : "default"
+                  }
                 >
                   <Link href={`/exams/${examId}/learn`}>
-                    Learn {plan.today.fresh} new
+                    {plan.today.fresh > 0
+                      ? `Learn ${plan.today.fresh} new`
+                      : "Learn ahead"}
                   </Link>
                 </Button>
               ) : null}

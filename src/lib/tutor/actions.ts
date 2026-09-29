@@ -7,7 +7,7 @@ import { slideImage } from "@/lib/diagrams/render";
 import { getProvider, LlmError, type ChatTurn } from "@/lib/llm";
 import { readProvider } from "@/lib/settings";
 
-import { deckContext, flashcardContext } from "./context";
+import { deckContext, flashcardContext, type ContextQuery } from "./context";
 import { askTutor, extractCards, type ExtractedCard } from "./index";
 import { saveTutorCards } from "./save";
 
@@ -59,6 +59,22 @@ async function buildTurns(
   return turns;
 }
 
+/**
+ * What the student is asking about: their last two questions and the card on
+ * screen. Earlier turns are left out so an old topic does not crowd out the
+ * new one.
+ */
+function queryFor(input: TutorInput & { instruction?: string }): ContextQuery {
+  const recent = input.messages
+    .filter((message) => message.role === "user")
+    .slice(-2)
+    .map((message) => message.text);
+  return {
+    text: [input.focus ?? "", input.instruction ?? "", ...recent].join("\n"),
+    slideId: input.slideId,
+  };
+}
+
 export type AskResult =
   | { ok: true; reply: string; suggestions: string[]; beyondMaterial: boolean }
   | { ok: false; error: string };
@@ -76,10 +92,11 @@ type TutorInput = {
 export async function askTutorAction(input: TutorInput): Promise<AskResult> {
   try {
     const provider = getProvider(input.provider);
+    const query = queryFor(input);
     const [material, cards] = input.examId
       ? await Promise.all([
-          deckContext(input.examId, provider.name),
-          flashcardContext(input.examId, provider.name),
+          deckContext(input.examId, provider.name, query),
+          flashcardContext(input.examId, provider.name, query),
         ])
       : ["", ""];
     const answer = await askTutor(
@@ -109,10 +126,11 @@ export async function extractCardsAction(
 ): Promise<ExtractResult> {
   try {
     const provider = getProvider(input.provider);
+    const query = queryFor(input);
     const [material, existing] = input.examId
       ? await Promise.all([
-          deckContext(input.examId, provider.name),
-          flashcardContext(input.examId, provider.name),
+          deckContext(input.examId, provider.name, query),
+          flashcardContext(input.examId, provider.name, query),
         ])
       : ["", ""];
     const cards = await extractCards(provider, {

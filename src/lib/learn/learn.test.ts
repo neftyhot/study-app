@@ -509,4 +509,49 @@ describe("learn sessions", () => {
     expect(finished.session.completedAt).not.toBeNull();
     expect(finished.state).toBeNull();
   });
+
+  it("starts at the chosen card and runs on from there", () => {
+    const session = startLearnSession(db, examId, {
+      scope: "all",
+      roundSize: 5,
+      startAt: cardIds[7],
+    });
+    expect(session.cardOrder).toEqual(cardIds.slice(7));
+    expect(loadLearn(db, session.id)?.step?.cardId).toBe(cardIds[7]);
+  });
+
+  it("keeps cramming across rounds and brings cards back tomorrow", () => {
+    // A card known for weeks: long-term would next show it a month or more out.
+    db.insert(studyProgress)
+      .values({
+        flashcardId: cardIds[0],
+        state: "recognition",
+        intervalDays: 20,
+        lastCreditedAt: "2026-01-01",
+      })
+      .run();
+
+    const session = startLearnSession(db, examId, {
+      scope: "all",
+      roundSize: 5,
+      mode: "cram",
+    });
+    expect(session.roundState?.mode).toBe("cram");
+    expect(loadLearn(db, session.id)?.step?.cardId).toBe(cardIds[0]);
+    submitOutcome(db, session.id, cardIds[0], { correct: true });
+
+    const progress = db
+      .select()
+      .from(studyProgress)
+      .where(eq(studyProgress.flashcardId, cardIds[0]))
+      .get()!;
+    expect(progress.intervalDays).toBeGreaterThan(20);
+    const tomorrow = new Date(Date.now() + 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    expect(progress.nextReviewDue! <= tomorrow).toBe(true);
+
+    expect(startNextRound(db, session.id)).toBe(true);
+    expect(loadLearn(db, session.id)?.state?.mode).toBe("cram");
+  });
 });

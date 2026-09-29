@@ -25,11 +25,29 @@ export type MasteryTier = "none" | "recognition" | "immediate_recall";
 
 const TIER_ORDER: MasteryTier[] = ["none", "recognition", "immediate_recall"];
 
+/**
+ * How a Learn run is paced.
+ *
+ * Long-term is the spaced-repetition default: wide gaps within the session
+ * and reviews spread over the following days and weeks, which is what makes
+ * material stick for months. Cram is for an exam in a day or two: tighter
+ * gaps so a round finishes sooner, an extra pass on anything that was missed,
+ * and every card back for review tomorrow rather than next week.
+ */
+export const LEARN_MODES = ["longterm", "cram"] as const;
+export type LearnMode = (typeof LEARN_MODES)[number];
+
 /** Intervening items before an interleaved re-prompt (PRD §5: 3–5). */
-const INTERLEAVE_GAPS = [3, 4, 5];
+const INTERLEAVE_GAPS: Record<LearnMode, number[]> = {
+  longterm: [3, 4, 5],
+  cram: [2, 3, 4],
+};
 
 /** Same-session delayed check, far enough back to be a real second look. */
-const DELAY_GAPS = [8, 10, 12];
+const DELAY_GAPS: Record<LearnMode, number[]> = {
+  longterm: [8, 10, 12],
+  cram: [5, 6, 7],
+};
 
 /** Errors after which a concept is parked rather than drilled forever. */
 const MAX_ERRORS = 4;
@@ -50,12 +68,16 @@ export type ConceptState = {
   done: boolean;
   /** Parked after repeated errors; surfaced to the student, not hidden. */
   struggled: boolean;
+  /** Cram only: a missed concept has had its extra delayed pass. */
+  reinforced?: boolean;
 };
 
 export type RoundState = {
   concepts: ConceptState[];
   step: number;
   gapCursor: number;
+  /** Absent on rounds saved before modes existed, which were long-term. */
+  mode?: LearnMode;
 };
 
 export type Step = {
@@ -81,6 +103,7 @@ export type StartOptions = {
    * typed attempt is genuine recall and does count.
    */
   skipRecognitionFor?: Iterable<string>;
+  mode?: LearnMode;
 };
 
 export function startRound(
@@ -103,6 +126,7 @@ export function startRound(
     })),
     step: 0,
     gapCursor: 0,
+    mode: options.mode ?? "longterm",
   };
 }
 
@@ -143,8 +167,10 @@ export function applyOutcome(
   step: Step,
   outcome: Outcome,
 ): RoundState {
-  const gap = INTERLEAVE_GAPS[state.gapCursor % INTERLEAVE_GAPS.length];
-  const delay = DELAY_GAPS[state.gapCursor % DELAY_GAPS.length];
+  const mode = state.mode ?? "longterm";
+  const gap = gapFor(state);
+  const delays = DELAY_GAPS[mode];
+  const delay = delays[state.gapCursor % delays.length];
   const next = state.step + 1;
 
   const concepts: ConceptState[] = state.concepts.map((concept) => {
@@ -208,11 +234,28 @@ export function applyOutcome(
         };
       case "typed_delayed":
       default:
+        // Cramming: anything missed along the way gets one more delayed
+        // check before the round lets it go.
+        if (mode === "cram" && concept.errors > 0 && !concept.reinforced) {
+          return {
+            ...concept,
+            attempts,
+            tier,
+            dueAt: next + delay,
+            answerShown: false,
+            reinforced: true,
+          };
+        }
         return { ...concept, attempts, tier, done: true, answerShown: false };
     }
   });
 
-  return { concepts, step: next, gapCursor: state.gapCursor + 1 };
+  return { ...state, concepts, step: next, gapCursor: state.gapCursor + 1 };
+}
+
+function gapFor(state: RoundState): number {
+  const gaps = INTERLEAVE_GAPS[state.mode ?? "longterm"];
+  return gaps[state.gapCursor % gaps.length];
 }
 
 function promote(current: MasteryTier, step: Step): MasteryTier {
@@ -307,7 +350,7 @@ export function skipAsUnknown(
   state: RoundState,
   cardId: string,
 ): RoundState {
-  const gap = INTERLEAVE_GAPS[state.gapCursor % INTERLEAVE_GAPS.length];
+  const gap = gapFor(state);
 
   return {
     ...state,

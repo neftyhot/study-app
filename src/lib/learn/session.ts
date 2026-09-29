@@ -32,11 +32,12 @@ import {
   skipAsUnknown,
   skipRecognition,
   startRound,
+  type LearnMode,
   type Outcome,
   type RoundState,
   type Step,
 } from "./ladder";
-import { qualityForVerdict, scheduleFor } from "@/lib/srs";
+import { addDays, qualityForVerdict, scheduleFor, todayIso } from "@/lib/srs";
 
 import { applyLearnResult } from "./progress";
 import type { TypedGrade } from "./typed";
@@ -92,12 +93,47 @@ function knownCards(db: Db, cardIds: readonly string[]): Set<string> {
   );
 }
 
+export type LearnFilter = QueueFilter & {
+  roundSize?: number;
+  mode?: LearnMode;
+  /** Begin at this card: the deck runs from here, in lecture order. */
+  startAt?: string | null;
+};
+
+/**
+ * The queue from `startAt` onward.
+ *
+ * The chosen card may not be in this queue (already excluded, or outside the
+ * topic), so the run starts at the first queued card at or after it in
+ * lecture order. Past the end of the queue, it starts at the beginning
+ * rather than handing back nothing.
+ */
+export function startingFrom(
+  order: readonly string[],
+  lecture: readonly string[],
+  startAt: string | null | undefined,
+): string[] {
+  if (!startAt) return [...order];
+  const position = new Map(lecture.map((id, index) => [id, index]));
+  const from = position.get(startAt);
+  if (from === undefined) return [...order];
+  const index = order.findIndex((id) => (position.get(id) ?? -1) >= from);
+  return index < 0 ? [...order] : order.slice(index);
+}
+
 export function startLearnSession(
   db: Db,
   examId: string,
-  filter: QueueFilter & { roundSize?: number },
+  filter: LearnFilter,
 ): StudySession {
-  const order = buildQueue(loadQueueCards(db, examId), filter);
+  const cards = loadQueueCards(db, examId);
+  const order = startingFrom(
+    // Starting at a chosen card means following the deck from there.
+    buildQueue(cards, filter.startAt ? { ...filter, shuffled: false } : filter),
+    cards.map((card) => card.id),
+    filter.startAt,
+  );
+  const mode = filter.mode ?? "longterm";
   const roundSize = clampRoundSize(filter.roundSize ?? DEFAULT_ROUND_SIZE);
 
   const existing = openLearnSession(db, examId);
@@ -118,13 +154,13 @@ export function startLearnSession(
       mode: "learn",
       scope: filter.scope,
       topic: filter.scope === "topic" ? (filter.topic ?? null) : null,
-      shuffled: filter.shuffled ?? false,
+      shuffled: filter.startAt ? false : (filter.shuffled ?? false),
       cardOrder: order,
       roundSize,
       roundIndex: 0,
       roundState:
         first.length > 0
-          ? startRound(first, { skipRecognitionFor: knownCards(db, first) })
+          ? startRound(first, { skipRecognitionFor: knownCards(db, first), mode })
           : null,
     })
     .returning()
@@ -173,6 +209,25 @@ export type SubmitResult = {
   step: Step | null;
   roundComplete: boolean;
 };
+
+/**
+ * Cramming brings every card back tomorrow.
+ *
+ * The interval and ease are kept, so once the exam is over the card carries on
+ * spacing out from where the scheduler put it; only the next date is pulled in.
+ */
+export function forMode<T extends { nextReviewDue: string | null }>(
+  schedule: T,
+  mode: LearnMode | undefined,
+  today = todayIso(),
+): T {
+  if (mode !== "cram") return schedule;
+  const tomorrow = addDays(today, 1);
+  const due = schedule.nextReviewDue;
+  return due !== null && due <= tomorrow
+    ? schedule
+    : { ...schedule, nextReviewDue: tomorrow };
+}
 
 /**
  * Records one answer: progress first, then the ladder.
@@ -224,7 +279,7 @@ export function submitOutcome(
     guessed: outcome.guessed,
   });
 
-  const row = { ...update, ...schedule };
+  const row = { ...update, ...forMode(schedule, session.roundState.mode) };
 
   if (current) {
     db.update(studyProgress)
@@ -321,7 +376,10 @@ export function skipKnown(
   });
 
   // `schedule` carries the authoritative state; spread it last.
-  const row = { lastReviewedAt: new Date().toISOString(), ...schedule };
+  const row = {
+    lastReviewedAt: new Date().toISOString(),
+    ...forMode(schedule, session.roundState.mode),
+  };
 
   if (current) {
     db.update(studyProgress)
@@ -429,6 +487,8 @@ export function startNextRound(db: Db, sessionId: string): boolean {
     roundIndex: nextIndex,
     roundState: startRound(slice, {
       skipRecognitionFor: knownCards(db, slice),
+      // The last round's state is the only record of the mode chosen.
+      mode: session.roundState?.mode ?? "longterm",
     }),
   });
 

@@ -4,7 +4,6 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { cardRubrics, flashcards } from "@/db/schema";
-import type { QueueFilter } from "@/lib/study/queue";
 
 import { hasRevision } from "@/lib/cards/edit";
 
@@ -32,6 +31,7 @@ import {
   startNextRound,
   submitOutcome,
   provideAssist,
+  type LearnFilter,
 } from "./session";
 import { exactAnswerGrade, type TypedGrade } from "./typed";
 import { getTypedGrader } from "@/lib/grade";
@@ -202,10 +202,7 @@ function status(sessionId: string): LearnStatus {
   };
 }
 
-export async function beginLearnSession(
-  examId: string,
-  filter: QueueFilter & { roundSize?: number },
-) {
+export async function beginLearnSession(examId: string, filter: LearnFilter) {
   const session = startLearnSession(db, examId, filter);
   return { sessionId: session.id, status: status(session.id) };
 }

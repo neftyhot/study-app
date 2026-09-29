@@ -6,6 +6,17 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.3.2",
+    date: "2026-09-29",
+    notes: [
+      "Learn now has two modes. Long-term spreads reviews out over days and weeks, like Anki, so it sticks for the final. Cram is for an exam in a day or two: cards come back sooner, anything you miss gets an extra check, and every card is due again tomorrow.",
+      "Start Learn at any card: press “Start at a specific card”, scroll through the deck and pick where to begin.",
+      "Learn stays on the deck page as long as there are cards you haven't learned, instead of disappearing once the day's new cards were done.",
+      "Multiple-choice answers in Learn are shown in full (“DNA polymerase III”, not “III”), with similar options such as the other polymerases to choose between.",
+      "The tutor answers much faster. It reads the parts of your deck that matter for the question rather than the whole deck every time, and if your key hits Google's rate limit it tells you straight away instead of waiting and retrying.",
+    ],
+  },
+  {
     version: "1.3.1",
     date: "2026-09-28",
     notes: [
