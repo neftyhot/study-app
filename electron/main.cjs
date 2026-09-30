@@ -142,7 +142,21 @@ function configureDataDirectories() {
 function resourcePath(...parts) {
   return isDev
     ? path.join(__dirname, "..", ...parts)
-    : path.join(app.getAppPath(), ...parts);
+    : path.join(unpackedRoot(), ...parts);
+}
+
+/**
+ * Where the packaged app's unpacked files live.
+ *
+ * The launcher code sits sealed inside `app.asar`, which Electron checks
+ * against a hash on every start. The Next server, its migrations and the
+ * native modules are unpacked beside it (see `asarUnpack` in package.json):
+ * the server changes into its own directory and writes a cache there, and
+ * native code has to load from a real file.
+ */
+function unpackedRoot() {
+  const root = app.getAppPath();
+  return root.endsWith(".asar") ? `${root}.unpacked` : root;
 }
 
 /** Applies any migrations the packaged code expects but the data lacks. */
@@ -213,20 +227,61 @@ async function startServer() {
   // PowerPoint slides are drawn in a hidden window (src/lib/ingest/slide-render.ts).
   globalThis.__studyAppDrawSlides = require("./slide-drawer.cjs").drawSlides;
 
+  // A fresh secret each launch, which the server asks of every request
+  // (src/proxy.ts). Only this app's own windows are given it, so another
+  // program on the computer, or a web page in a browser, cannot drive the
+  // server just by finding its port. Kept off process.env so child
+  // processes do not inherit it.
+  const launchSecret = require("node:crypto").randomBytes(32).toString("hex");
+  globalThis.__studyAppLaunchSecret = launchSecret;
+
   const entry = resourcePath(".next", "standalone", "server.js");
   process.chdir(path.dirname(entry));
   require(entry);
 
   const url = `http://127.0.0.1:${port}`;
-  await waitForServer(url);
+  sendLaunchSecret(url, launchSecret);
+  await waitForServer(url, launchSecret);
   return url;
 }
 
+/** The header the server checks the launch secret in; see src/proxy.ts. */
+const LAUNCH_SECRET_HEADER = "x-study-app-launch";
+
+/**
+ * Adds the launch secret to every request this app's windows make to its own
+ * server: the app window, and the hidden one that draws slides. Nothing
+ * else, including other programs on this computer, is given it.
+ */
+function sendLaunchSecret(url, secret) {
+  const { origin } = new URL(url);
+  const { session } = require("electron");
+  session.defaultSession.webRequest.onBeforeSendHeaders(
+    { urls: ["http://127.0.0.1/*"] },
+    (details, callback) => {
+      let sameOrigin = false;
+      try {
+        sameOrigin = new URL(details.url).origin === origin;
+      } catch {
+        // Not a URL we can read; leave it alone.
+      }
+      callback(
+        sameOrigin
+          ? { requestHeaders: { ...details.requestHeaders, [LAUNCH_SECRET_HEADER]: secret } }
+          : {},
+      );
+    },
+  );
+}
+
 /** The standalone server binds asynchronously; poll until it answers. */
-async function waitForServer(url, attempts = 100) {
+async function waitForServer(url, secret, attempts = 100) {
   for (let i = 0; i < attempts; i += 1) {
     try {
-      const response = await fetch(url, { method: "HEAD" });
+      const response = await fetch(url, {
+        method: "HEAD",
+        headers: { [LAUNCH_SECRET_HEADER]: secret },
+      });
       if (response.status < 500) return;
     } catch {
       // Not listening yet.
