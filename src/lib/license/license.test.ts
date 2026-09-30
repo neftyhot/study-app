@@ -483,6 +483,13 @@ describe("the gate", () => {
     expect(store.readRevocationCheckedAt(dir)).toBe(2000);
   });
 
+  it("does not let a trial start in the future", () => {
+    const now = Date.now();
+    writeFileSync(join(dir, "license.json"), JSON.stringify({ trialStartedAt: now + 3650 * DAY }));
+    expect(store.startTrial(dir, now)).toBe(now);
+    expect(store.startTrial(dir, now + DAY)).toBe(now);
+  });
+
   it("does not believe a confirmation dated in the future", () => {
     const now = Date.now();
     const passed = { valid: true, payload: { id: "key-1", type: "lifetime" } };

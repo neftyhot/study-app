@@ -98,7 +98,8 @@ function readTrialStart(userDataDir) {
 
 function startTrial(userDataDir, now = Date.now()) {
   const existing = readTrialStart(userDataDir);
-  if (existing !== null) return existing;
+  // A start well past the clock was written by hand, to never run out.
+  if (existing !== null && existing <= now + FUTURE_SLACK_MS) return existing;
   write(userDataDir, { ...read(userDataDir), trialStartedAt: now });
   return now;
 }
