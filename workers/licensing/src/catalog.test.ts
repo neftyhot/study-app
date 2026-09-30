@@ -63,7 +63,9 @@ let verdict: Record<string, unknown>;
 
 beforeEach(() => {
   sqlite = new Database(":memory:");
-  sqlite.exec(readFileSync(new URL("../migrations/0001_catalog.sql", import.meta.url), "utf8"));
+  for (const migration of ["0001_catalog.sql", "0002_report_network.sql"]) {
+    sqlite.exec(readFileSync(new URL(`../migrations/${migration}`, import.meta.url), "utf8"));
+  }
   env = {
     STRIPE_WEBHOOK_SECRET: "whsec",
     LICENSE_PRIVATE_KEY: "",
@@ -368,6 +370,24 @@ describe("owning a listing", () => {
     await call("POST", `/catalog/${id}/add`, { who: ALICE });
     const listed = (await (await call("GET", "/catalog")).json()) as { decks: { adds: number }[] };
     expect(listed.decks[0].adds).toBe(1);
+  });
+
+  it("caps reports and edits from one network, whatever install ids it uses", async () => {
+    const id = await shared();
+    const other = "55555555-5555-4555-8555-555555555555";
+    expect((await call("POST", `/catalog/${id}/report`, { who: BOB, body: {} })).status).toBe(200);
+    const { network } = sqlite.prepare(`SELECT network FROM catalog_reports WHERE reporter = ?`).get(BOB) as { network: string };
+    expect(network).toMatch(/^ip:/);
+    const insert = sqlite.prepare(`INSERT INTO catalog_reports (deck_id, reporter, reason, at, network) VALUES (?, ?, NULL, ?, ?)`);
+    for (let i = 1; i < LIMITS.reportsPerDayPerIp; i++) insert.run(`other-${i}`, `fake-${i}`, Date.now(), network);
+    expect((await call("POST", `/catalog/${id}/report`, { who: other, body: {} })).status).toBe(429);
+    expect((await call("POST", `/catalog/${id}/report`, { who: other, body: {}, ip: "198.51.100.9" })).status).toBe(200);
+
+    const attempt = sqlite.prepare(`INSERT INTO catalog_attempts (who, action, outcome, at) VALUES (?, 'edit', 'allowed', ?)`);
+    for (let i = 0; i < LIMITS.editsPerDayPerIp; i++) attempt.run(network, Date.now());
+    const edit = { ...deck(), title: "Midterm 2 (curve)" };
+    expect((await call("PATCH", `/catalog/${id}`, { who: ALICE, body: edit })).status).toBe(429);
+    expect((await call("PATCH", `/catalog/${id}`, { who: ALICE, body: edit, ip: "198.51.100.9" })).status).toBe(200);
   });
 
   it("hides a deck enough students report, except from its owner", async () => {

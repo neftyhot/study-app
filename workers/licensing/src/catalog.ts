@@ -86,9 +86,13 @@ export const LIMITS = {
   /** From one network, whatever install ids it uses. */
   publishPerDayPerIp: 20,
   editsPerDay: 20,
+  /** From one network, whatever install ids it uses. */
+  editsPerDayPerIp: 60,
   /** Refusals in a day before that install may not share until tomorrow. */
   rejectionsPerDay: 3,
   reportsPerDay: 20,
+  /** From one network, whatever install ids it uses. */
+  reportsPerDayPerIp: 40,
   reportsToHide: 3,
 } as const;
 
@@ -472,12 +476,17 @@ async function report(request: Request, db: D1Like, id: string, me: string) {
     .bind(me, since)
     .first<{ n: number }>()) ?? { n: 0 };
   if (n >= LIMITS.reportsPerDay) throw new Refusal(429, "You've sent a lot of reports today. Thanks — we'll look at them.", DAY);
+  const network = await networkOf(request);
+  const fromNetwork = await count(db, `SELECT count(*) AS n FROM catalog_reports WHERE network = ? AND at > ?`, network, since);
+  if (fromNetwork >= LIMITS.reportsPerDayPerIp) {
+    throw new Refusal(429, "A lot of reports have come from this network today. Thanks — we'll look at them.", DAY);
+  }
 
   const body = await readBody(request).catch(() => ({}) as Record<string, unknown>);
   const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) || null : null;
   await db
-    .prepare(`INSERT OR IGNORE INTO catalog_reports (deck_id, reporter, reason, at) VALUES (?, ?, ?, ?)`)
-    .bind(id, me, reason, Date.now())
+    .prepare(`INSERT OR IGNORE INTO catalog_reports (deck_id, reporter, reason, at, network) VALUES (?, ?, ?, ?, ?)`)
+    .bind(id, me, reason, Date.now(), network)
     .run();
 
   const { reports } = (await db
@@ -684,8 +693,19 @@ async function withinLimits(db: D1Like, me: string, ip: string, action: "publish
     if (fromNetwork >= LIMITS.publishPerDayPerIp) {
       throw new Refusal(429, "Too many decks have been shared from this network today. Try again tomorrow.", DAY);
     }
-  } else if ((await byMe(DAY)) >= LIMITS.editsPerDay) {
-    throw new Refusal(429, "You've edited your listings a lot today. Try again tomorrow.", DAY);
+  } else {
+    if ((await byMe(DAY)) >= LIMITS.editsPerDay) {
+      throw new Refusal(429, "You've edited your listings a lot today. Try again tomorrow.", DAY);
+    }
+    const fromNetwork = await count(
+      db,
+      `SELECT count(*) AS n FROM catalog_attempts WHERE who = ? AND action = 'edit' AND at > ?`,
+      ip,
+      since(DAY),
+    );
+    if (fromNetwork >= LIMITS.editsPerDayPerIp) {
+      throw new Refusal(429, "Too many listings have been edited from this network today. Try again tomorrow.", DAY);
+    }
   }
 }
 
