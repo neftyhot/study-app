@@ -33,7 +33,9 @@ import { canSeal, isSealed, seal, unseal } from "@/lib/secret-box";
 import {
   PROVIDERS,
   type ApiProviderId,
+  isGradingMode,
   type DownloadState,
+  type GradingMode,
   type KeyStatus,
   type ProviderId,
 } from "@/lib/settings-shared";
@@ -140,6 +142,38 @@ export function readGradingStrictness(db?: Db): Strictness {
 
 export function writeGradingStrictness(strictness: Strictness, db?: Db) {
   writeSetting(STRICTNESS_KEY, strictness, db);
+}
+
+const GRADING_MODE_KEY = "grading_mode";
+const GRADER_DOWNLOAD_KEY = "grader_download";
+
+/** On this computer unless the student chose the cloud. */
+export function readGradingMode(db?: Db): GradingMode {
+  const value = readSetting(GRADING_MODE_KEY, db);
+  return isGradingMode(value) ? value : "local";
+}
+
+export function writeGradingMode(mode: GradingMode, db?: Db) {
+  if (!isGradingMode(mode)) return;
+  writeSetting(GRADING_MODE_KEY, mode, db);
+}
+
+/**
+ * The grading model's download, kept apart from the chat model's so a
+ * student can grade on this computer while chatting with a cloud model.
+ */
+export function readGraderDownload(db?: Db): DownloadState | null {
+  const raw = readSetting(GRADER_DOWNLOAD_KEY, db);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as DownloadState;
+  } catch {
+    return null;
+  }
+}
+
+export function writeGraderDownload(state: DownloadState | null, db?: Db) {
+  writeSetting(GRADER_DOWNLOAD_KEY, state ? JSON.stringify(state) : "", db);
 }
 
 /* ------------------------------------------------------------- Appearance */

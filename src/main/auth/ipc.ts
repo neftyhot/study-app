@@ -75,9 +75,20 @@ export type UpdateApi = {
   install(): Promise<{ ok: true; version: string } | { ok: false; error: string }>;
 };
 
+/** What the preload puts on `window.studyApp.tutor`: a picture of the app window. */
+export type TutorApi = {
+  /** A JPEG data URL of the window as it is now, or null if it could not be taken. */
+  captureScreen(): Promise<string | null>;
+};
+
 declare global {
   interface Window {
     /** Present only inside the desktop app. */
-    studyApp?: { googleAuth: GoogleAuthApi; license: LicenseApi; update?: UpdateApi };
+    studyApp?: {
+      googleAuth: GoogleAuthApi;
+      license: LicenseApi;
+      update?: UpdateApi;
+      tutor?: TutorApi;
+    };
   }
 }

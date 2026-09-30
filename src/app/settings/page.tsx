@@ -8,7 +8,7 @@ import { StatsCard } from "@/components/settings/stats-card";
 import { APP_VERSION } from "@/lib/app-info";
 import { CHANGELOG } from "@/lib/changelog";
 import { loadStats } from "@/lib/stats";
-import { GradingSettings } from "@/components/settings/grading-settings";
+import { GradingSettings, SpeedUpCard } from "@/components/settings/grading-settings";
 import { ProviderSettings } from "@/components/settings/provider-settings";
 import { PurchaseLicense } from "@/components/settings/purchase-license";
 import { PrivacyPolicyText } from "@/components/privacy/privacy-policy";
@@ -29,10 +29,11 @@ import { readAppearance, readGradingStrictness } from "@/lib/settings";
 import { db } from "@/db";
 import { installId } from "@/lib/telemetry";
 import { DeleteStatistics } from "@/components/settings/delete-statistics";
-import { getSetupSnapshot } from "@/lib/settings-actions";
+import { getGradingSnapshot, getSetupSnapshot } from "@/lib/settings-actions";
 
 export default async function SettingsPage() {
   const snapshot = await getSetupSnapshot();
+  const grading = await getGradingSnapshot();
   const license = readLicenseStatus();
 
   return (
@@ -84,7 +85,9 @@ export default async function SettingsPage() {
 
       <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
 
-      <GradingSettings initial={readGradingStrictness()} />
+      <SpeedUpCard provider={snapshot.provider} />
+
+      <GradingSettings initial={readGradingStrictness()} grading={grading} />
 
       <Card id="privacy" className="scroll-mt-20">
         <CardHeader>

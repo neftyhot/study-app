@@ -1,6 +1,6 @@
 {
   "name": "megan-study",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -12,13 +12,14 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx src/db/seed.ts",
+    "dev:data": "tsx scripts/dev-data.ts",
     "typecheck": "tsc --noEmit",
     "fixtures": "tsx scripts/build-fixtures.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "grade:check": "tsx --env-file=.env.local scripts/grade-check.ts",
     "smoke": "tsx scripts/smoke.ts",
-    "electron:dev": "concurrently -k -n next,electron -c cyan,magenta \"next dev\" \"wait-on tcp:3000 && electron .\"",
+    "electron:dev": "npm run db:migrate && concurrently -k -n next,electron -c cyan,magenta \"next dev\" \"wait-on tcp:3000 && electron .\"",
     "electron:build": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder",
     "electron:pack": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder --dir",
     "build:win": "next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=x64 && node scripts/compile-main.mjs --platform=win32 --arch=x64 && electron-builder --win --x64",

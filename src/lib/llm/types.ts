@@ -100,6 +100,14 @@ export type ChatRequest = {
   maxOutputTokens?: number;
   /** As on StructuredRequest; a chat left at "default" can think away its whole budget. */
   thinking?: ThinkingEffort;
+  /**
+   * Gives up on one attempt after this long. Without it a stalled connection
+   * waits on the HTTP stack's own five-minute limit while the student watches
+   * a spinner. Providers without the control ignore it.
+   */
+  timeoutMs?: number;
+  /** Cancels the request outright, e.g. when the whole answer is out of time. */
+  signal?: AbortSignal;
 };
 
 export interface LlmProvider {

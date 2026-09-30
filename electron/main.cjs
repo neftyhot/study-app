@@ -488,6 +488,22 @@ app.whenReady().then(async () => {
   });
   updater.cleanUpAfterUpdate(app);
 
+  // What the student is looking at, for "Ask a tutor" questions like "what
+  // does this mean". Only the window that asked is captured, and only the app.
+  ipcMain.handle("tutor:capture-screen", async (event) => {
+    if (!fromApp(event)) return null;
+    try {
+      const image = await event.sender.capturePage();
+      if (image.isEmpty()) return null;
+      const { width } = image.getSize();
+      // Wide enough to read, small enough to send quickly.
+      const scaled = width > 1600 ? image.resize({ width: 1600 }) : image;
+      return `data:image/jpeg;base64,${scaled.toJPEG(80).toString("base64")}`;
+    } catch {
+      return null;
+    }
+  });
+
   try {
     // Near the end of the offline allowance, ask before deciding.
     const storedId = gate.licenseId(gate.store.readToken(userData));

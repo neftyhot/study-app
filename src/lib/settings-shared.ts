@@ -33,3 +33,14 @@ export type KeyStatus = {
   hint: string | null;
   fromEnvironment: boolean;
 };
+
+/**
+ * Where Check Answer runs. "local" grades on this computer when the grading
+ * model is installed and falls back to the cloud; "cloud" asks the cloud
+ * first and falls back to this computer if it is slow.
+ */
+export type GradingMode = "local" | "cloud";
+
+export function isGradingMode(value: unknown): value is GradingMode {
+  return value === "local" || value === "cloud";
+}

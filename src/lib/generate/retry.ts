@@ -35,6 +35,23 @@ export function backoffMs(attempt: number, random = Math.random): number {
   return BASE_DELAY_MS * 2 ** attempt + Math.floor(random() * 250);
 }
 
+/**
+ * How long the provider said to wait, in ms, when it said. Gemini's 429 names
+ * it ("retryDelay": "23s", "Please retry in 23.4s"); a free key's per-minute
+ * window is longer than the whole doubling schedule, so without this a big
+ * deck lost most of its batches on the first run and made a third the cards.
+ */
+export function retryHintMs(error: unknown): number | null {
+  const message = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? "")}` : String(error);
+  const match = /retry(?:Delay|[ _-]?after| in)?["'\s:=]*"?(\d+(?:\.\d+)?)\s*s\b/i.exec(message);
+  if (!match) return null;
+  const ms = Number(match[1]) * 1000;
+  return ms > MAX_HINT_MS ? null : ms;
+}
+
+/** Longer than a per-minute window is a daily limit, which waiting will not fix. */
+const MAX_HINT_MS = 65_000;
+
 export type RetryOptions = {
   attempts?: number;
   /** Injected in tests so they do not actually wait. */
@@ -56,7 +73,8 @@ export async function withRetry<T>(
     } catch (error) {
       if (attempt >= attempts - 1 || !isRetryable(error)) throw error;
 
-      const delay = backoffMs(attempt);
+      const hint = retryHintMs(error);
+      const delay = Math.max(backoffMs(attempt), hint === null ? 0 : hint + Math.floor(Math.random() * 1000));
       options.onRetry?.(attempt + 1, delay, error);
       await sleep(delay);
     }

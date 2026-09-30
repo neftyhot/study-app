@@ -6,6 +6,16 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.5.1",
+    date: "2026-09-29",
+    notes: [
+      "Delete a deck from the home page: press the bin next to its edit button. You're shown exactly what goes with it (files, cards, study guide and progress) before anything is removed.",
+      "Learn keeps going after the last round: it starts again from the top of the deck, so you can keep practising for as long as you like.",
+      "The tutor no longer spins for minutes when the AI service is slow. It gives up after 90 seconds and tells you to ask again, and New chat works even while an answer is on its way.",
+      "Making cards on a free Gemini key is more reliable: when Google asks the app to slow down, it waits as long as Google says instead of giving up on part of the deck, so a big deck no longer comes out with far fewer cards than usual.",
+    ],
+  },
+  {
     version: "1.5.0",
     date: "2026-09-29",
     notes: [

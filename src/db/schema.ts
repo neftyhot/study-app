@@ -11,7 +11,7 @@
 import { relations, sql } from "drizzle-orm";
 // Type-only: the Learn round engine owns the shape of its own saved state.
 import type { RoundState } from "@/lib/learn/ladder";
-import type { CitedSentence, CounterExample } from "@/lib/primer/types";
+import type { CitedSentence, CounterExample, ExtraExample } from "@/lib/primer/types";
 import {
   index,
   integer,
@@ -1080,7 +1080,7 @@ export const primerSections = sqliteTable(
      * More worked examples, each written when the student presses "Another
      * example" and kept, so the second visit shows them without a model call.
      */
-    extraExamples: text("extra_examples", { mode: "json" }).$type<string[]>(),
+    extraExamples: text("extra_examples", { mode: "json" }).$type<ExtraExample[]>(),
   },
   (t) => [index("primer_sections_guide_idx").on(t.guideId, t.orderIndex)],
 );

@@ -30,7 +30,7 @@ import {
 } from "@/db/schema";
 import type { JsonSchema, LlmProvider } from "@/lib/llm";
 
-import type { CitedSentence, CounterExample } from "./types";
+import { exampleView, type CalculationStep, type CitedSentence, type CounterExample, type ExtraExample } from "./types";
 import { TOPIC_CAP } from "./formats";
 import { SKIP_LOGISTICS_RULE } from "@/lib/logistics";
 
@@ -1120,8 +1120,26 @@ export const EXAMPLE_SCHEMA: JsonSchema = {
       description:
         "One new specific, concrete example of the concept in action, as a short paragraph of 2-4 sentences.",
     },
+    calculations: {
+      type: "array",
+      description:
+        "Every calculation behind the numbers in the example, in the order they are worked out, including any value the example states without showing how it was found. Empty when the example has no numbers worked out.",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string", description: "What this step finds, e.g. \"Gross profit\"." },
+          expression: {
+            type: "string",
+            description: "The working with the numbers filled in, e.g. \"$50,000 − $30,000\".",
+          },
+          result: { type: "string", description: "The value with units, e.g. \"$20,000\"." },
+        },
+        required: ["label", "expression", "result"],
+        additionalProperties: false,
+      },
+    },
   },
-  required: ["example"],
+  required: ["example", "calculations"],
   additionalProperties: false,
 };
 
@@ -1137,14 +1155,20 @@ export const EXAMPLE_SYSTEM = `You give a student one more concrete example of a
   case (a named disease, law, event, organism, character or situation) with
   the detail that shows the concept at work. Never put made-up numbers on a
   subject that does not use numbers.
+- When the example works numbers through, list every calculation in
+  "calculations", in order, so no value appears from nowhere: each step's
+  label, the expression with the numbers filled in, and the result. Every
+  number in the example that was calculated must match a step's result, and
+  each step must be arithmetically correct. When there are no numbers to work
+  out, leave "calculations" empty.
 - Never contradict the explanation you are given.`;
 
 export function examplePrompt(
   section: Pick<PrimerSection, "conceptName" | "definition" | "breakdown" | "example">,
-  seen: string[],
+  seen: ExtraExample[],
 ): string {
   const join = joinSentences;
-  const already = [join(section.example), ...seen].filter(Boolean);
+  const already = [join(section.example), ...seen.map((e) => exampleView(e).text)].filter(Boolean);
   return [
     `CONCEPT: ${section.conceptName}`,
     `DEFINITION: ${join(section.definition)}`,
@@ -1160,13 +1184,16 @@ export async function anotherExample(
   db: Db,
   llm: () => LlmProvider,
   sectionId: string,
-): Promise<{ examples: string[] } | null> {
+): Promise<{ examples: ExtraExample[] } | null> {
   const section = db.select().from(primerSections).where(eq(primerSections.id, sectionId)).get();
   if (!section) return null;
   const seen = section.extraExamples ?? [];
   if (seen.length >= MAX_EXTRA_EXAMPLES) return { examples: seen };
 
-  const { data } = await llm().generateStructured<{ example: string }>({
+  const { data } = await llm().generateStructured<{
+    example: string;
+    calculations?: CalculationStep[];
+  }>({
     feature: "primer_example",
     system: EXAMPLE_SYSTEM,
     prompt: examplePrompt(section, seen),
@@ -1178,7 +1205,18 @@ export async function anotherExample(
   const example = data.example?.trim();
   if (!example) throw new PrimerError("The model did not write an example. Try again.");
 
-  const examples = [...seen, example];
+  const calculations = (data.calculations ?? [])
+    .filter((step) => step && typeof step.expression === "string" && step.expression.trim())
+    .map((step) => ({
+      label: String(step.label ?? "").trim(),
+      expression: step.expression.trim(),
+      result: String(step.result ?? "").trim(),
+    }));
+
+  const examples: ExtraExample[] = [
+    ...seen,
+    calculations.length ? { text: example, calculations } : example,
+  ];
   db.update(primerSections).set({ extraExamples: examples }).where(eq(primerSections.id, sectionId)).run();
   return { examples };
 }

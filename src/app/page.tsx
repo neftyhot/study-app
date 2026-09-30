@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { QuickStart } from "@/components/ingest/quick-start";
 import { CourseActions } from "@/components/manage/course-actions";
+import { DeleteDeckButton } from "@/components/manage/delete-deck-button";
 import {
   EditCourseDialog,
   EditExamDialog,
@@ -55,7 +56,9 @@ export default async function DashboardPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <KeyRound className="size-4" />
-              {provider === "gemini" ? "Add your Gemini key" : "Add your API key"}
+              {provider === "gemini"
+                ? "Add your Gemini key"
+                : "Add your API key"}
             </CardTitle>
             <CardDescription>
               {provider === "gemini"
@@ -74,7 +77,9 @@ export default async function DashboardPage() {
       <QuickStart courses={courseOptions} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground text-sm">Other ways to start:</span>
+        <span className="text-muted-foreground text-sm">
+          Other ways to start:
+        </span>
         <Button asChild variant="outline" size="sm">
           <Link href="/decks/new">
             <ListPlus className="size-4" />
@@ -133,17 +138,25 @@ export default async function DashboardPage() {
                   <Card key={exam.id} className="flex flex-col">
                     <CardHeader>
                       <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base">{exam.title}</CardTitle>
-                        <EditExamDialog
-                          exam={{
-                            id: exam.id,
-                            title: exam.title,
-                            date: exam.date,
-                            courseId: course.id,
-                          }}
-                          courses={courseOptions}
-                          size="icon-sm"
-                        />
+                        <CardTitle className="text-base">
+                          {exam.title}
+                        </CardTitle>
+                        <div className="flex shrink-0">
+                          <EditExamDialog
+                            exam={{
+                              id: exam.id,
+                              title: exam.title,
+                              date: exam.date,
+                              courseId: course.id,
+                            }}
+                            courses={courseOptions}
+                            size="icon-sm"
+                          />
+                          <DeleteDeckButton
+                            examId={exam.id}
+                            examTitle={exam.title}
+                          />
+                        </div>
                       </div>
                       {exam.date ? (
                         <CardDescription className="flex items-center gap-1.5">
@@ -164,7 +177,6 @@ export default async function DashboardPage() {
           ))}
         </div>
       )}
-
     </div>
   );
 }

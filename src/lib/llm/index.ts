@@ -56,9 +56,10 @@ export {
  * "bulk" is deck generation: hundreds of cards, nobody waiting on any single
  * one, cost dominated by volume. "interactive" is everything else. Only Gemini
  * currently has a cheaper tier worth routing to; other providers answer both
- * roles with the model the student configured.
+ * roles with the model the student configured. "grade" is Check Answer: a
+ * short call a student is waiting on, so it goes to the fastest model.
  */
-export type ProviderRole = "bulk" | "interactive" | "primer";
+export type ProviderRole = "bulk" | "interactive" | "primer" | "grade";
 
 
 /**
@@ -183,6 +184,8 @@ function geminiModel(role: ProviderRole): string {
       return modelFor("geminiBulk");
     case "primer":
       return modelFor("geminiPrimer");
+    case "grade":
+      return modelFor("geminiGrade");
     default:
       return modelFor("gemini");
   }
@@ -200,7 +203,11 @@ function chainFor(
   role: ProviderRole,
   build: (model: string) => LlmProvider,
 ): LlmProvider {
-  const models = modelChain(provider, readModelTier(provider), chosen);
+  const chain = modelChain(provider, readModelTier(provider), chosen);
+  // Grading keeps its fast model even when the student picked the thinking
+  // level: a slower, deeper model buys nothing on a one-line answer.
+  const models =
+    role === "grade" ? [chosen, ...chain.filter((model) => model !== chosen)] : chain;
   return providerChain(models.map(build), { fallBackOnRate: role !== "bulk" });
 }
 

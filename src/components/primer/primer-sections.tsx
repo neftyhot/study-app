@@ -2,18 +2,26 @@
 
 import { useState } from "react";
 import {
+  Calculator,
   ChevronDown,
   ChevronRight,
   Lightbulb,
   ListTree,
   Loader2,
+  MessageCircleQuestion,
   ShieldQuestion,
 } from "lucide-react";
 
+import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { Button } from "@/components/ui/button";
 import type { PrimerFormat } from "@/db/schema";
 import { cn } from "@/lib/utils";
-import type { CitedSentence, CounterExample } from "@/lib/primer/types";
+import {
+  exampleView,
+  type CitedSentence,
+  type CounterExample,
+  type ExtraExample,
+} from "@/lib/primer/types";
 
 /** Matches MAX_EXTRA_EXAMPLES in lib/primer; that module is server-only. */
 const MAX_EXTRA_EXAMPLES = 5;
@@ -28,7 +36,7 @@ export type PrimerSectionView = {
   example: CitedSentence[];
   counterExample: CounterExample | null;
   /** Examples written on request, after the one the guide came with. */
-  extraExamples: string[];
+  extraExamples: ExtraExample[];
 };
 
 export type PrimerChapterView = {
@@ -131,10 +139,12 @@ const conceptAnchor = (i: number, j: number) => `concept-${i + 1}-${j + 1}`;
  * first and a wall of text never; the contents opens whichever is clicked.
  */
 export function PrimerDocument({
+  examId,
   chapters,
   slides,
   format = "explained",
 }: {
+  examId: string;
   chapters: PrimerChapterView[];
   slides: CitationSlides;
   format?: PrimerFormat;
@@ -208,7 +218,7 @@ export function PrimerDocument({
         </nav>
       </aside>
 
-      <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-6" data-primer-document>
         <details className="rounded-md border p-3 lg:hidden">
           <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium">
             <ListTree className="size-4" /> Contents
@@ -257,6 +267,8 @@ export function PrimerDocument({
                   {chapter.sections.map((section, j) => (
                     <Concept
                       key={section.id}
+                      examId={examId}
+                      chapterTitle={chapter.title}
                       anchor={conceptAnchor(i, j)}
                       number={`${i + 1}.${j + 1}`}
                       section={section}
@@ -279,19 +291,110 @@ export function PrimerDocument({
   );
 }
 
+/** Block-level text the student can read; nested matches are skipped so nothing is said twice. */
+const READABLE = "h1, h2, h3, h4, h5, p, li, dt, dd, summary";
+const MAX_SCREEN_CHARS = 4_000;
+
+/**
+ * The words of the study guide that are on screen right now, top to bottom.
+ * Goes with a question alongside the screenshot, and in place of it for a
+ * model that can't see images.
+ */
+function visibleGuideText(): string {
+  const root = document.querySelector("[data-primer-document]");
+  if (!root) return "";
+  const bottom = window.innerHeight;
+  const lines: string[] = [];
+  let length = 0;
+  for (const element of Array.from(root.querySelectorAll<HTMLElement>(READABLE))) {
+    if (element.parentElement?.closest(READABLE)) continue;
+    const rect = element.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top >= bottom || rect.height === 0) continue;
+    const text = element.innerText.replace(/\s+/g, " ").trim();
+    if (!text) continue;
+    lines.push(text);
+    length += text.length + 1;
+    if (length > MAX_SCREEN_CHARS) break;
+  }
+  return lines.join("\n").slice(0, MAX_SCREEN_CHARS);
+}
+
+async function post<T>(url: string, sectionId: string): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sectionId }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
+  return body as T;
+}
+
 function Concept({
+  examId,
+  chapterTitle,
   anchor,
   number,
   section,
   slides,
   format,
 }: {
+  examId: string;
+  chapterTitle: string;
   anchor: string;
   number: string;
   section: PrimerSectionView;
   slides: CitationSlides;
   format: PrimerFormat;
 }) {
+  const hasBuiltIn = section.example.length > 0;
+
+  // More worked examples, one per press. Each is kept, so they are all there
+  // on the next visit; the button goes once there are plenty.
+  const [examples, setExamples] = useState<ExtraExample[]>(section.extraExamples);
+  const [writingExample, setWritingExample] = useState(false);
+  const [exampleError, setExampleError] = useState<string | null>(null);
+
+  async function moreExamples() {
+    setWritingExample(true);
+    setExampleError(null);
+    try {
+      const body = await post<{ examples: ExtraExample[] }>("/api/primer/example", section.id);
+      setExamples(body.examples);
+    } catch (e) {
+      setExampleError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWritingExample(false);
+    }
+  }
+
+  // "What this isn't". Nothing is generated until the button is pressed; once
+  // written, the server keeps it, so it is shown straight away next time.
+  const [counter, setCounter] = useState<CounterExample | null>(section.counterExample);
+  const [counterShown, setCounterShown] = useState(false);
+  const [writingCounter, setWritingCounter] = useState(false);
+  const [counterError, setCounterError] = useState<string | null>(null);
+
+  async function revealCounter() {
+    setCounterShown(true);
+    if (counter) return;
+    setWritingCounter(true);
+    setCounterError(null);
+    try {
+      const body = await post<{ counterExample: CounterExample }>(
+        "/api/primer/counter-example",
+        section.id,
+      );
+      setCounter(body.counterExample);
+    } catch (e) {
+      setCounterError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWritingCounter(false);
+    }
+  }
+
+  const offset = hasBuiltIn ? 2 : 1;
+
   return (
     <article id={anchor} className="scroll-mt-6 space-y-3">
       <h3 className="text-lg font-semibold">
@@ -300,131 +403,126 @@ function Concept({
       </h3>
       <CitedText sentences={section.definition} slides={slides} />
       <Breakdown format={format} sentences={section.breakdown} slides={slides} />
-      {section.example.length > 0 ? (
+      {hasBuiltIn ? (
         <div className={cn("bg-muted/40 space-y-1 rounded-md border-l-4 border-l-primary px-4 py-3")}>
           <h4 className="text-sm font-semibold">Example</h4>
           <CitedText sentences={section.example} slides={slides} />
         </div>
       ) : null}
-      <MoreExamples
-        sectionId={section.id}
-        initial={section.extraExamples}
-        hasBuiltIn={section.example.length > 0}
-      />
-      <CounterExamplePanel sectionId={section.id} initial={section.counterExample} />
+
+      <div className="space-y-3" aria-live="polite">
+        {examples.map((example, index) => (
+          <ExampleBox key={index} title={`Example ${index + offset}`} example={example} />
+        ))}
+        {exampleError ? <p className="text-destructive text-sm">{exampleError}</p> : null}
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {examples.length < MAX_EXTRA_EXAMPLES ? (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={writingExample}
+            onClick={() => void moreExamples()}
+          >
+            {writingExample ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Lightbulb className="size-4" />
+            )}
+            {writingExample
+              ? "Writing an example…"
+              : hasBuiltIn || examples.length > 0
+                ? "Another example"
+                : "Show an example"}
+          </Button>
+        ) : null}
+        {counterShown ? null : (
+          <Button variant="outline" size="sm" onClick={() => void revealCounter()}>
+            <ShieldQuestion className="size-4" />
+            Show Counter-Example
+          </Button>
+        )}
+        <TutorPanel
+          examId={examId}
+          primerSectionId={section.id}
+          focus={`The student opened the tutor from their study guide, on concept ${number} "${section.conceptName}" in the topic "${chapterTitle}". That topic of the guide and the lecture slides it cites are at the top of the material.`}
+          contextLabel="It has this topic of your study guide, the slides it cites, your deck and what is on your screen."
+          captureScreen
+          screenText={visibleGuideText}
+          trigger={
+            <Button variant="outline" size="sm">
+              <MessageCircleQuestion className="size-4" />
+              Ask a tutor
+            </Button>
+          }
+        />
+      </div>
+
+      {counterShown ? (
+        <CounterExamplePanel
+          value={counter}
+          loading={writingCounter}
+          error={counterError}
+          onRetry={() => void revealCounter()}
+        />
+      ) : null}
     </article>
   );
 }
 
 /**
- * More worked examples, one per press. Each is kept, so they are all there on
- * the next visit; the button goes once there are plenty.
+ * One written example. When it has numbers, the working sits in a box down
+ * the right-hand third with the text wrapping around it, so no value in the
+ * example is one the student has to take on trust.
  */
-function MoreExamples({
-  sectionId,
-  initial,
-  hasBuiltIn,
-}: {
-  sectionId: string;
-  initial: string[];
-  hasBuiltIn: boolean;
-}) {
-  const [examples, setExamples] = useState(initial);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function more() {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/primer/example", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId }),
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
-      setExamples(body.examples);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const offset = hasBuiltIn ? 2 : 1;
+function ExampleBox({ title, example }: { title: string; example: ExtraExample }) {
+  const { text, calculations } = exampleView(example);
   return (
-    <div className="space-y-3" aria-live="polite">
-      {examples.map((example, index) => (
-        <div
-          key={index}
-          className="bg-muted/40 space-y-1 rounded-md border-l-4 border-l-primary px-4 py-3"
+    <div className="bg-muted/40 flex flex-col gap-3 rounded-md border-l-4 border-l-primary px-4 py-3 sm:block sm:flow-root">
+      {calculations.length > 0 ? (
+        <aside
+          aria-label="Calculations"
+          className="bg-background order-last rounded-md border p-3 text-sm sm:float-right sm:mt-6 sm:mb-2 sm:ml-4 sm:w-1/3"
         >
-          <h4 className="text-sm font-semibold">Example {index + offset}</h4>
-          <p className="leading-relaxed">{example}</p>
-        </div>
-      ))}
-      {error ? <p className="text-destructive text-sm">{error}</p> : null}
-      {examples.length < MAX_EXTRA_EXAMPLES ? (
-        <Button variant="outline" size="sm" disabled={loading} onClick={() => void more()}>
-          {loading ? <Loader2 className="size-4 animate-spin" /> : <Lightbulb className="size-4" />}
-          {loading
-            ? "Writing an example…"
-            : hasBuiltIn || examples.length > 0
-              ? "Another example"
-              : "Show an example"}
-        </Button>
+          <h5 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+            <Calculator className="size-3.5" />
+            Calculations
+          </h5>
+          <ol className="space-y-2">
+            {calculations.map((step, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="text-muted-foreground mt-0.5 text-xs tabular-nums">{i + 1}.</span>
+                <div className="min-w-0">
+                  <p className="text-muted-foreground text-xs">{step.label}</p>
+                  <p className="font-mono break-words tabular-nums">
+                    {step.expression} = <strong>{step.result}</strong>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </aside>
       ) : null}
+      <div className="space-y-1">
+        <h4 className="text-sm font-semibold">{title}</h4>
+        <p className="leading-relaxed">{text}</p>
+      </div>
     </div>
   );
 }
 
-/**
- * "What this isn't". Nothing is generated until the button is pressed; once
- * written, the server keeps it, so it is shown straight away on the next visit.
- */
 function CounterExamplePanel({
-  sectionId,
-  initial,
+  value,
+  loading,
+  error,
+  onRetry,
 }: {
-  sectionId: string;
-  initial: CounterExample | null;
+  value: CounterExample | null;
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
 }) {
-  const [value, setValue] = useState<CounterExample | null>(initial);
-  const [shown, setShown] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function reveal() {
-    setShown(true);
-    if (value) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch("/api/primer/counter-example", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId }),
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.error ?? `Request failed (${response.status})`);
-      setValue(body.counterExample);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  if (!shown) {
-    return (
-      <Button variant="outline" size="sm" onClick={reveal}>
-        <ShieldQuestion className="size-4" />
-        Show Counter-Example
-      </Button>
-    );
-  }
-
   return (
     <div className="bg-muted/40 space-y-3 rounded-md border p-4 text-sm" aria-live="polite">
       <h3 className="font-semibold">What this isn&apos;t</h3>
@@ -435,7 +533,7 @@ function CounterExamplePanel({
       ) : error ? (
         <div className="space-y-2">
           <p className="text-destructive">{error}</p>
-          <Button variant="outline" size="sm" onClick={reveal}>
+          <Button variant="outline" size="sm" onClick={onRetry}>
             Try again
           </Button>
         </div>

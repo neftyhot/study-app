@@ -75,6 +75,11 @@ function checkVision(provider: LlmProvider, turns: ChatTurn[]) {
   }
 }
 
+/** One try at an answer; normal replies take seconds, so this is a stall. */
+const ATTEMPT_TIMEOUT_MS = 45_000;
+/** The whole answer, retries included. */
+const ANSWER_DEADLINE_MS = 90_000;
+
 export async function askTutor(
   provider: LlmProvider,
   turns: ChatTurn[],
@@ -83,6 +88,8 @@ export async function askTutor(
 ): Promise<TutorResponse> {
   checkVision(provider, turns);
   const chat = requireChat(provider);
+  // Retries, and the provider chain behind them, all stop at one deadline.
+  const deadline = AbortSignal.timeout(ANSWER_DEADLINE_MS);
 
   const request: ChatRequest = {
     feature: "tutor",
@@ -96,6 +103,8 @@ export async function askTutor(
     // Left to itself the model thinks at length before a chat reply, and the
     // thinking comes out of the same budget: the first answer came back empty.
     thinking: "low",
+    timeoutMs: ATTEMPT_TIMEOUT_MS,
+    signal: deadline,
   };
 
   // A first request sometimes comes back empty or cut off (a cold model, a
@@ -103,7 +112,7 @@ export async function askTutor(
   // always works, so the student should not have to.
   let data: TutorResponse | undefined;
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 3 && !deadline.aborted; attempt += 1) {
     try {
       data = (await chat<TutorResponse>(request)).data;
       if (data?.reply?.trim()) break;
@@ -114,9 +123,16 @@ export async function askTutor(
       if (!isRetryable(error)) throw error;
     }
     data = undefined;
+    if (deadline.aborted) break;
     await new Promise((resolve) => setTimeout(resolve, 800 * (attempt + 1)));
   }
 
+  if (!data?.reply?.trim() && deadline.aborted) {
+    throw new LlmError(
+      `The tutor got no answer from ${provider.name === "gemini" ? "Gemini" : "the model"} within ${ANSWER_DEADLINE_MS / 1000} seconds. Its servers are sometimes overloaded, most often on free keys; ask again in a moment.`,
+      lastError,
+    );
+  }
   if (!data?.reply?.trim()) {
     throw lastError instanceof Error
       ? lastError

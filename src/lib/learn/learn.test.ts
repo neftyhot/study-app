@@ -493,7 +493,7 @@ describe("learn sessions", () => {
     expect(session.roundState?.concepts[0].stage).toBe("typed_immediate");
   });
 
-  it("advances through rounds and closes the session at the end", () => {
+  it("advances through rounds and recycles the deck after the last", () => {
     const session = startLearnSession(db, examId, {
       scope: "all",
       roundSize: 5,
@@ -503,11 +503,16 @@ describe("learn sessions", () => {
     expect(loadLearn(db, session.id)?.roundNumber).toBe(2);
 
     expect(startNextRound(db, session.id)).toBe(true); // cards 11–12
-    expect(startNextRound(db, session.id)).toBe(false);
+    expect(loadLearn(db, session.id)?.state?.concepts).toHaveLength(2);
 
-    const finished = loadLearn(db, session.id)!;
-    expect(finished.session.completedAt).not.toBeNull();
-    expect(finished.state).toBeNull();
+    expect(startNextRound(db, session.id)).toBe(true); // back to cards 1–5
+    const recycled = loadLearn(db, session.id)!;
+    expect(recycled.roundNumber).toBe(1);
+    expect(recycled.pass).toBe(2);
+    expect(recycled.session.completedAt).toBeNull();
+    expect(recycled.state?.concepts.map((c) => c.cardId)).toEqual(
+      session.cardOrder.slice(0, 5),
+    );
   });
 
   it("starts at the chosen card and runs on from there", () => {

@@ -73,6 +73,7 @@ export function providerChain(chain: LlmProvider[], options: ChainOptions = {}):
 
   async function run<T>(
     call: (provider: LlmProvider) => Promise<StructuredResult<T>> | undefined,
+    signal?: AbortSignal,
   ): Promise<StructuredResult<T>> {
     let firstError: unknown;
     let sawLimit = false;
@@ -90,6 +91,8 @@ export function providerChain(chain: LlmProvider[], options: ChainOptions = {}):
           return result;
         } catch (error) {
           firstError ??= error;
+          // Out of time: every other model would be cut off the same way.
+          if (signal?.aborted) throw error;
           const kind = classifyFailure(error);
           if (!kind) throw error;
           if (kind === "limit") sawLimit = true;
@@ -135,7 +138,7 @@ export function providerChain(chain: LlmProvider[], options: ChainOptions = {}):
     },
     generateChat: first.generateChat
       ? <T,>(request: Parameters<NonNullable<LlmProvider["generateChat"]>>[0]) =>
-          run<T>((provider) => provider.generateChat?.<T>(request))
+          run<T>((provider) => provider.generateChat?.<T>(request), request.signal)
       : undefined,
   };
 }

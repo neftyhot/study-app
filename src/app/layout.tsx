@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
+import { BootScript } from "@/components/boot-script";
 import { StatusBanner, StatusScreen, StatusWatcher } from "@/components/layout/app-status";
 import { SiteHeader } from "@/components/layout/site-header";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
@@ -89,7 +90,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         />
         {/* The saved style, on <html> before first paint; see themeBootScript. */}
         {bootScript ? (
-          <script id="theme-boot" dangerouslySetInnerHTML={{ __html: bootScript }} />
+          <BootScript id="theme-boot" code={bootScript} />
         ) : null}
       </head>
       <body className="flex min-h-full flex-col">

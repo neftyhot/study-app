@@ -10,7 +10,8 @@ import {
   startModelDownload,
   unloadLocalModel,
 } from "@/lib/llm";
-import { LOCAL_MODELS, recommendedModel } from "@/lib/llm/catalog";
+import { GRADER_MODEL_ID, LOCAL_MODELS, recommendedModel } from "@/lib/llm/catalog";
+import { canGradeLocally, prewarmGrader, unloadLocalGrader } from "@/lib/grade";
 import { maybeSendReport } from "@/lib/telemetry";
 import {
   allKeyStatuses,
@@ -19,12 +20,15 @@ import {
   acceptPrivacy,
   markSetupComplete,
   readDownload,
+  readGraderDownload,
+  readGradingMode,
   readLocalModel,
   readModelTier,
   readProvider,
   writeApiKey,
   writeModelTier,
   writeAppearance,
+  writeGradingMode,
   writeGradingStrictness,
   writeProvider,
   writeTheme,
@@ -33,6 +37,7 @@ import {
 } from "@/lib/settings";
 import { isModelLevel, type ModelLevel } from "@/lib/llm/tiers";
 import { isStrictness } from "@/lib/grade/strictness";
+import { isGradingMode, type GradingMode } from "@/lib/settings-shared";
 
 export type SetupSnapshot = {
   provider: ProviderId;
@@ -190,4 +195,74 @@ export async function saveAppearanceAction(appearance: unknown) {
  */
 export async function saveThemeAction(theme: unknown) {
   return writeTheme(theme, db);
+}
+
+/* ------------------------------------------------ Where answers are checked */
+
+export type GradingSnapshot = {
+  mode: GradingMode;
+  download: ReturnType<typeof readGraderDownload>;
+  /** Enough memory for the grading model; below this the API always grades. */
+  capable: boolean;
+  totalRamGb: number;
+  modelBytes: number;
+  /** A provider with a key is set up, so the API can be the backup. */
+  apiReady: boolean;
+  provider: ProviderId;
+};
+
+export async function getGradingSnapshot(): Promise<GradingSnapshot> {
+  const model = LOCAL_MODELS.find((entry) => entry.id === GRADER_MODEL_ID);
+  return {
+    mode: readGradingMode(db),
+    download: readGraderDownload(db),
+    capable: canGradeLocally(),
+    totalRamGb: Math.round(totalmem() / 1_073_741_824),
+    modelBytes: model?.bytes ?? 0,
+    apiReady: isAnswerable(db),
+    provider: readProvider(db),
+  };
+}
+
+export async function setGradingMode(mode: string) {
+  if (!isGradingMode(mode)) return { ok: false as const, error: "Unknown setting." };
+  writeGradingMode(mode, db);
+  // The cloud does not need the model in memory; give it back.
+  if (mode === "cloud") await unloadLocalGrader();
+  else void prewarmGrader().catch(() => undefined);
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+/**
+ * Fetches the grading model in the background. Unlike the offline chat model
+ * this never changes the provider: a student can grade here and chat in the
+ * cloud.
+ */
+export async function beginGraderDownload() {
+  if (!canGradeLocally()) {
+    return { started: false as const, reason: "This computer needs 8 GB of memory to check answers itself." };
+  }
+  const result = startModelDownload(GRADER_MODEL_ID, db, "grader");
+  revalidatePath("/settings");
+  return result;
+}
+
+export async function graderDownloadProgress() {
+  return readGraderDownload(db);
+}
+
+export async function cancelGraderDownload() {
+  clearDownload(db, "grader");
+  await unloadLocalGrader();
+  revalidatePath("/settings");
+}
+
+/**
+ * Called when a study screen opens: loads the grading model and caches its
+ * prompt so the first Check Answer is already fast. Returns straight away.
+ */
+export async function prewarmGrading() {
+  void prewarmGrader().catch(() => undefined);
+  return { ok: true as const };
 }

@@ -14,7 +14,7 @@ import { DEFAULT_ANTHROPIC_MODEL } from "./anthropic";
 import { DEFAULT_GEMINI_BULK_MODEL, DEFAULT_GEMINI_MODEL } from "./gemini";
 import { DEFAULT_OPENAI_MODEL } from "./openai";
 
-export type ModelSlot = "anthropic" | "openai" | "gemini" | "geminiBulk" | "geminiPrimer";
+export type ModelSlot = "anthropic" | "openai" | "gemini" | "geminiBulk" | "geminiPrimer" | "geminiGrade";
 
 /**
  * The Primer is one long read of the whole deck. It runs on Flash like
@@ -22,12 +22,19 @@ export type ModelSlot = "anthropic" | "openai" | "gemini" | "geminiBulk" | "gemi
  */
 export const DEFAULT_GEMINI_PRIMER_MODEL = DEFAULT_GEMINI_MODEL;
 
+/**
+ * Check Answer is a short, latency-bound call: Flash-Lite answers in about a
+ * second where Flash can take several on the free tier.
+ */
+export const DEFAULT_GEMINI_GRADE_MODEL = "gemini-3.5-flash-lite";
+
 export const BUILT_IN_MODELS: Record<ModelSlot, string> = {
   anthropic: DEFAULT_ANTHROPIC_MODEL,
   openai: DEFAULT_OPENAI_MODEL,
   gemini: DEFAULT_GEMINI_MODEL,
   geminiBulk: DEFAULT_GEMINI_BULK_MODEL,
   geminiPrimer: DEFAULT_GEMINI_PRIMER_MODEL,
+  geminiGrade: DEFAULT_GEMINI_GRADE_MODEL,
 };
 
 const ENV: Record<ModelSlot, string> = {
@@ -36,6 +43,7 @@ const ENV: Record<ModelSlot, string> = {
   gemini: "GEMINI_MODEL",
   geminiBulk: "GEMINI_BULK_MODEL",
   geminiPrimer: "GEMINI_PRIMER_MODEL",
+  geminiGrade: "GEMINI_GRADE_MODEL",
 };
 
 const REMOTE_KEY = "remote_models";

@@ -44,6 +44,7 @@ import {
   type FileChoice,
   type SourceOption,
 } from "@/lib/generate/selection";
+import { usePrewarmGrading } from "@/components/learn/use-prewarm-grading";
 
 /** A file's broad topics, as the practice setup lists them. */
 export type SourceTopics = Record<string, { topic: string; cards: number }[]>;
@@ -98,6 +99,7 @@ export function PracticeRunner({
   /** The Settings choice, which each new test starts from. */
   defaultStrictness: Strictness;
 }) {
+  usePrewarmGrading();
   const router = useRouter();
   const [questions, setQuestions] = useState(initialQuestions);
   const [answers, setAnswers] = useState<Record<string, string>>(() =>

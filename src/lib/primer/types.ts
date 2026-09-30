@@ -28,3 +28,28 @@ export interface CounterExample {
   incorrectApplication: string;
   whyFlawed: string;
 }
+
+/** One line of working in a numeric example: what is found, how, and the value. */
+export interface CalculationStep {
+  /** What this step finds, e.g. "Gross profit". */
+  label: string;
+  /** The working with the numbers filled in, e.g. "$50,000 − $30,000". */
+  expression: string;
+  /** The value it comes to, with units, e.g. "$20,000". */
+  result: string;
+}
+
+/**
+ * An example written on request. Older guides stored plain strings; newer
+ * ones carry the calculations behind any numbers so none of them are hidden.
+ */
+export type ExtraExample = string | { text: string; calculations: CalculationStep[] };
+
+export function exampleView(example: ExtraExample): {
+  text: string;
+  calculations: CalculationStep[];
+} {
+  return typeof example === "string"
+    ? { text: example, calculations: [] }
+    : { text: example.text, calculations: example.calculations ?? [] };
+}

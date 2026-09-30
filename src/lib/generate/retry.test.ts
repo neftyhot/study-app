@@ -7,7 +7,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { backoffMs, isRetryable, withRetry } from "./retry";
+import { backoffMs, isRetryable, retryHintMs, withRetry } from "./retry";
 
 const sleep = () => Promise.resolve();
 
@@ -71,5 +71,31 @@ describe("withRetry", () => {
 
     await expect(withRetry(work, { sleep })).rejects.toThrow(/401/);
     expect(work).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("retryHintMs", () => {
+  it("reads the wait a rate-limited provider asks for", () => {
+    expect(retryHintMs(new Error('429 RESOURCE_EXHAUSTED {"retryDelay": "23s"}'))).toBe(23_000);
+    expect(retryHintMs(new Error("429 Please retry in 7.5s."))).toBe(7_500);
+    expect(retryHintMs(new Error("429 Too Many Requests"))).toBeNull();
+  });
+
+  it("does not wait out a daily limit", () => {
+    expect(retryHintMs(new Error('429 {"retryDelay": "3600s"}'))).toBeNull();
+  });
+
+  it("waits at least as long as the hint", async () => {
+    const waits: number[] = [];
+    let calls = 0;
+    await withRetry(
+      async () => {
+        calls += 1;
+        if (calls < 2) throw new Error('429 {"retryDelay": "20s"}');
+        return "ok";
+      },
+      { sleep: async (ms) => void waits.push(ms) },
+    );
+    expect(waits[0]).toBeGreaterThanOrEqual(20_000);
   });
 });

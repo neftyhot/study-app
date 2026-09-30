@@ -69,6 +69,7 @@ import {
   MisconceptionList,
 } from "@/components/cards/explain-button";
 import type { StudyScope } from "@/lib/study/queue";
+import { usePrewarmGrading } from "@/components/learn/use-prewarm-grading";
 
 /** PRD §14's assistance buttons, in the order a stuck student wants them. */
 const AIDS: { kind: AssistKind; label: string }[] = [
@@ -126,6 +127,7 @@ export function LearnMode({
   initialSessionId: string | null;
   initialStatus: LearnStatus | null;
 }) {
+  usePrewarmGrading();
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [status, setStatus] = useState(initialStatus);
   const [reveal, setReveal] = useState<Reveal | null>(null);
@@ -262,8 +264,10 @@ export function LearnMode({
           setStatus(result.status);
           setReveal(null);
           if (!result.more) {
-            toast.success("Every concept in this deck has been through a round");
+            toast.error("No concepts left to study in this session");
             setSessionId(null);
+          } else if (result.status.roundNumber === 1) {
+            toast.success("Every concept has had a round — starting again from the top");
           }
         }}
         onFinish={async () => {
@@ -302,7 +306,8 @@ export function LearnMode({
         />
         <div className="text-muted-foreground flex flex-wrap justify-between gap-2 text-xs">
           <span>
-            Round {status.roundNumber} of {status.roundCount} ·{" "}
+            Round {status.roundNumber} of {status.roundCount}
+            {status.pass > 1 ? ` (pass ${status.pass})` : ""} ·{" "}
             {status.remaining} concept{status.remaining === 1 ? "" : "s"} left
           </span>
           <span>{status.mastered} recalled without help</span>
@@ -890,10 +895,10 @@ function RoundSummary({
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap gap-2">
-        {last ? null : (
-          <Button onClick={() => void onNext()}>Next round</Button>
-        )}
-        <Button variant={last ? "default" : "outline"} onClick={() => void onFinish()}>
+        <Button onClick={() => void onNext()}>
+          {last ? "Keep going — recycle the deck" : "Next round"}
+        </Button>
+        <Button variant="outline" onClick={() => void onFinish()}>
           Finish session
         </Button>
       </CardContent>

@@ -72,6 +72,10 @@ export function TutorPanel({
   slideId,
   slideLabel,
   focus,
+  primerSectionId,
+  captureScreen = false,
+  screenText,
+  contextLabel,
   trigger,
   className,
 }: {
@@ -81,6 +85,18 @@ export function TutorPanel({
   slideLabel?: string | null;
   /** What the student is looking at in words, e.g. the card they were asked. */
   focus?: string | null;
+  /** The study-guide concept it was opened from; its topic and cited slides go along. */
+  primerSectionId?: string | null;
+  /**
+   * Screenshot the window as the panel opens and attach it to the first
+   * question, so "what does this mean" has the page it is about. Only in the
+   * desktop app, and only for a model that can see images.
+   */
+  captureScreen?: boolean;
+  /** The words on screen as the panel opens, for models that can't see the screenshot. */
+  screenText?: () => string;
+  /** What the tutor has, in place of the default description. */
+  contextLabel?: string;
   /** The button that opens it; it toggles the panel open and shut. */
   trigger?: React.ReactElement<{ onClick?: (event: React.MouseEvent) => void }>;
   className?: string;
@@ -106,10 +122,53 @@ export function TutorPanel({
   const fileInput = useRef<HTMLInputElement>(null);
   /** The saved chat this conversation writes to; null until the first answer. */
   const chatId = useRef<string | null>(null);
+  // Bumped by New chat and by opening another chat, so an answer still on its
+  // way lands nowhere instead of in the conversation that replaced it.
+  const turn = useRef(0);
   /** The same id, for highlighting the open chat in the list. */
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<TutorChatSummary[] | null>(null);
+  /** The words on screen when the panel was last opened. */
+  const [screen, setScreen] = useState<string | null>(null);
+  /** The screenshot taken on opening, so opening again replaces it rather than piling up. */
+  const [autoShot, setAutoShot] = useState<string | null>(null);
+
+  /**
+   * Taken before the panel slides in, so the picture is the page and not the
+   * panel covering it.
+   */
+  async function snapshot() {
+    if (screenText) {
+      try {
+        setScreen(screenText().trim() || null);
+      } catch {
+        setScreen(null);
+      }
+    }
+
+    const capture = captureScreen ? window.studyApp?.tutor?.captureScreen : undefined;
+    if (!capture) return;
+
+    const [shot, info] = await Promise.all([
+      capture().catch(() => null),
+      model ? Promise.resolve(model) : tutorProviderAction().catch(() => null),
+    ]);
+    if (info && !model) setModel(info);
+    if (!shot || !info?.vision) return;
+
+    setAutoShot(shot);
+    setImages((current) => [...current.filter((image) => image !== autoShot), shot]);
+  }
+
+  async function toggleOpen() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    await snapshot();
+    setOpen(true);
+  }
 
   useEffect(() => {
     if (!open || model) return;
@@ -131,6 +190,8 @@ export function TutorPanel({
   }
 
   function startNewChat() {
+    turn.current += 1;
+    setBusy(false);
     chatId.current = null;
     setActiveChat(null);
     setMessages([]);
@@ -145,6 +206,8 @@ export function TutorPanel({
       void loadHistory();
       return;
     }
+    turn.current += 1;
+    setBusy(false);
     chatId.current = chat.id;
     setActiveChat(chat.id);
     setMessages(
@@ -213,7 +276,15 @@ export function TutorPanel({
     examId,
     // Sent on every request, so a follow-up still has the page in view.
     slideId: sendSlide ? slideId : null,
-    focus,
+    focus: [
+      focus,
+      screen
+        ? `When they opened the tutor, this was the text on their screen:\n"""\n${screen}\n"""\nIf they say "this", "that" or "what does this mean" without naming anything, they mean what is on screen${autoShot ? " (a screenshot of it is attached to their first question)" : ""}. Answer about that, and don't ask them which topic.`
+        : null,
+    ]
+      .filter(Boolean)
+      .join("\n\n") || null,
+    primerSectionId,
   };
 
   async function send(text: string) {
@@ -231,12 +302,14 @@ export function TutorPanel({
     setDraft("");
     setImages([]);
     setBusy(true);
+    const mine = ++turn.current;
 
     try {
       const result = await askTutorAction({
         ...context,
         messages: history.map(({ role, text, images }) => ({ role, text, images })),
       });
+      if (turn.current !== mine) return;
 
       if (!result.ok) {
         toast.error(result.error);
@@ -257,8 +330,10 @@ export function TutorPanel({
       setMessages(answered);
       void persist(answered);
     } finally {
-      setBusy(false);
-      input.current?.focus({ preventScroll: true });
+      if (turn.current === mine) {
+        setBusy(false);
+        input.current?.focus({ preventScroll: true });
+      }
     }
   }
 
@@ -293,7 +368,7 @@ export function TutorPanel({
   );
   const toggle = isValidElement(button)
     ? cloneElement(Children.only(button), {
-        onClick: () => setOpen((current) => !current),
+        onClick: () => void toggleOpen(),
         "aria-expanded": open,
       } as never)
     : button;
@@ -319,9 +394,11 @@ export function TutorPanel({
             <SheetDescription>
               {model?.error
                 ? model.error
-                : slideLabel && sendSlide
-                  ? `It has your whole deck and flashcards, and is looking at ${slideLabel}.`
-                  : "It has your whole deck and your flashcards (ask about “flashcard 12”)."}
+                : contextLabel
+                  ? contextLabel
+                  : slideLabel && sendSlide
+                    ? `It has your whole deck and flashcards, and is looking at ${slideLabel}.`
+                    : "It has your whole deck and your flashcards (ask about “flashcard 12”)."}
             </SheetDescription>
             <div className="flex flex-wrap gap-2 pt-2">
               <Button
@@ -337,7 +414,7 @@ export function TutorPanel({
                 Past chats
               </Button>
               {messages.length > 0 || showHistory ? (
-                <Button variant="outline" size="sm" disabled={busy} onClick={startNewChat}>
+                <Button variant="outline" size="sm" onClick={startNewChat}>
                   <RotateCcw className="size-3.5" />
                   New chat
                 </Button>
@@ -505,7 +582,12 @@ export function TutorPanel({
                   <div key={i} className="relative">
                     {/* A local data URL, not a remote asset. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={image} alt="" className="h-14 rounded border" />
+                    <img
+                      src={image}
+                      alt={image === autoShot ? "Your screen" : ""}
+                      title={image === autoShot ? "Your screen, taken as the tutor opened" : undefined}
+                      className="h-14 rounded border"
+                    />
                     <button
                       type="button"
                       aria-label="Remove image"

@@ -15,8 +15,10 @@ import { resolve } from "node:path";
 import { createClient, type Db } from "@/db/client";
 import {
   readDownload,
+  readGraderDownload,
   SETTING,
   writeDownload,
+  writeGraderDownload,
   writeSetting,
   type DownloadState,
 } from "@/lib/settings";
@@ -33,6 +35,18 @@ export function modelsRoot(): string {
   );
 }
 
+/**
+ * Which row a download reports to. "provider" is the model that answers chat
+ * and generation; "grader" is the one Check Answer runs, which a student can
+ * have alongside a cloud provider.
+ */
+export type DownloadSlot = "provider" | "grader";
+
+const STATE = {
+  provider: { read: readDownload, write: writeDownload },
+  grader: { read: readGraderDownload, write: writeGraderDownload },
+} as const;
+
 /** In-process guard so two clicks cannot start the same download twice. */
 const running = new Set<string>();
 
@@ -44,12 +58,17 @@ export type StartResult =
   | { started: true }
   | { started: false; reason: string };
 
-export function startModelDownload(modelId: string, db?: Db): StartResult {
+export function startModelDownload(
+  modelId: string,
+  db?: Db,
+  slot: DownloadSlot = "provider",
+): StartResult {
   const model = findModel(modelId);
   if (!model) return { started: false, reason: "Unknown model." };
 
   const target = db ?? createClient();
-  const existing = readDownload(target);
+  const { read, write } = STATE[slot];
+  const existing = read(target);
 
   if (existing?.status === "downloading" && running.has(existing.modelId)) {
     return { started: false, reason: "A download is already running." };
@@ -59,7 +78,7 @@ export function startModelDownload(modelId: string, db?: Db): StartResult {
   }
 
   running.add(modelId);
-  writeDownload(
+  write(
     {
       modelId,
       status: "downloading",
@@ -71,8 +90,9 @@ export function startModelDownload(modelId: string, db?: Db): StartResult {
 
   // Deliberately not awaited: the caller returns immediately and the student
   // carries on. Failures are recorded in the same row the UI already polls.
-  void run(modelId).catch((error: unknown) => {
+  void run(modelId, slot).catch((error: unknown) => {
     record(
+      slot,
       {
         modelId,
         status: "failed",
@@ -88,15 +108,15 @@ export function startModelDownload(modelId: string, db?: Db): StartResult {
   return { started: true };
 }
 
-function record(state: DownloadState, db?: Db) {
+function record(slot: DownloadSlot, state: DownloadState, db?: Db) {
   try {
-    writeDownload(state, db ?? createClient());
+    STATE[slot].write(state, db ?? createClient());
   } catch {
     // Losing a progress update is not worth failing a download over.
   }
 }
 
-async function run(modelId: string) {
+async function run(modelId: string, slot: DownloadSlot) {
   const model = findModel(modelId);
   if (!model) throw new Error("Unknown model.");
 
@@ -116,7 +136,7 @@ async function run(modelId: string) {
       if (now - lastWrite < PROGRESS_INTERVAL_MS) return;
       lastWrite = now;
 
-      record({
+      record(slot, {
         modelId,
         status: "downloading",
         downloadedBytes: downloadedSize,
@@ -128,9 +148,11 @@ async function run(modelId: string) {
   const path = await downloader.download();
 
   const db = createClient();
-  writeSetting(SETTING.localModelId, modelId, db);
-  writeSetting(SETTING.localModelPath, path, db);
-  writeDownload(
+  if (slot === "provider") {
+    writeSetting(SETTING.localModelId, modelId, db);
+    writeSetting(SETTING.localModelPath, path, db);
+  }
+  STATE[slot].write(
     {
       modelId,
       status: "ready",
@@ -145,9 +167,9 @@ async function run(modelId: string) {
 }
 
 /** Clears a failed download so the wizard can offer to try again. */
-export function clearDownload(db?: Db) {
+export function clearDownload(db?: Db, slot: DownloadSlot = "provider") {
   const target = db ?? createClient();
-  const state = readDownload(target);
+  const state = STATE[slot].read(target);
   if (state) running.delete(state.modelId);
-  writeDownload(null, target);
+  STATE[slot].write(null, target);
 }

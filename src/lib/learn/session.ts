@@ -172,6 +172,8 @@ export type LearnView = {
   state: RoundState | null;
   step: Step | null;
   roundNumber: number;
+  /** Times through the deck so far, counting this one; Learn loops back to the start. */
+  pass: number;
   roundCount: number;
 };
 
@@ -189,11 +191,22 @@ export function loadLearn(db: Db, sessionId: string): LearnView | undefined {
     session,
     state,
     step: state ? nextStep(state) : null,
-    roundNumber: Math.floor(session.roundIndex / session.roundSize) + 1,
-    roundCount: Math.max(
-      Math.ceil(session.cardOrder.length / session.roundSize),
-      1,
-    ),
+    ...roundPosition(session),
+  };
+}
+
+/**
+ * `roundIndex` keeps counting past the end of the deck, so a session loops:
+ * after the last round the first comes back, as pass 2.
+ */
+function roundPosition(session: Pick<StudySession, "roundIndex" | "roundSize" | "cardOrder">) {
+  const roundCount = Math.max(Math.ceil(session.cardOrder.length / session.roundSize), 1);
+  const round = Math.floor(session.roundIndex / session.roundSize);
+  return {
+    roundNumber: (round % roundCount) + 1,
+    roundCount,
+    pass: Math.floor(round / roundCount) + 1,
+    start: (round % roundCount) * session.roundSize,
   };
 }
 
@@ -465,7 +478,10 @@ export function skipToRecall(
   return { state, step: nextStep(state), roundComplete: isComplete(state) };
 }
 
-/** Advances to the next micro-round; returns false when the deck is finished. */
+/**
+ * Advances to the next micro-round. Past the last round it recycles the deck
+ * from the start rather than ending; false only when there is nothing to study.
+ */
 export function startNextRound(db: Db, sessionId: string): boolean {
   const session = db
     .select()
@@ -475,7 +491,8 @@ export function startNextRound(db: Db, sessionId: string): boolean {
   if (!session) return false;
 
   const nextIndex = session.roundIndex + session.roundSize;
-  const slice = session.cardOrder.slice(nextIndex, nextIndex + session.roundSize);
+  const { start } = roundPosition({ ...session, roundIndex: nextIndex });
+  const slice = session.cardOrder.slice(start, start + session.roundSize);
 
   if (slice.length === 0) {
     const now = new Date().toISOString();

@@ -89,6 +89,18 @@ export const LOCAL_MODELS: LocalModel[] = [
       "Trained heavily on textbook-style reasoning, which is exactly this job. Strong for its size on stepwise explanation.",
   },
   {
+    id: "qwen3-4b",
+    name: "Qwen3 4B Instruct",
+    publisher: "Alibaba",
+    license: "Apache-2.0",
+    uri: `${HF}/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/main/Qwen3-4B-Instruct-2507-Q4_K_M.gguf`,
+    bytes: 2_497_281_120,
+    minimumRamGb: 8,
+    tier: "capable",
+    summary:
+      "The model that grades typed answers on this computer: every held-out grading case right, in about half a second per answer.",
+  },
+  {
     id: "qwen2.5-7b",
     name: "Qwen2.5 7B",
     publisher: "Alibaba",
@@ -147,3 +159,12 @@ export function recommendedModel(totalRamGb: number): LocalModel {
   const usable = affordable.filter((model) => model.tier !== "minimal");
   return usable.at(-1) ?? affordable.at(-1) ?? LOCAL_MODELS[0];
 }
+
+/**
+ * The model Check Answer runs on this computer. Chosen by benchmark
+ * (scripts/local-grade-bench.ts): 46 of 46 grading cases, ~0.6 s warm.
+ */
+export const GRADER_MODEL_ID = "qwen3-4b";
+
+/** Below this, a 2.5 GB model plus the app would push the machine into swap. */
+export const GRADER_MIN_RAM_GB = 8;

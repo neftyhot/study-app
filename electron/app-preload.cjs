@@ -4,8 +4,8 @@
  * Context isolation stays on and Node stays out of the renderer. Three
  * functions cross for "Sign in with Google", none of which returns a token,
  * two for buying a license during the trial, which can only open the
- * checkout page and ask whether the purchase has arrived, and one that
- * installs the latest release.
+ * checkout page and ask whether the purchase has arrived, one that
+ * installs the latest release, and one that captures this window for the tutor.
  *
  * Channel names and shapes are defined in src/main/auth/ipc.ts; a sandboxed
  * preload cannot load TypeScript, so the names are repeated here.
@@ -25,5 +25,9 @@ contextBridge.exposeInMainWorld("studyApp", {
   // Installs GitHub's latest release in place and restarts; see updater.cjs.
   update: {
     install: () => ipcRenderer.invoke("update:install"),
+  },
+  // A picture of this window for the tutor; returns a data URL or null.
+  tutor: {
+    captureScreen: () => ipcRenderer.invoke("tutor:capture-screen"),
   },
 });

@@ -116,6 +116,7 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
             </section>
           ) : null}
           <PrimerDocument
+            examId={examId}
             format={format}
             slides={primer.slides}
             chapters={primer.chapters.map((chapter, i) => ({

@@ -36,11 +36,10 @@ import {
 import { exactAnswerGrade, type TypedGrade } from "./typed";
 import { getTypedGrader } from "@/lib/grade";
 
-/**
- * Typed answers are graded on the server: the client never receives the answer
- * it is being asked for, and correctness is never the browser's to decide.
- */
-const grader = getTypedGrader();
+// Typed answers are graded on the server: the client never receives the
+// answer it is being asked for, and correctness is never the browser's to
+// decide. The grader is chosen per answer so a change in Settings applies at
+// once.
 
 export type LearnPrompt = {
   cardId: string;
@@ -63,6 +62,7 @@ export type LearnStatus = {
   prompt: LearnPrompt | null;
   roundNumber: number;
   roundCount: number;
+  pass: number;
   roundComplete: boolean;
   remaining: number;
   mastered: number;
@@ -153,6 +153,7 @@ function status(sessionId: string): LearnStatus {
       prompt: null,
       roundNumber: view?.roundNumber ?? 0,
       roundCount: view?.roundCount ?? 0,
+      pass: view?.pass ?? 1,
       roundComplete: true,
       remaining: 0,
       mastered: 0,
@@ -166,6 +167,7 @@ function status(sessionId: string): LearnStatus {
   const base = {
     roundNumber: view.roundNumber,
     roundCount: view.roundCount,
+    pass: view.pass,
     roundComplete: step === null,
     remaining: concepts.filter((concept) => !concept.done).length,
     mastered: concepts.filter((concept) => concept.tier === "immediate_recall")
@@ -265,7 +267,7 @@ export async function answerTyped(
     answer,
   };
   // The multiple-choice answer, typed exactly, is right before any rubric.
-  const grade = exactAnswerGrade(request) ?? (await grader.grade(request));
+  const grade = exactAnswerGrade(request) ?? (await getTypedGrader().grade(request));
 
   const correct = grade.verdict === "correct";
 
@@ -388,7 +390,7 @@ export async function practiceMissedPoints(
   const card = cardRow(cardId);
   if (!card || focusPoints.length === 0) return null;
 
-  const grade = await grader.grade({
+  const grade = await getTypedGrader().grade({
     question: card.question,
     expected: card.directAnswer,
     essentialPoints: card.essentialPoints ?? [],

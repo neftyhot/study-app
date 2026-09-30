@@ -9,6 +9,7 @@ import { readProvider } from "@/lib/settings";
 
 import { deckContext, flashcardContext, type ContextQuery } from "./context";
 import { askTutor, extractCards, type ExtractedCard } from "./index";
+import { primerTopicContext } from "./primer-context";
 import { saveTutorCards } from "./save";
 
 export type TutorMessage = {
@@ -86,19 +87,38 @@ type TutorInput = {
   slideId?: string | null;
   /** What the student is looking at, e.g. the card they were just asked. */
   focus?: string | null;
+  /** The study-guide concept the tutor was opened from, if any. */
+  primerSectionId?: string | null;
   provider?: "gemini" | "anthropic" | "openai" | "local";
 };
+
+/**
+ * The material and flashcards for a question. Opened from the study guide,
+ * the topic being read and the slides it cites go first, so "what does this
+ * mean" has the page it is about.
+ */
+async function contextFor(
+  input: TutorInput & { instruction?: string },
+  providerName: string,
+): Promise<[string, string]> {
+  if (!input.examId) return ["", ""];
+  const primer = input.primerSectionId
+    ? primerTopicContext(db, input.examId, input.primerSectionId, providerName)
+    : null;
+  const query = queryFor(input);
+  if (primer) query.text = `${primer.conceptName}\n${primer.topicTitle ?? ""}\n${query.text}`;
+  const [deck, cards] = await Promise.all([
+    deckContext(input.examId, providerName, query),
+    flashcardContext(input.examId, providerName, query),
+  ]);
+  const material = primer ? [primer.text, deck].filter((part) => part.trim()).join("\n\n") : deck;
+  return [material, cards];
+}
 
 export async function askTutorAction(input: TutorInput): Promise<AskResult> {
   try {
     const provider = getProvider(input.provider);
-    const query = queryFor(input);
-    const [material, cards] = input.examId
-      ? await Promise.all([
-          deckContext(input.examId, provider.name, query),
-          flashcardContext(input.examId, provider.name, query),
-        ])
-      : ["", ""];
+    const [material, cards] = await contextFor(input, provider.name);
     const answer = await askTutor(
       provider,
       await buildTurns(input.messages, input.slideId, input.focus),
@@ -126,13 +146,7 @@ export async function extractCardsAction(
 ): Promise<ExtractResult> {
   try {
     const provider = getProvider(input.provider);
-    const query = queryFor(input);
-    const [material, existing] = input.examId
-      ? await Promise.all([
-          deckContext(input.examId, provider.name, query),
-          flashcardContext(input.examId, provider.name, query),
-        ])
-      : ["", ""];
+    const [material, existing] = await contextFor(input, provider.name);
     const cards = await extractCards(provider, {
       material,
       cards: existing,

@@ -121,10 +121,15 @@ export function createGeminiProvider(options?: {
               temperature: request.temperature ?? 0.4,
               maxOutputTokens: request.maxOutputTokens,
               ...thinkingConfig(model, request.thinking),
+              ...(request.timeoutMs ? { httpOptions: { timeout: request.timeoutMs } } : {}),
+              ...(request.signal ? { abortSignal: request.signal } : {}),
             },
           }),
         );
       } catch (error) {
+        if (request.signal?.aborted || isAbort(error)) {
+          throw new LlmError("Gemini request timed out: no answer in time.", error);
+        }
         throw new LlmError(`Gemini request failed: ${describe(error)}`, error);
       }
 
@@ -303,4 +308,9 @@ function describe(error: unknown) {
     return "Google rejected your Gemini key. Paste a new one from aistudio.google.com/apikey in Settings.";
   }
   return message;
+}
+
+/** A request cut off by its own timeout or signal, which the SDK reports as an AbortError. */
+function isAbort(error: unknown) {
+  return error instanceof Error && (error.name === "AbortError" || /aborted/i.test(error.message));
 }
