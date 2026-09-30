@@ -6,6 +6,17 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.7.1",
+    date: "2026-09-30",
+    notes: [
+      "The Calculator button is on every card now, in Flashcards, Learn and the study guide, not just on cards with numbers.",
+      "Learn has the Numbers button too, listing the numbers a question gives (never the answer).",
+      "Drag the calculator anywhere by its title bar. It remembers where you put it.",
+      "The Numbers list keeps each number right next to what it is, instead of across the screen.",
+      "Security improvements to the desktop app.",
+    ],
+  },
+  {
     version: "1.7.0",
     date: "2026-09-30",
     notes: [
