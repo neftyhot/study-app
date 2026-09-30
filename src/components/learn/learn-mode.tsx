@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Calculator,
   CircleCheck,
   CircleHelp,
   CircleX,
@@ -70,6 +71,12 @@ import {
 } from "@/components/cards/explain-button";
 import type { StudyScope } from "@/lib/study/queue";
 import { usePrewarmGrading } from "@/components/learn/use-prewarm-grading";
+import {
+  CalculatorPanel,
+  NumbersPanel,
+  numberRows,
+  type CalculatorHandle,
+} from "@/components/cards/number-tools";
 
 /** PRD §14's assistance buttons, in the order a stuck student wants them. */
 const AIDS: { kind: AssistKind; label: string }[] = [
@@ -145,6 +152,8 @@ export function LearnMode({
   const [helps, setHelps] = useState<AssistResult[]>([]);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [helping, setHelping] = useState<AssistKind | null>(null);
+  const [calcOpen, setCalcOpen] = useState(false);
+  const calcRef = useRef<CalculatorHandle>(null);
 
   if (!sessionId || !status) {
     return (
@@ -349,6 +358,24 @@ export function LearnMode({
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {/* A calculator on every question, and the numbers it gives. */}
+          <NumbersPanel
+            key={shown.cardId}
+            rows={numberRows(shown.givens ?? [], shown.question, [], false)}
+            onPick={(value) => calcRef.current?.insert(value)}
+            actions={
+              <Button
+                variant="outline"
+                size="sm"
+                aria-pressed={calcOpen}
+                onClick={() => setCalcOpen((value) => !value)}
+              >
+                <Calculator className="size-4" />
+                Calculator
+              </Button>
+            }
+          />
+
           {!reveal ? (
             <AssistBar
               helps={helps}
@@ -488,6 +515,7 @@ export function LearnMode({
         open={sourceOpen}
         onOpenChange={setSourceOpen}
       />
+      <CalculatorPanel ref={calcRef} open={calcOpen} onOpenChange={setCalcOpen} />
     </div>
   );
 }

@@ -10,11 +10,13 @@ import {
   useEffect,
   useImperativeHandle,
   useMemo,
+  useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
 } from "react";
-import { Calculator, Delete, Hash, X } from "lucide-react";
+import { Calculator, Delete, GripHorizontal, Hash, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { evaluate, extractNumbers, formatResult, numericPart } from "@/lib/calc";
@@ -153,12 +155,13 @@ export function NumbersPanel({
         {actions}
       </div>
       {open && rows.length > 0 ? (
-        <div className="bg-muted/40 rounded-md border p-3">
+        <div className="bg-muted/40 w-fit max-w-full rounded-md border p-3">
           <p className="text-muted-foreground mb-2 text-xs">
             Every number here, with what it is.
             {onPick ? " Press one to put it in the calculator." : ""}
           </p>
-          <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-1.5 text-sm">
+          {/* Sized to the words, so each number sits next to its label. */}
+          <dl className="grid grid-cols-[minmax(0,auto)_auto] items-baseline gap-x-3 gap-y-1.5 text-sm">
             {rows.map((row, i) => (
               <div key={i} className="contents">
                 <dt className="text-muted-foreground min-w-0 break-words">
@@ -169,7 +172,7 @@ export function NumbersPanel({
                     </span>
                   ) : null}
                 </dt>
-                <dd className="text-right">
+                <dd>
                   {onPick && numericPart(row.value) ? (
                     <button
                       type="button"
@@ -226,6 +229,39 @@ const KEYS: { label: string; input: string; wide?: boolean; tone?: "op" | "go" }
 
 const TYPED = /^[0-9.+\-*/^%()]$/;
 
+type Point = { x: number; y: number };
+
+const POSITION_KEY = "calculator-position";
+
+/** Where the calculator was last dragged to, if anywhere. */
+function savedPosition(): Point | null {
+  try {
+    const raw = window.localStorage.getItem(POSITION_KEY);
+    const point = raw ? (JSON.parse(raw) as Point) : null;
+    return point && Number.isFinite(point.x) && Number.isFinite(point.y) ? point : null;
+  } catch {
+    return null;
+  }
+}
+
+function savePosition(point: Point) {
+  try {
+    window.localStorage.setItem(POSITION_KEY, JSON.stringify(point));
+  } catch {
+    // Not remembered; it still moves.
+  }
+}
+
+/** Keeps the whole calculator on screen. */
+function onScreen(point: Point, panel: HTMLElement | null): Point {
+  const width = panel?.offsetWidth ?? 288;
+  const height = panel?.offsetHeight ?? 400;
+  return {
+    x: Math.min(Math.max(point.x, 0), Math.max(0, window.innerWidth - width)),
+    y: Math.min(Math.max(point.y, 0), Math.max(0, window.innerHeight - height)),
+  };
+}
+
 /**
  * A calculator that floats in the corner, so it stays put while cards
  * change. While it is open the keyboard types into it: digits, operators,
@@ -243,6 +279,50 @@ export function CalculatorPanel({
 }) {
   const [expression, setExpression] = useState("");
   const [history, setHistory] = useState<{ expression: string; result: string }[]>([]);
+  // Null until dragged: it then sits wherever it was put, even after closing.
+  const [position, setPosition] = useState<Point | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const grab = useRef<Point | null>(null);
+  const latest = useRef<Point | null>(null);
+
+  // Back where it was left, kept on screen if the window has shrunk since.
+  useEffect(() => {
+    if (!open) return;
+    const saved = latest.current ?? savedPosition();
+    if (saved) {
+      latest.current = onScreen(saved, panelRef.current);
+      setPosition(latest.current);
+    }
+    function onResize() {
+      if (latest.current) setPosition(onScreen(latest.current, panelRef.current));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [open]);
+
+  function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    grab.current = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function drag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!grab.current) return;
+    const next = onScreen(
+      { x: event.clientX - grab.current.x, y: event.clientY - grab.current.y },
+      panelRef.current,
+    );
+    latest.current = next;
+    setPosition(next);
+  }
+
+  function endDrag() {
+    if (!grab.current) return;
+    grab.current = null;
+    if (latest.current) savePosition(latest.current);
+  }
 
   const preview = useMemo(() => {
     const value = evaluate(expression);
@@ -316,12 +396,26 @@ export function CalculatorPanel({
 
   return (
     <div
+      ref={panelRef}
       role="dialog"
       aria-label="Calculator"
-      className="bg-popover text-popover-foreground fixed right-4 bottom-4 z-50 w-72 rounded-xl border p-3 shadow-lg"
+      className={cn(
+        "bg-popover text-popover-foreground fixed z-50 w-72 rounded-xl border p-3 shadow-lg",
+        !position && "right-4 bottom-4",
+      )}
+      style={position ? { left: position.x, top: position.y } : undefined}
     >
-      <div className="mb-2 flex items-center justify-between">
+      {/* The title bar is the handle: drag it to move the calculator. */}
+      <div
+        className="mb-2 flex cursor-grab touch-none items-center justify-between select-none active:cursor-grabbing"
+        title="Drag to move"
+        onPointerDown={startDrag}
+        onPointerMove={drag}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
         <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
+          <GripHorizontal className="size-3.5" />
           <Calculator className="size-3.5" />
           Calculator
         </span>

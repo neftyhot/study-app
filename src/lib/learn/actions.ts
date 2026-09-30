@@ -9,6 +9,7 @@ import { hasRevision } from "@/lib/cards/edit";
 
 import { buildMcq, type McqCard, type McqOption } from "./mcq";
 import type { Stage } from "./ladder";
+import type { NumberGiven } from "@/lib/primer/types";
 import {
   assistsForCard,
   diagnoseCard,
@@ -56,6 +57,8 @@ export type LearnPrompt = {
   canUndo: boolean;
   /** The page or slide this card was built from, for the source viewer. */
   sourceSlideId: string | null;
+  /** The numbers the question gives, never the answer itself. */
+  givens: NumberGiven[];
 };
 
 export type LearnStatus = {
@@ -109,6 +112,7 @@ function cardRow(cardId: string) {
       fullExplanation: flashcards.fullExplanation,
       sourceExcerpt: flashcards.sourceExcerpt,
       sourceSlideId: flashcards.sourceSlideId,
+      givens: flashcards.givens,
       essentialPoints: cardRubrics.essentialPoints,
       optionalPoints: cardRubrics.optionalPoints,
       misconceptions: cardRubrics.commonMisconceptions,
@@ -200,6 +204,11 @@ function status(sessionId: string): LearnStatus {
       countsTowardMastery: step.countsTowardMastery,
       canUndo: hasRevision(db, card.id),
       sourceSlideId: card.sourceSlideId ?? null,
+      givens: (card.givens ?? []).filter(
+        (given) =>
+          given.value.trim().toLowerCase() !==
+          card.directAnswer.trim().toLowerCase(),
+      ),
     },
   };
 }
