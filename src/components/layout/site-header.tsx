@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { GraduationCap, Search, Settings } from "lucide-react";
+import { GraduationCap, Library, Search, Settings } from "lucide-react";
 
 import { CardBuilder } from "@/components/cards/card-builder";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -41,6 +41,11 @@ export async function SiteHeader() {
           <Button asChild variant="ghost" size="icon" aria-label="Search everything">
             <Link href="/search">
               <Search className="size-4" />
+            </Link>
+          </Button>
+          <Button asChild variant="ghost" size="icon" aria-label="Deck catalog">
+            <Link href="/catalog">
+              <Library className="size-4" />
             </Link>
           </Button>
           <DownloadChip initial={download} models={LOCAL_MODELS} />

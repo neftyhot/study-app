@@ -6,6 +6,16 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.6.0",
+    date: "2026-09-30",
+    notes: [
+      "New deck catalog (the library button in the header): browse decks other students have shared, filtered by college, professor, course and exam type, and add any of them to your own decks in one click. You pick your college the first time you open it and can change it any time.",
+      "Sharing is optional: share one of your own decks and only its cards and study guide go up, never your slides or files. You can edit or remove your listings whenever you like.",
+      "Shared decks are checked automatically for inappropriate content before they're listed, and you can report a deck that slipped through. Sharing is rate-limited to keep the catalog clean.",
+      "The privacy policy has a new section on the catalog, so you'll be asked to agree to it again.",
+    ],
+  },
+  {
     version: "1.5.1",
     date: "2026-09-29",
     notes: [

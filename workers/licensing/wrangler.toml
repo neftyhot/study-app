@@ -13,3 +13,11 @@ id = "b8a5c56d4f744de9b604923f0df18aab"
 [vars]
 # Optional: only checkouts from this Payment Link mint a key (plink_…).
 PAYMENT_LINK_ID = ""
+
+# The shared deck catalog (src/catalog.ts). Schema in migrations/; apply with
+# `npx wrangler d1 migrations apply study-app-catalog --remote`.
+[[d1_databases]]
+binding = "CATALOG"
+database_name = "study-app-catalog"
+database_id = "82fffa7b-b4ef-4e08-a8c7-8332a44b9509"
+migrations_dir = "migrations"

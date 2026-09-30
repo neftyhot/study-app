@@ -22,6 +22,8 @@
  *                          status.ts).
  *   GET  /revoked/:id      Whether a key has been revoked in the License
  *                          Manager (PUT /admin/revocations sets the list).
+ *   /catalog, /catalog/:id The shared deck catalog, in D1, with every new
+ *                          deck checked by Gemini first (catalog.ts).
  *   POST /feedback         A feature suggestion from the app's settings.
  *                          Stored under `feedback:`; read in the License
  *                          Manager's Suggestions tab.
@@ -50,6 +52,7 @@ import {
   type ListResult,
   type PutOptions,
 } from "./insights";
+import { handleCatalog, type D1Like } from "./catalog";
 import { handleStatus, handleStatusUpdate } from "./status";
 
 export type KVLike = {
@@ -71,6 +74,12 @@ export type Env = {
   /** The replacement token while ADMIN_TOKEN is being rotated (README). */
   ADMIN_TOKEN_NEXT?: string;
   LICENSES: KVLike;
+  /** The deck catalog's D1 database (migrations/). */
+  CATALOG?: D1Like;
+  /** The developer's Gemini key: moderates catalog shares. Unset, sharing is off. */
+  GEMINI_API_KEY?: string;
+  /** Overrides the catalog's moderation model. */
+  GEMINI_MODERATION_MODEL?: string;
 };
 
 /** How stale a webhook may be before it is treated as a replay (Stripe's default). */
@@ -139,6 +148,9 @@ const worker = {
       if (!authorized(request, env)) return new Response("Unauthorized", { status: 401 });
       return handleReissue(request, env);
     }
+
+    const catalog = await handleCatalog(request, env, url);
+    if (catalog) return catalog;
 
     if (url.pathname.startsWith("/admin/")) {
       return handleAdmin(request, env, url.pathname);

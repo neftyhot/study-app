@@ -5,9 +5,9 @@
  * Plain data so the client can render it. Bump the version whenever what the
  * app collects changes: everyone is asked to agree again.
  */
-export const PRIVACY_POLICY_VERSION = "2026-09-29";
+export const PRIVACY_POLICY_VERSION = "2026-09-30";
 
-export const PRIVACY_POLICY_UPDATED = "September 29, 2026";
+export const PRIVACY_POLICY_UPDATED = "September 30, 2026";
 
 /** One point in a list; `label` is shown in bold before the text. */
 export type PolicyItem = { label?: string; text: string };
@@ -25,6 +25,7 @@ export const PRIVACY_POLICY_SUMMARY: string[] = [
   "Your study material and API keys stay on this computer.",
   "Usage statistics (counts, time and AI costs, never your content) are sent to the developer, and this can't be turned off.",
   "AI features send the material they need to the AI provider you choose.",
+  "Sharing a deck to the catalog is optional; a shared deck's cards and study guide are public to other users.",
   "The app checks the developer's server for updates and service status; it can switch AI off during maintenance, but what you've already made always stays usable.",
 ];
 
@@ -38,7 +39,9 @@ export const PRIVACY_POLICY: PolicySection[] = [
       { text: "flashcards, study guides, practice exams, questions, answers and grades;" },
       { text: "your API keys and settings." },
     ],
-    outro: ["None of it is ever sent to the developer."],
+    outro: [
+      "None of it is ever sent to the developer, unless you choose to share a deck to the deck catalog (see below).",
+    ],
   },
   {
     heading: "Usage statistics (required)",
@@ -94,6 +97,25 @@ export const PRIVACY_POLICY: PolicySection[] = [
     ],
     outro: [
       "None of these ever delete or hide your courses, flashcards, study guides or exams. If the app can't reach the server, it carries on with the last answer it received.",
+    ],
+  },
+  {
+    heading: "Deck catalog (optional)",
+    intro:
+      "The catalog lets you browse decks other students have shared and, if you want, share your own. Browsing and adding decks sends only a random install id; your college choice stays on this computer.",
+    items: [
+      {
+        label: "What sharing sends",
+        text: "only when you press Share: the deck's title, cards and study guide, the college, professor, course, term and exam type you enter, and your random install id. Slides and files are never shared.",
+      },
+      {
+        label: "Content check",
+        text: "before a deck is listed, its text is checked automatically by Google Gemini, run by the developer, to keep inappropriate material out. Decks that fail the check are not listed.",
+      },
+      {
+        label: "Who can see it",
+        text: "a shared deck is public to every Megan Study user. You can edit or remove your listings at any time, and the developer can hide listings that are reported.",
+      },
     ],
   },
   {
