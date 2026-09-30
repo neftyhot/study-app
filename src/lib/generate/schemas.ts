@@ -6,6 +6,7 @@
  * well-formed — validation in `validate.ts` then checks the citation resolves to a real slide.
  */
 import type { JsonSchema } from "@/lib/llm";
+import type { CalculationStep, NumberGiven } from "@/lib/primer/types";
 
 export const CARD_TYPES = [
   "atomic",
@@ -180,6 +181,50 @@ export const GENERATED_CARD_SCHEMA: JsonSchema = {
             description:
               "True only when the material itself flags this as important: 'know this', 'on the exam', a learning objective, or a speaker note stressing it.",
           },
+          givens: {
+            type: "array",
+            description:
+              "Every number the question states, each with what it is. Empty for a card with no numbers.",
+            items: {
+              type: "object",
+              properties: {
+                label: {
+                  type: "string",
+                  description: "What the number is, e.g. 'Cardiac output'.",
+                },
+                value: {
+                  type: "string",
+                  description: "The number with its unit, e.g. '5 L/min'.",
+                },
+              },
+              required: ["label", "value"],
+              additionalProperties: false,
+            },
+          },
+          calculations: {
+            type: "array",
+            description:
+              "Every step that gets from the givens to the answer, none skipped. Empty when the answer is not calculated.",
+            items: {
+              type: "object",
+              properties: {
+                label: {
+                  type: "string",
+                  description: "What this step works out.",
+                },
+                expression: {
+                  type: "string",
+                  description: "The arithmetic with the numbers filled in.",
+                },
+                result: {
+                  type: "string",
+                  description: "The result with its unit.",
+                },
+              },
+              required: ["label", "expression", "result"],
+              additionalProperties: false,
+            },
+          },
         },
         required: [
           "topic",
@@ -191,6 +236,8 @@ export const GENERATED_CARD_SCHEMA: JsonSchema = {
           "slideCitation",
           "sourceExcerpt",
           "essentialPoints",
+          "givens",
+          "calculations",
         ],
         additionalProperties: false,
       },
@@ -220,6 +267,10 @@ export type GeneratedCard = {
   optionalPoints?: string[];
   commonMisconceptions?: string[];
   professorEmphasis?: boolean;
+  /** Every number the question states, labelled. Empty when there are none. */
+  givens?: NumberGiven[];
+  /** Every step from the givens to the answer. Empty when nothing is worked out. */
+  calculations?: CalculationStep[];
   /** Study-guide runs only: the O-token of the objective answered. */
   objective?: string;
 };

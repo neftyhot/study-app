@@ -44,6 +44,7 @@ import {
 } from "./schemas";
 import { validateCards, type Rejection } from "./validate";
 import { fileUploadOrder, loadObjectives } from "@/lib/order";
+import { cleanCalculations, cleanGivens } from "@/lib/primer/types";
 
 /**
  * Slides per model call.
@@ -436,6 +437,10 @@ export function clearGeneratedCards(db: Db, examId: string) {
   return { deleted: generated.length, kept: cards.length - generated.length };
 }
 
+function nonEmpty<T>(items: T[]): T[] | null {
+  return items.length ? items : null;
+}
+
 /** Writes cards and their rubrics. Never updates or deletes existing rows. */
 function persistCards(
   db: Db,
@@ -461,6 +466,8 @@ function persistCards(
           sourceExcerpt: card.sourceExcerpt,
           hasAiSupplement: card.hasAiSupplement === true,
           professorEmphasis: card.professorEmphasis === true,
+          givens: nonEmpty(cleanGivens(card.givens)),
+          calculations: nonEmpty(cleanCalculations(card.calculations)),
         })
         .returning({ id: flashcards.id })
         .all();

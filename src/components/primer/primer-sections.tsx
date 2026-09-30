@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Calculator,
   ChevronDown,
@@ -12,15 +12,24 @@ import {
   ShieldQuestion,
 } from "lucide-react";
 
+import {
+  CalculationsBox,
+  CalculatorPanel,
+  NumbersPanel,
+  numberRows,
+  type CalculatorHandle,
+} from "@/components/cards/number-tools";
 import { TutorPanel } from "@/components/tutor/tutor-panel";
 import { Button } from "@/components/ui/button";
 import type { PrimerFormat } from "@/db/schema";
 import { cn } from "@/lib/utils";
 import {
   exampleView,
+  type CalculationStep,
   type CitedSentence,
   type CounterExample,
   type ExtraExample,
+  type NumberGiven,
 } from "@/lib/primer/types";
 
 /** Matches MAX_EXTRA_EXAMPLES in lib/primer; that module is server-only. */
@@ -37,6 +46,10 @@ export type PrimerSectionView = {
   counterExample: CounterExample | null;
   /** Examples written on request, after the one the guide came with. */
   extraExamples: ExtraExample[];
+  /** Every number the concept states, with what it is. */
+  givens?: NumberGiven[];
+  /** The working behind the example's numbers, step by step. */
+  calculations?: CalculationStep[];
 };
 
 export type PrimerChapterView = {
@@ -150,6 +163,9 @@ export function PrimerDocument({
   format?: PrimerFormat;
 }) {
   const [open, setOpen] = useState<Set<number>>(() => new Set([0]));
+  // One calculator for the whole guide, so it stays put while scrolling.
+  const [calcOpen, setCalcOpen] = useState(false);
+  const calcRef = useRef<CalculatorHandle>(null);
   const allOpen = open.size === chapters.length;
 
   function toggle(i: number) {
@@ -274,6 +290,9 @@ export function PrimerDocument({
                       section={section}
                       slides={slides}
                       format={format}
+                      calculatorOpen={calcOpen}
+                      onToggleCalculator={() => setCalcOpen((value) => !value)}
+                      onPickNumber={(value) => calcRef.current?.insert(value)}
                     />
                   ))}
                 </div>
@@ -287,6 +306,7 @@ export function PrimerDocument({
           );
         })}
       </div>
+      <CalculatorPanel ref={calcRef} open={calcOpen} onOpenChange={setCalcOpen} />
     </div>
   );
 }
@@ -338,6 +358,9 @@ function Concept({
   section,
   slides,
   format,
+  calculatorOpen,
+  onToggleCalculator,
+  onPickNumber,
 }: {
   examId: string;
   chapterTitle: string;
@@ -346,8 +369,22 @@ function Concept({
   section: PrimerSectionView;
   slides: CitationSlides;
   format: PrimerFormat;
+  calculatorOpen: boolean;
+  onToggleCalculator: () => void;
+  onPickNumber: (value: string) => void;
 }) {
   const hasBuiltIn = section.example.length > 0;
+  const calculations = section.calculations ?? [];
+  // The concept's own list of numbers, or for an older guide, the numbers
+  // found in its text; then each result the working reaches.
+  const numbers = numberRows(
+    section.givens ?? [],
+    [...section.definition, ...section.breakdown, ...section.example]
+      .map((sentence) => sentence.text)
+      .join("\n"),
+    calculations,
+    true,
+  );
 
   // More worked examples, one per press. Each is kept, so they are all there
   // on the next visit; the button goes once there are plenty.
@@ -408,6 +445,24 @@ function Concept({
           <h4 className="text-sm font-semibold">Example</h4>
           <CitedText sentences={section.example} slides={slides} />
         </div>
+      ) : null}
+      <CalculationsBox steps={calculations} />
+      {numbers.length > 0 ? (
+        <NumbersPanel
+          rows={numbers}
+          onPick={onPickNumber}
+          actions={
+            <Button
+              variant={calculatorOpen ? "secondary" : "outline"}
+              size="sm"
+              aria-pressed={calculatorOpen}
+              onClick={onToggleCalculator}
+            >
+              <Calculator className="size-4" />
+              Calculator
+            </Button>
+          }
+        />
       ) : null}
 
       <div className="space-y-3" aria-live="polite">
@@ -480,30 +535,10 @@ function ExampleBox({ title, example }: { title: string; example: ExtraExample }
   const { text, calculations } = exampleView(example);
   return (
     <div className="bg-muted/40 flex flex-col gap-3 rounded-md border-l-4 border-l-primary px-4 py-3 sm:block sm:flow-root">
-      {calculations.length > 0 ? (
-        <aside
-          aria-label="Calculations"
-          className="bg-background order-last rounded-md border p-3 text-sm sm:float-right sm:mt-6 sm:mb-2 sm:ml-4 sm:w-1/3"
-        >
-          <h5 className="text-muted-foreground mb-2 flex items-center gap-1.5 text-xs font-semibold tracking-wide uppercase">
-            <Calculator className="size-3.5" />
-            Calculations
-          </h5>
-          <ol className="space-y-2">
-            {calculations.map((step, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="text-muted-foreground mt-0.5 text-xs tabular-nums">{i + 1}.</span>
-                <div className="min-w-0">
-                  <p className="text-muted-foreground text-xs">{step.label}</p>
-                  <p className="font-mono break-words tabular-nums">
-                    {step.expression} = <strong>{step.result}</strong>
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </aside>
-      ) : null}
+      <CalculationsBox
+        steps={calculations}
+        className="order-last sm:float-right sm:mt-6 sm:mb-2 sm:ml-4 sm:w-1/3"
+      />
       <div className="space-y-1">
         <h4 className="text-sm font-semibold">{title}</h4>
         <p className="leading-relaxed">{text}</p>

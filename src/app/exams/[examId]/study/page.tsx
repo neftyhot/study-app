@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { StudyDeck, type StudyCardView } from "@/components/study/study-deck";
+import { db } from "@/db";
 import { MINUTES } from "@/lib/plan/estimate";
+import { readFlashcardFormat } from "@/lib/settings";
 import {
   countDueCards,
   getExam,
@@ -47,6 +49,8 @@ export default async function StudyPage(
     essentialPoints: card.rubric?.essentialPoints ?? [],
     commonMisconceptions: card.rubric?.commonMisconceptions ?? [],
     lastGrade: card.progress?.lastGrade ?? null,
+    givens: card.givens ?? [],
+    calculations: card.calculations ?? [],
     source: card.sourceSlide
       ? {
           slideId: card.sourceSlide.id,
@@ -76,6 +80,7 @@ export default async function StudyPage(
         cards={views}
         topics={topics}
         dueCount={dueCount}
+        initialFormat={readFlashcardFormat(db)}
         reviewCap={
           exam.dailyMinutes
             ? Math.max(1, Math.floor(exam.dailyMinutes / MINUTES.typedReview))

@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import Link from "next/link";
 
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
+import { FlashcardFormatSettings } from "@/components/settings/flashcard-format-settings";
 import { FeedbackCard } from "@/components/settings/feedback-card";
 import { StatsCard } from "@/components/settings/stats-card";
 import { APP_VERSION } from "@/lib/app-info";
@@ -25,7 +26,7 @@ import { uploadsRoot } from "@/lib/ingest/storage";
 import { LOCAL_MODELS } from "@/lib/llm/catalog";
 import { modelsRoot } from "@/lib/llm/download";
 import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/status";
-import { readAppearance, readGradingStrictness } from "@/lib/settings";
+import { readAppearance, readFlashcardFormat, readGradingStrictness } from "@/lib/settings";
 import { db } from "@/db";
 import { installId } from "@/lib/telemetry";
 import { DeleteStatistics } from "@/components/settings/delete-statistics";
@@ -82,6 +83,8 @@ export default async function SettingsPage() {
       ) : null}
 
       <AppearanceSettings initial={readAppearance(db)} />
+
+      <FlashcardFormatSettings initial={readFlashcardFormat(db)} />
 
       <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
 

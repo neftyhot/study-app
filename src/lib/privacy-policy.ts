@@ -5,7 +5,7 @@
  * Plain data so the client can render it. Bump the version whenever what the
  * app collects changes: everyone is asked to agree again.
  */
-export const PRIVACY_POLICY_VERSION = "2026-09-30";
+export const PRIVACY_POLICY_VERSION = "2026-09-30.2";
 
 export const PRIVACY_POLICY_UPDATED = "September 30, 2026";
 
@@ -110,7 +110,7 @@ export const PRIVACY_POLICY: PolicySection[] = [
       },
       {
         label: "Content check",
-        text: "before a deck is listed, its text is checked automatically by Google Gemini, run by the developer, to keep inappropriate material out. Decks that fail the check are not listed.",
+        text: "before a deck is listed (and when you edit a listing), its text is checked automatically to keep inappropriate material out, using your own API key and the provider it belongs to (Google Gemini, Anthropic Claude or OpenAI). The key travels with the deck to the catalog server, is used for that one check, and is never stored or logged there. The check runs on your key's account, typically well under a cent. A local model can't run the check, so sharing needs one of those keys; browsing and adding decks don't. Decks that fail the check are not listed.",
       },
       {
         label: "Who can see it",

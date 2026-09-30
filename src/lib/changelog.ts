@@ -6,6 +6,18 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.7.0",
+    date: "2026-09-30",
+    notes: [
+      "Three flashcard formats: Classic (the one you had), Flip card (turns over in the middle of the page) and Swipe stack (swipe right if you knew it, left if you missed it). Choose one in Settings or when you start a deck, with a preview to try first.",
+      "Cards with numbers get a Calculations box once you show the answer, with every step of the working, and a calculator you can use with your keyboard.",
+      "A new Numbers button lists every number in a question with what it is, on flashcards and in the study guide, so you can work the problem forward. Press a number to put it in the calculator.",
+      "New cards and study guides keep every number and every step of the working, so you no longer need to remember the example from class to solve them.",
+      "Sharing a deck to the catalog now runs the content check on your own Gemini, Claude or OpenAI key. It uses one short request, and the key is never stored. The privacy policy is updated to explain this, so you'll be asked to agree to it again.",
+      "Security improvements to the desktop app.",
+    ],
+  },
+  {
     version: "1.6.0",
     date: "2026-09-30",
     notes: [

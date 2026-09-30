@@ -1,10 +1,13 @@
 // Development only: load .env.local before any other module, so nothing
-// required below can read process.env before it is populated. A packaged
-// build has no such file (its OAuth client is compiled in), so a miss is fine.
-try {
-  process.loadEnvFile(require("node:path").resolve(__dirname, "../.env.local"));
-} catch {
-  // No .env.local.
+// required below can read process.env before it is populated. Never in a
+// packaged build: its OAuth client is compiled in, and a file dropped beside
+// it must not be able to change how it behaves.
+if (!require("electron").app.isPackaged) {
+  try {
+    process.loadEnvFile(require("node:path").resolve(__dirname, "../.env.local"));
+  } catch {
+    // No .env.local.
+  }
 }
 
 /**
@@ -348,6 +351,18 @@ app.whenReady().then(async () => {
     appOrigin: () => (appUrl ? new URL(appUrl).origin : null),
   });
 
+  // Only the activation window's own page, loaded from disk, may use these.
+  const fromActivation = (event) => {
+    const url = event.senderFrame?.url;
+    if (!url) return false;
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === "file:" && parsed.pathname.endsWith("/activation.html");
+    } catch {
+      return false;
+    }
+  };
+
   ipcMain.handle("get-machine-id", () => gate.machineId());
 
   ipcMain.handle("validate-license", (_event, token) =>
@@ -421,7 +436,10 @@ app.whenReady().then(async () => {
     return { configured, found: true, ...result };
   }
 
-  ipcMain.handle("activate-license", (_event, token) => activateAndLaunch(token));
+  ipcMain.handle("activate-license", (event, token) => {
+    if (!fromActivation(event)) return { valid: false, message: "Not allowed." };
+    return activateAndLaunch(token);
+  });
 
   /**
    * Whether the stored key has been revoked in the License Manager. If it
@@ -459,11 +477,15 @@ app.whenReady().then(async () => {
   });
 
   // The renderer never builds the checkout URL; it can only ask for it opened.
-  ipcMain.handle("open-purchase", async () => {
+  ipcMain.handle("open-purchase", async (event) => {
+    if (!fromActivation(event)) return;
     await shell.openExternal(purchase.purchaseUrl(gate.machineId()));
   });
 
-  ipcMain.handle("check-purchase", () => checkPurchase());
+  ipcMain.handle("check-purchase", (event) => {
+    if (!fromActivation(event)) return { configured: false, found: false };
+    return checkPurchase();
+  });
 
   // The same two, for the app window during the trial (see app-preload.cjs).
   const fromApp = (event) => {

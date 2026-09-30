@@ -29,6 +29,7 @@ import {
   writeModelTier,
   writeAppearance,
   writeGradingMode,
+  writeFlashcardFormat,
   writeGradingStrictness,
   writeProvider,
   writeTheme,
@@ -167,6 +168,13 @@ export async function finishSetup() {
 export async function setGradingStrictness(value: string) {
   if (!isStrictness(value)) return { ok: false as const, error: "Unknown setting." };
   writeGradingStrictness(value, db);
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+/** How flashcards are shown; chosen here or when starting a deck. */
+export async function setFlashcardFormat(value: string) {
+  if (!writeFlashcardFormat(value, db)) return { ok: false as const, error: "Unknown format." };
   revalidatePath("/settings");
   return { ok: true as const };
 }

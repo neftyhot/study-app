@@ -16,6 +16,7 @@
  * sysprep'd image) changes it.
  */
 const { execFileSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const WINDOWS_KEY = "HKLM\\SOFTWARE\\Microsoft\\Cryptography";
@@ -30,7 +31,13 @@ function windowsMachineId() {
   // The 64-bit view: a 32-bit process would otherwise be redirected to
   // WOW6432Node, which has no MachineGuid. `sysnative` reaches the real
   // System32 from a 32-bit process; a 64-bit one uses System32 directly.
-  const root = process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows";
+  // The usual Windows folder first, whatever the environment says: pointing
+  // SystemRoot at a folder with a fake reg.exe would otherwise let anyone
+  // report whatever machine id they liked. The environment is only asked
+  // when Windows really is installed somewhere else.
+  const root = fs.existsSync("C:\\Windows\\System32\\reg.exe")
+    ? "C:\\Windows"
+    : (process.env.SystemRoot ?? process.env.windir ?? "C:\\Windows");
   const system =
     process.arch === "ia32" && process.env.PROCESSOR_ARCHITEW6432
       ? "Sysnative"

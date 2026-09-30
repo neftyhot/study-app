@@ -29,6 +29,51 @@ export interface CounterExample {
   whyFlawed: string;
 }
 
+/** A number a question or example states, with what it is. */
+export interface NumberGiven {
+  /** What the number is, e.g. "Stroke volume". */
+  label: string;
+  /** The number with its unit, e.g. "70 mL". */
+  value: string;
+}
+
+/** Drops malformed steps and trims what is left; the model is not trusted. */
+export function cleanCalculations(raw: unknown): CalculationStep[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (step): step is CalculationStep =>
+        !!step &&
+        typeof step.label === "string" &&
+        typeof step.expression === "string" &&
+        typeof step.result === "string",
+    )
+    .map((step) => ({
+      label: step.label.trim().slice(0, 200),
+      expression: step.expression.trim().slice(0, 400),
+      result: step.result.trim().slice(0, 200),
+    }))
+    .filter((step) => step.expression || step.result)
+    .slice(0, 30);
+}
+
+export function cleanGivens(raw: unknown): NumberGiven[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (given): given is NumberGiven =>
+        !!given &&
+        typeof given.label === "string" &&
+        typeof given.value === "string",
+    )
+    .map((given) => ({
+      label: given.label.trim().slice(0, 200),
+      value: given.value.trim().slice(0, 100),
+    }))
+    .filter((given) => given.value)
+    .slice(0, 40);
+}
+
 /** One line of working in a numeric example: what is found, how, and the value. */
 export interface CalculationStep {
   /** What this step finds, e.g. "Gross profit". */

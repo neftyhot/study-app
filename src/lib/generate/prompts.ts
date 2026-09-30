@@ -159,7 +159,22 @@ TOPICS
   on a contents slide ("Olfactory system", "Thyroid gland"), never the single
   term the card asks about ("Olfactory bulb", "TSH").
 - Every card from the same section uses the same topic, spelled the same way.
-  A batch of slides normally needs one to three topics, not one per card.`;
+  A batch of slides normally needs one to three topics, not one per card.
+
+NUMBERS AND CALCULATIONS
+- A card whose answer is worked out states EVERY number needed to work it out
+  in the question itself — including values the slide had already calculated
+  in its own example. The student will not remember the class example; a
+  question that gives two of the five numbers it needs cannot be answered.
+- givens lists every number the question states, each with a label saying what
+  it is ("Stroke volume", "70 mL"). Label from the material's own terms.
+  Never list the answer, or a cloze card's hidden word, among the givens:
+  the student sees them before answering.
+- calculations lists every step from the givens to the answer, in order. Never
+  skip an intermediate step, never combine two steps into one, and never state
+  a result without the arithmetic that produced it. The last step's result is
+  the answer. Check every step's arithmetic.
+- Both are empty arrays for a card that involves no numbers.`;
 
 /** The preset whose prose fits a custom ratio most closely. */
 export function nearestPreset(ratio: number): Exclude<DensityMode, "custom"> {

@@ -4,8 +4,9 @@
  *   GET    /catalog              Live listings, newest first, plus the
  *                                caller's own hidden ones.
  *   GET    /catalog/:id          One listing with a preview of its cards.
- *   POST   /catalog              Share a deck. Checked by Gemini first; a
- *                                deck it flags or declines is never listed.
+ *   POST   /catalog              Share a deck. Checked by an AI model first,
+ *                                on the sharer's own key; a deck it flags
+ *                                or declines is never listed.
  *   PATCH  /catalog/:id          Edit a listing's details (owner only;
  *                                the new text is checked again).
  *   DELETE /catalog/:id          Remove a listing (owner only).
@@ -20,10 +21,13 @@
  * install and this server know, so it doubles as the owner's secret. It is
  * never returned to anyone.
  *
- * Moderation is what costs money, so nothing reaches Gemini until a request
- * is well formed, under its size caps, not a duplicate of a listed deck, and
- * inside the rate limits (per install, per network, and for everyone per
- * day). A cheap local check turns away the obvious first, and every verdict
+ * The check runs on the sharer's own API key (Gemini, Claude or OpenAI),
+ * sent with the share as `moderation: { provider, key }`, with the same
+ * instructions whichever provider it is. The key is used for that one call
+ * and is never stored, logged or returned. Nothing reaches the provider
+ * until a request is well formed, under its size caps, not a duplicate of a
+ * listed deck, and inside the rate limits (per install and per network). A
+ * cheap local check turns away the obvious first, and every verdict
  * is kept by the hash of what was checked, so sending the same deck again
  * costs nothing and gets the same answer. Anything that goes wrong with the
  * check itself refuses the share: the catalog fails closed.
@@ -41,19 +45,35 @@ export type D1Like = { prepare(sql: string): D1Statement };
 
 export type CatalogEnv = InsightsEnv & {
   CATALOG?: D1Like;
-  /** The developer's Gemini key, for moderation only. Unset: sharing is off. */
-  GEMINI_API_KEY?: string;
-  /** Overrides MODERATION_MODEL without a code change. */
-  GEMINI_MODERATION_MODEL?: string;
 };
 
-export const MODERATION_MODEL = "gemini-3.7-flash";
+/**
+ * The model each provider's check runs on: a capable one, not the smallest,
+ * so a verdict is rarely wrong, but cheap enough that sharing costs the
+ * student a fraction of a cent.
+ */
+export const MODERATION_MODELS = {
+  gemini: "gemini-3.7-flash",
+  anthropic: "claude-haiku-4-5-20251001",
+  openai: "gpt-6-luna",
+} as const;
+
+export type ModerationProvider = keyof typeof MODERATION_MODELS;
+
+/** The sharer's own key, used for their check and then forgotten. */
+export type Moderator = { provider: ModerationProvider; key: string };
+
+const PROVIDER_NAMES: Record<ModerationProvider, string> = {
+  gemini: "Gemini",
+  anthropic: "Claude",
+  openai: "OpenAI",
+};
 
 export const CATALOG_KINDS = ["exam", "quiz", "test", "module", "assignment", "custom"] as const;
 
 export const LIMITS = {
   bodyBytes: 800_000,
-  /** Everything Gemini would read; a bigger deck is refused, not half-checked. */
+  /** Everything the check would read; a bigger deck is refused, not half-checked. */
   moderationChars: 400_000,
   minCards: 3,
   maxCards: 500,
@@ -68,8 +88,6 @@ export const LIMITS = {
   editsPerDay: 20,
   /** Refusals in a day before that install may not share until tomorrow. */
   rejectionsPerDay: 3,
-  /** Gemini calls a day across every install: a ceiling on the bill. */
-  moderationsPerDay: 500,
   reportsPerDay: 20,
   reportsToHide: 3,
 } as const;
@@ -303,6 +321,7 @@ async function publish(request: Request, env: CatalogEnv, db: D1Like, me: string
   await sharingOpen(env);
   await notBanned(db, me);
   const body = await readBody(request);
+  const moderator = moderatorOf(body);
 
   const details = cleanDetails(body);
   const cards = cleanCards(body.cards);
@@ -337,7 +356,7 @@ async function publish(request: Request, env: CatalogEnv, db: D1Like, me: string
   if (text.length > LIMITS.moderationChars) {
     throw new Refusal(413, "That deck is too large to share. Try one with fewer or shorter cards.");
   }
-  const verdict = await moderate(env, db, text, [me, ip], "publish");
+  const verdict = await moderate(db, moderator, text, [me, ip], "publish");
   if (!verdict.allowed) throw new Refusal(422, refusalMessage(verdict.reason));
 
   const id = crypto.randomUUID();
@@ -380,7 +399,8 @@ async function edit(request: Request, env: CatalogEnv, db: D1Like, id: string, m
   const row = await owned(db, id, me);
   await notBanned(db, me);
   // The name it was shared under stays unless the edit gives a new one.
-  const details = cleanDetails({ uploader: row.uploader, ...(await readBody(request)) });
+  const body = await readBody(request);
+  const details = cleanDetails({ uploader: row.uploader, ...body });
 
   const unchanged =
     details.title === row.title &&
@@ -395,9 +415,10 @@ async function edit(request: Request, env: CatalogEnv, db: D1Like, id: string, m
 
   if (!unchanged) {
     await sharingOpen(env);
+    const moderator = moderatorOf(body);
     const ip = await networkOf(request);
     await withinLimits(db, me, ip, "edit");
-    const verdict = await moderate(env, db, detailsText(details), [me, ip], "edit");
+    const verdict = await moderate(db, moderator, detailsText(details), [me, ip], "edit");
     if (!verdict.allowed) throw new Refusal(422, refusalMessage(verdict.reason));
 
     await db
@@ -591,9 +612,27 @@ function cleanGuide(value: unknown): GuideSnapshot | null {
 async function sharingOpen(env: CatalogEnv) {
   const raw = await env.LICENSES.get(SETTINGS_KEY);
   const settings = raw ? (JSON.parse(raw) as { publishing?: boolean }) : {};
-  if (settings.publishing === false || !env.GEMINI_API_KEY) {
+  if (settings.publishing === false) {
     throw new Refusal(503, "Sharing to the catalog is paused right now. Browsing and adding decks still work.");
   }
+}
+
+/**
+ * The key the check runs on. A share without one is refused before anything
+ * else is spent: the catalog has no key of its own to fall back on.
+ */
+export function moderatorOf(body: Record<string, unknown>): Moderator {
+  const raw = body.moderation as { provider?: unknown; key?: unknown } | undefined;
+  const provider = raw?.provider;
+  const key = typeof raw?.key === "string" ? raw.key.trim() : "";
+  if (typeof provider !== "string" || !(provider in MODERATION_MODELS) || !key) {
+    throw new Refusal(
+      400,
+      "Sharing needs a Gemini, Claude or OpenAI API key in Settings, to check the deck before it's listed. Local models can't run the check.",
+    );
+  }
+  if (key.length > 400 || /\s/.test(key)) throw new Refusal(400, "That API key doesn't look right. Check it in Settings.");
+  return { provider: provider as ModerationProvider, key };
 }
 
 async function notBanned(db: D1Like, me: string) {
@@ -705,7 +744,7 @@ const LINK = /\b(?:https?:\/\/|www\.)\S+|\b[a-z0-9-]+\.(?:com|net|org|io|gg|ly|x
 const CONTACT = /[\w.+-]+@[\w-]+\.[\w.]+|(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b|\b(?:snap(?:chat)?|insta(?:gram)?|discord|telegram|whatsapp|venmo|cashapp)\s*[:@]/i;
 
 /**
- * The obvious cases, turned away without spending a Gemini call: slurs,
+ * The obvious cases, turned away without spending a model call: slurs,
  * listing details that advertise or carry contact details, link spam, and
  * text that is one character over and over.
  */
@@ -748,11 +787,11 @@ const SCHEMA = {
 };
 
 /**
- * Gemini's verdict on `text`, from the cache when this exact text has been
- * checked before. Only Gemini's own verdicts and the prefilter's are cached;
- * a failed call is not, and refuses the share.
+ * The model's verdict on `text`, from the cache when this exact text has
+ * been checked before (by any provider). Only the models' own verdicts and
+ * the prefilter's are cached; a failed call is not, and refuses the share.
  */
-async function moderate(env: CatalogEnv, db: D1Like, text: string, who: string[], action: string): Promise<Verdict> {
+async function moderate(db: D1Like, moderator: Moderator, text: string, who: string[], action: string): Promise<Verdict> {
   const hash = await sha256(`v1:${text}`);
   const cached = await db
     .prepare(`SELECT allowed, reason FROM catalog_verdicts WHERE hash = ?`)
@@ -767,20 +806,14 @@ async function moderate(env: CatalogEnv, db: D1Like, text: string, who: string[]
   let verdict = prefilter(text);
   let model = "prefilter";
   if (verdict.allowed) {
-    const today = await count(
-      db,
-      `SELECT count(*) AS n FROM catalog_attempts WHERE outcome IN ('allowed', 'rejected', 'error') AND who NOT LIKE 'ip:%' AND at > ?`,
-      Date.now() - DAY,
-    );
-    if (today >= LIMITS.moderationsPerDay) {
-      throw new Refusal(503, "The catalog has had a lot of new decks today. Try sharing again tomorrow.", DAY);
-    }
-    model = env.GEMINI_MODERATION_MODEL?.trim() || MODERATION_MODEL;
+    model = `${moderator.provider}:${MODERATION_MODELS[moderator.provider]}`;
     try {
-      verdict = await askGemini(env.GEMINI_API_KEY!, model, text);
+      verdict = await askModerator(moderator, text);
     } catch (error) {
-      console.error("[catalog] moderation failed", error);
       await record(db, who, action, "error");
+      if (error instanceof Refusal) throw error;
+      // The message never carries the key: see ModeratorError.
+      console.error("[catalog] moderation failed", moderator.provider, error instanceof Error ? error.message : "unknown");
       throw new Refusal(503, "The deck couldn't be checked right now, so it wasn't shared. Try again in a few minutes.");
     }
   }
@@ -797,14 +830,63 @@ function refusalMessage(reason: string | null) {
   return `This deck wasn't shared: it didn't pass the catalog's content check.${reason ? ` ${reason}` : ""}`;
 }
 
-/** Declined outright (a block or safety stop) counts as a refusal, not an error. */
-export async function askGemini(apiKey: string, model: string, text: string): Promise<Verdict> {
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+const USER_PROMPT = (text: string) => `Review this deck.\n\n<deck>\n${text}\n</deck>`;
+
+/**
+ * A provider's answer to a call that failed. Only the status goes in the
+ * message: error bodies can quote part of the key back.
+ */
+async function providerFailure(moderator: Moderator, response: Response): Promise<never> {
+  await response.body?.cancel().catch(() => {});
+  const name = PROVIDER_NAMES[moderator.provider];
+  if (response.status === 401 || response.status === 403) {
+    throw new Refusal(400, `Your ${name} API key was turned down, so the deck couldn't be checked. Check the key in Settings.`);
+  }
+  if (response.status === 429) {
+    throw new Refusal(429, `Your ${name} API key is over its rate limit or out of credit. Try again later.`, 600);
+  }
+  throw new Error(`${name} ${response.status}`);
+}
+
+/** The verdict inside a model's JSON answer. */
+export function readVerdict(answer: string, provider: string): Verdict {
+  const json = answer.slice(answer.indexOf("{"), answer.lastIndexOf("}") + 1);
+  const parsed = JSON.parse(json) as { allowed?: unknown; category?: unknown; reason?: unknown };
+  if (typeof parsed.allowed !== "boolean") throw new Error(`${provider} gave no verdict.`);
+  if (parsed.allowed && parsed.category !== "ok" && parsed.category !== undefined) {
+    // Allowed but filed under a harm: treat the contradiction as a refusal.
+    return { allowed: false, reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : null };
+  }
+  return {
+    allowed: parsed.allowed,
+    reason: parsed.allowed ? null : typeof parsed.reason === "string" ? parsed.reason.trim().slice(0, 300) || null : null,
+  };
+}
+
+/**
+ * The same instructions and the same answer shape, on whichever provider
+ * the sharer has a key for. Declined outright (a block, a safety stop, a
+ * refusal) counts as a refusal, not an error.
+ */
+export async function askModerator(moderator: Moderator, text: string): Promise<Verdict> {
+  if (moderator.provider === "anthropic") return askClaude(moderator, text);
+  if (moderator.provider === "openai") return askOpenAi(moderator, text);
+  return askGemini(moderator, text);
+}
+
+const declined = (provider: ModerationProvider): Verdict => ({
+  allowed: false,
+  reason: `${PROVIDER_NAMES[provider]} declined to review it.`,
+});
+
+async function askGemini(moderator: Moderator, text: string): Promise<Verdict> {
+  const model = MODERATION_MODELS.gemini;
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
+    headers: { "content-type": "application/json", "x-goog-api-key": moderator.key },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM }] },
-      contents: [{ role: "user", parts: [{ text: `Review this deck.\n\n<deck>\n${text}\n</deck>` }] }],
+      contents: [{ role: "user", parts: [{ text: USER_PROMPT(text) }] }],
       generationConfig: {
         temperature: 0,
         maxOutputTokens: 2048,
@@ -815,30 +897,80 @@ export async function askGemini(apiKey: string, model: string, text: string): Pr
     }),
     signal: AbortSignal.timeout(25_000),
   });
-  if (!response.ok) throw new Error(`Gemini ${response.status}: ${(await response.text()).slice(0, 300)}`);
+  // Gemini answers a bad key with 400 API_KEY_INVALID rather than 401.
+  if (response.status === 400) {
+    const body = await response.clone().text().catch(() => "");
+    if (/API_KEY_INVALID|API key not valid/i.test(body)) {
+      return providerFailure(moderator, new Response(null, { status: 401 }));
+    }
+  }
+  if (!response.ok) return providerFailure(moderator, response);
 
   const body = (await response.json()) as {
     promptFeedback?: { blockReason?: string };
     candidates?: { finishReason?: string; content?: { parts?: { text?: string; thought?: boolean }[] } }[];
   };
-  if (body.promptFeedback?.blockReason) {
-    return { allowed: false, reason: "Gemini declined to review it." };
-  }
+  if (body.promptFeedback?.blockReason) return declined("gemini");
   const candidate = body.candidates?.[0];
   if (candidate && /SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION/.test(candidate.finishReason ?? "")) {
-    return { allowed: false, reason: "Gemini declined to review it." };
+    return declined("gemini");
   }
   const answer = candidate?.content?.parts?.filter((p) => !p.thought).map((p) => p.text ?? "").join("") ?? "";
-  const parsed = JSON.parse(answer) as { allowed?: unknown; category?: unknown; reason?: unknown };
-  if (typeof parsed.allowed !== "boolean") throw new Error("Gemini gave no verdict.");
-  if (parsed.allowed && parsed.category !== "ok" && parsed.category !== undefined) {
-    // Allowed but filed under a harm: treat the contradiction as a refusal.
-    return { allowed: false, reason: typeof parsed.reason === "string" ? parsed.reason.slice(0, 300) : null };
-  }
-  return {
-    allowed: parsed.allowed,
-    reason: parsed.allowed ? null : typeof parsed.reason === "string" ? parsed.reason.trim().slice(0, 300) || null : null,
+  return readVerdict(answer, "Gemini");
+}
+
+async function askClaude(moderator: Moderator, text: string): Promise<Verdict> {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": moderator.key,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: MODERATION_MODELS.anthropic,
+      max_tokens: 1024,
+      temperature: 0,
+      system: `${SYSTEM}\n\nReply with one JSON object and nothing else, matching this JSON schema:\n${JSON.stringify(SCHEMA)}`,
+      messages: [{ role: "user", content: USER_PROMPT(text) }],
+    }),
+    signal: AbortSignal.timeout(25_000),
+  });
+  if (!response.ok) return providerFailure(moderator, response);
+
+  const body = (await response.json()) as { stop_reason?: string; content?: { type: string; text?: string }[] };
+  if (body.stop_reason === "refusal") return declined("anthropic");
+  const answer = body.content?.filter((c) => c.type === "text").map((c) => c.text ?? "").join("") ?? "";
+  return readVerdict(answer, "Claude");
+}
+
+async function askOpenAi(moderator: Moderator, text: string): Promise<Verdict> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${moderator.key}` },
+    body: JSON.stringify({
+      model: MODERATION_MODELS.openai,
+      temperature: 0,
+      max_completion_tokens: 2048,
+      messages: [
+        { role: "system", content: SYSTEM },
+        { role: "user", content: USER_PROMPT(text) },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "verdict", strict: true, schema: { ...SCHEMA, additionalProperties: false } },
+      },
+    }),
+    signal: AbortSignal.timeout(25_000),
+  });
+  if (!response.ok) return providerFailure(moderator, response);
+
+  const body = (await response.json()) as {
+    choices?: { finish_reason?: string; message?: { content?: string | null; refusal?: string | null } }[];
   };
+  const choice = body.choices?.[0];
+  if (choice?.message?.refusal || choice?.finish_reason === "content_filter") return declined("openai");
+  return readVerdict(choice?.message?.content ?? "", "OpenAI");
 }
 
 /* ------------------------------------------------------------------- Admin */

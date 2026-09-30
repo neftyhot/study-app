@@ -131,6 +131,8 @@ export default async function PrimerPage(props: PageProps<"/exams/[examId]/prime
                 example: s.example,
                 counterExample: s.counterExample ?? null,
                 extraExamples: s.extraExamples ?? [],
+                givens: s.givens ?? [],
+                calculations: s.calculations ?? [],
               })),
             }))}
           />

@@ -935,7 +935,9 @@ function PublishDialog({
             Optional. Its cards and study guide text go into the catalog for
             anyone to add; slides and uploaded files are never shared. Your
             progress stays yours. Every share gets an automatic content check
-            first, and sharing is limited to a few decks an hour.
+            first, run on your own Gemini, Claude or OpenAI key (a fraction of
+            a cent; the key isn&apos;t kept). Local models can&apos;t run it.
+            Sharing is limited to a few decks an hour.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

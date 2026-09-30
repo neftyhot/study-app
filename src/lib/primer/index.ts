@@ -30,7 +30,16 @@ import {
 } from "@/db/schema";
 import type { JsonSchema, LlmProvider } from "@/lib/llm";
 
-import { exampleView, type CalculationStep, type CitedSentence, type CounterExample, type ExtraExample } from "./types";
+import {
+  cleanCalculations,
+  cleanGivens,
+  exampleView,
+  type CalculationStep,
+  type CitedSentence,
+  type CounterExample,
+  type ExtraExample,
+  type NumberGiven,
+} from "./types";
 import { TOPIC_CAP } from "./formats";
 import { SKIP_LOGISTICS_RULE } from "@/lib/logistics";
 
@@ -211,6 +220,40 @@ const BREAKDOWN: Record<PrimerFormat, JsonSchema> = {
   ),
 };
 
+const GIVENS: JsonSchema = {
+  type: "array",
+  description:
+    "Every number this concept states, in the definition, breakdown or example, each with what it is. Empty when it states none.",
+  items: {
+    type: "object",
+    properties: {
+      label: { type: "string", description: "What the number is, e.g. \"Revenue\"." },
+      value: { type: "string", description: "The number with its unit, e.g. \"$50,000\"." },
+    },
+    required: ["label", "value"],
+    additionalProperties: false,
+  },
+};
+
+const CALCULATIONS: JsonSchema = {
+  type: "array",
+  description:
+    "Every step of the example's working, in order, none skipped. Empty when the example works nothing out.",
+  items: {
+    type: "object",
+    properties: {
+      label: { type: "string", description: "What this step finds, e.g. \"Gross profit\"." },
+      expression: {
+        type: "string",
+        description: "The working with the numbers filled in, e.g. \"$50,000 − $30,000\".",
+      },
+      result: { type: "string", description: "The value it comes to, with units." },
+    },
+    required: ["label", "expression", "result"],
+    additionalProperties: false,
+  },
+};
+
 /**
  * The response shape for one format. Without examples the example field is
  * left out altogether, so the model spends nothing writing one.
@@ -237,15 +280,20 @@ export function primerSchema(format: PrimerFormat = "explained", withExamples = 
             ),
             breakdown: BREAKDOWN[format],
             ...(withExamples
-              ? { example: SENTENCES("One specific, concrete example of it in action.") }
+              ? {
+                  example: SENTENCES("One specific, concrete example of it in action."),
+                  calculations: CALCULATIONS,
+                }
               : {}),
+            givens: GIVENS,
           },
           required: [
             "conceptName",
             "topic",
             "definition",
             "breakdown",
-            ...(withExamples ? ["example"] : []),
+            ...(withExamples ? ["example", "calculations"] : []),
+            "givens",
           ],
           additionalProperties: false,
         },
@@ -273,6 +321,8 @@ type PrimerResponse = {
     definition: RawSentence[];
     breakdown: RawSentence[];
     example?: RawSentence[];
+    givens?: unknown;
+    calculations?: unknown;
   }[];
 };
 
@@ -363,6 +413,13 @@ Each slide is tagged [SN.M]: slideshow N, slide M.
   case: a named disease, law, event, organism, character or situation, with
   the detail that shows the concept at work. Never put made-up numbers on a
   subject that does not use numbers.
+- Never leave out an intermediate calculation. State every number the working
+  needs, including values the slides had already worked out, and list every
+  step in "calculations" — each step's result is used by a later step or is
+  the answer, and no value appears from nowhere. A student who missed the
+  class example must be able to follow it from this guide alone.
+- "givens" lists every number the concept states, each labelled with what it
+  is, so a student can see all of them together.
 - Every sentence stands alone as one sentence.
 - Cite the slide a sentence rests on with its N and M, and copy a short
   phrase from that slide exactly as written as the excerpt. If a sentence
@@ -630,6 +687,8 @@ type Concept = {
   definition: CitedSentence[];
   breakdown: CitedSentence[];
   example: CitedSentence[];
+  givens?: NumberGiven[];
+  calculations?: CalculationStep[];
 };
 
 async function inPool<T, R>(items: T[], limit: number, run: (item: T, index: number) => Promise<R>) {
@@ -691,6 +750,13 @@ export function mergeConcepts(concepts: Concept[]): Concept[] {
     existing.definition = [...existing.definition, ...fresh(concept.definition)];
     existing.breakdown = [...existing.breakdown, ...fresh(concept.breakdown)];
     existing.example = [...existing.example, ...fresh(concept.example)];
+    const seenGivens = new Set((existing.givens ?? []).map((g) => squash(`${g.label} ${g.value}`)));
+    existing.givens = [
+      ...(existing.givens ?? []),
+      ...(concept.givens ?? []).filter((g) => !seenGivens.has(squash(`${g.label} ${g.value}`))),
+    ];
+    // Two workings of different examples do not interleave; keep the first.
+    if (!existing.calculations?.length) existing.calculations = concept.calculations;
   }
   return merged;
 }
@@ -759,12 +825,14 @@ export async function generatePrimer(
       thinking: "minimal",
     });
     return (data.concepts ?? [])
-      .map((concept) => ({
+      .map((concept): Concept => ({
         conceptName: concept.conceptName?.trim() ?? "",
         topic: concept.topic?.trim() ?? "",
         definition: sentences(concept.definition, bySlide),
         breakdown: sentences(concept.breakdown, bySlide),
         example: withExamples ? sentences(concept.example, bySlide) : [],
+        givens: cleanGivens(concept.givens),
+        calculations: withExamples ? cleanCalculations(concept.calculations) : [],
       }))
       .filter((concept) => concept.conceptName && concept.definition.length > 0);
   };
@@ -858,7 +926,7 @@ export async function generatePrimer(
       tx.insert(primerSections)
         .values(
           topic.conceptIds.map((id) => {
-            const { conceptName, definition, breakdown, example } = concepts[id];
+            const { conceptName, definition, breakdown, example, givens, calculations } = concepts[id];
             return {
               guideId: guide.id,
               topicId: row.id,
@@ -867,6 +935,8 @@ export async function generatePrimer(
               definition,
               breakdown,
               example,
+              givens: givens?.length ? givens : null,
+              calculations: calculations?.length ? calculations : null,
             };
           }),
         )

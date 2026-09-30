@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { LIMITS, prefilter, type D1Like, type D1Statement } from "./catalog";
+import { LIMITS, MODERATION_MODELS, prefilter, type D1Like, type D1Statement } from "./catalog";
 import worker, { type Env, type KVLike } from "./index";
 
 function d1(sqlite: Database.Database): D1Like {
@@ -70,7 +70,6 @@ beforeEach(() => {
     ADMIN_TOKEN: TOKEN,
     LICENSES: new MemoryKV(),
     CATALOG: d1(sqlite),
-    GEMINI_API_KEY: "test-key",
   };
   verdict = { allowed: true, category: "ok", reason: "" };
   gemini = vi.fn(async () =>
@@ -112,6 +111,7 @@ function deck(overrides: Record<string, unknown> = {}) {
     description: "Cell signalling and membranes.",
     uploader: "Sam",
     sourceExamId: "exam-1",
+    moderation: { provider: "gemini", key: "test-key-gemini" },
     cards: [1, 2, 3, 4].map((n) => ({
       topic: "Membranes",
       question: `What does protein ${n}-${serial} do?`,
@@ -141,7 +141,7 @@ describe("sharing", () => {
     expect(gemini).toHaveBeenCalledTimes(1);
     const [url, init] = gemini.mock.calls[0] as [string, RequestInit];
     expect(url).toContain("gemini-3.7-flash:generateContent");
-    expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("test-key");
+    expect((init.headers as Record<string, string>)["x-goog-api-key"]).toBe("test-key-gemini");
     expect(String(init.body)).toContain("What does protein 1");
 
     const mine = (await (await call("GET", "/catalog", { who: ALICE })).json()) as { decks: Record<string, unknown>[] };
@@ -180,10 +180,13 @@ describe("sharing", () => {
     expect((await publish()).status).toBe(201);
   });
 
-  it("is off without a Gemini key, or when the developer pauses it", async () => {
-    delete env.GEMINI_API_KEY;
-    expect((await publish()).status).toBe(503);
-    env.GEMINI_API_KEY = "test-key";
+  it("needs the sharer's own key, and is off when the developer pauses it", async () => {
+    for (const moderation of [undefined, { provider: "local", key: "x".repeat(20) }, { provider: "gemini", key: "" }]) {
+      const refused = await publish(ALICE, deck({ moderation }));
+      expect(refused.status).toBe(400);
+      expect(String(refused.body.error)).toMatch(/Local models can't/);
+    }
+    expect(gemini).not.toHaveBeenCalled();
 
     expect((await call("PUT", "/admin/catalog/settings", { admin: true, body: { publishing: false } })).status).toBe(200);
     expect((await publish()).status).toBe(503);
@@ -255,12 +258,78 @@ describe("spam limits", () => {
     expect((await publish(ids.at(-1), deck(), "198.51.100.1")).status).toBe(201);
   });
 
-  it("caps Gemini calls for everyone in a day", async () => {
-    const now = Date.now();
-    const insert = sqlite.prepare(`INSERT INTO catalog_attempts (who, action, outcome, at) VALUES (?, 'publish', 'allowed', ?)`);
-    for (let i = 0; i < LIMITS.moderationsPerDay; i++) insert.run(`someone-${i}`, now);
-    expect((await publish()).status).toBe(503);
-    expect(gemini).not.toHaveBeenCalled();
+});
+
+describe("checking on the sharer's key", () => {
+  it("runs the same check on Claude", async () => {
+    gemini.mockImplementation(async (url: string, init: RequestInit) => {
+      expect(url).toBe("https://api.anthropic.com/v1/messages");
+      const headers = init.headers as Record<string, string>;
+      expect(headers["x-api-key"]).toBe("sk-ant-test-key");
+      const sent = JSON.parse(String(init.body));
+      expect(sent.model).toBe(MODERATION_MODELS.anthropic);
+      expect(sent.system).toMatch(/study/i);
+      return Response.json({ stop_reason: "end_turn", content: [{ type: "text", text: `Here: ${JSON.stringify(verdict)}` }] });
+    });
+    const moderation = { provider: "anthropic", key: "sk-ant-test-key" };
+    expect((await publish(ALICE, deck({ moderation }))).status).toBe(201);
+    verdict = { allowed: false, category: "harassment", reason: "Insulting." };
+    const refused = await publish(ALICE, deck({ moderation }));
+    expect(refused.status).toBe(422);
+    gemini.mockImplementationOnce(async () => Response.json({ stop_reason: "refusal", content: [] }));
+    expect((await publish(BOB, deck({ moderation }))).status).toBe(422);
+  });
+
+  it("runs the same check on OpenAI", async () => {
+    gemini.mockImplementation(async (url: string, init: RequestInit) => {
+      expect(url).toBe("https://api.openai.com/v1/chat/completions");
+      expect((init.headers as Record<string, string>).authorization).toBe("Bearer sk-openai-test-key");
+      const sent = JSON.parse(String(init.body));
+      expect(sent.model).toBe(MODERATION_MODELS.openai);
+      expect(sent.response_format.json_schema.strict).toBe(true);
+      return Response.json({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(verdict) } }] });
+    });
+    const moderation = { provider: "openai", key: "sk-openai-test-key" };
+    expect((await publish(ALICE, deck({ moderation }))).status).toBe(201);
+    gemini.mockImplementationOnce(async () =>
+      Response.json({ choices: [{ finish_reason: "stop", message: { content: null, refusal: "No." } }] }),
+    );
+    expect((await publish(ALICE, deck({ moderation }))).status).toBe(422);
+  });
+
+  it("says when a key is turned down, without repeating it or the provider's reply", async () => {
+    const key = "sk-ant-secret-1234567890";
+    gemini.mockImplementation(async () => new Response(`invalid x-api-key ${key}`, { status: 401 }));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const refused = await publish(ALICE, deck({ moderation: { provider: "anthropic", key } }));
+    expect(refused.status).toBe(400);
+    expect(String(refused.body.error)).toMatch(/Claude API key was turned down/);
+    expect(JSON.stringify(refused.body)).not.toContain(key);
+
+    gemini.mockImplementation(async () => new Response(`quota for ${key}`, { status: 429 }));
+    const limited = await publish(ALICE, deck({ moderation: { provider: "anthropic", key } }));
+    expect(limited.status).toBe(429);
+
+    gemini.mockImplementation(async () => new Response(`upstream ${key}`, { status: 500 }));
+    expect((await publish(ALICE, deck({ moderation: { provider: "anthropic", key } }))).status).toBe(503);
+    for (const args of spy.mock.calls) expect(JSON.stringify(args)).not.toContain(key);
+    spy.mockRestore();
+  });
+
+  it("reads Gemini's bad-key answer as a bad key", async () => {
+    gemini.mockImplementationOnce(async () =>
+      Response.json({ error: { code: 400, status: "INVALID_ARGUMENT", details: [{ reason: "API_KEY_INVALID" }] } }, { status: 400 }),
+    );
+    const refused = await publish();
+    expect(refused.status).toBe(400);
+    expect(String(refused.body.error)).toMatch(/Gemini API key was turned down/);
+  });
+
+  it("never stores the key", async () => {
+    expect((await publish()).status).toBe(201);
+    const dump = JSON.stringify(sqlite.prepare("SELECT * FROM catalog_decks").all()) +
+      JSON.stringify(sqlite.prepare("SELECT * FROM catalog_verdicts").all());
+    expect(dump).not.toContain("test-key-gemini");
   });
 });
 

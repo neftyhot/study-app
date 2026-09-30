@@ -11,7 +11,13 @@
 import { relations, sql } from "drizzle-orm";
 // Type-only: the Learn round engine owns the shape of its own saved state.
 import type { RoundState } from "@/lib/learn/ladder";
-import type { CitedSentence, CounterExample, ExtraExample } from "@/lib/primer/types";
+import type {
+  CalculationStep,
+  CitedSentence,
+  CounterExample,
+  ExtraExample,
+  NumberGiven,
+} from "@/lib/primer/types";
 import {
   index,
   integer,
@@ -256,6 +262,13 @@ export const flashcards = sqliteTable(
     /** Images a student attached by hand, relative to the uploads root. */
     frontImagePath: text("front_image_path"),
     backImagePath: text("back_image_path"),
+    /**
+     * Every number the question states, labelled, and every step from them to
+     * the answer. Null on cards that involve no numbers and on cards written
+     * before these were asked for.
+     */
+    givens: text("givens", { mode: "json" }).$type<NumberGiven[]>(),
+    calculations: text("calculations", { mode: "json" }).$type<CalculationStep[]>(),
     createdAt: createdAt(),
     /**
      * When the card was last edited. Null means never — it is still exactly
@@ -1081,6 +1094,9 @@ export const primerSections = sqliteTable(
      * example" and kept, so the second visit shows them without a model call.
      */
     extraExamples: text("extra_examples", { mode: "json" }).$type<ExtraExample[]>(),
+    /** The numbers the main example states, labelled, and its working. */
+    givens: text("givens", { mode: "json" }).$type<NumberGiven[]>(),
+    calculations: text("calculations", { mode: "json" }).$type<CalculationStep[]>(),
   },
   (t) => [index("primer_sections_guide_idx").on(t.guideId, t.orderIndex)],
 );

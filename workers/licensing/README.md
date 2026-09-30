@@ -28,7 +28,7 @@ automatic delivery does not happen.
 | `PUT /admin/status` | License Manager (App status tab) | Sets `/status`; unknown values fall back to normal; returns what was stored |
 | `POST /admin/reissue` | Developer | `{ licenseId or sessionId, machineId }` → a new key for the new machine; the old one is revoked |
 | `GET /catalog` | The app | Shared decks: `{ decks }`; the caller's own hidden listings are included for them |
-| `POST /catalog` | The app | Shares a deck (details, card and guide snapshots, never slides). Validated, deduplicated, rate-limited, then checked by Gemini (`gemini-3.7-flash`) before it's listed: a refusal is a 422 and nothing is stored. 503 while sharing is paused or `GEMINI_API_KEY` isn't set |
+| `POST /catalog` | The app | Shares a deck (details, card and guide snapshots, never slides). Validated, deduplicated, rate-limited, then checked before it's listed, on the sharer's own key sent as `moderation: { provider, key }` (Gemini `gemini-3.7-flash`, Claude `claude-haiku-4-5-20251001` or OpenAI `gpt-6-luna`, same instructions). The key is used for that call only, never stored or logged. A refusal is a 422 and nothing is stored; no key is a 400; a key the provider turns down is a 400, one over its limit a 429. 503 while sharing is paused |
 | `GET /catalog/:id`, `PATCH /catalog/:id`, `DELETE /catalog/:id` | The app | Preview; edit or remove (owner only; an edit to the text is checked again) |
 | `POST /catalog/:id/add`, `POST /catalog/:id/report` | The app | Copy a deck (counted once per install); report one (3 reports hide it) |
 | `GET /admin/catalog?status=`, `POST /admin/catalog/:id/hide\|restore\|ban`, `DELETE /admin/catalog/:id` | Developer | Moderate listings; `ban` hides everything that install shared and stops it sharing |
@@ -96,7 +96,6 @@ LICENSE_SERVER_URL=https://study-app-licensing.<you>.workers.dev
 | `LICENSE_PRIVATE_KEY` | `wrangler secret` | in git, in `wrangler.toml`, in the app |
 | `STRIPE_WEBHOOK_SECRET` (`whsec_…`) | `wrangler secret` | in git |
 | `ADMIN_TOKEN` (and `ADMIN_TOKEN_NEXT` while rotating) | `wrangler secret`, and the License Manager's settings | in git, in the app |
-| `GEMINI_API_KEY` (catalog content check; a dedicated AI Studio key) | `wrangler secret` | in git, in the app |
 | Stripe secret key (`sk_…`) | not needed here | — |
 
 The Worker only verifies webhooks and signs keys, so it never calls Stripe's

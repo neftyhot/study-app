@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Calculator,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -39,6 +47,24 @@ import { CardEditor } from "@/components/cards/card-editor";
 import { SourceViewer } from "@/components/sources/source-viewer";
 import { CardImage, CardQuestion } from "@/components/cards/card-face";
 import {
+  CalculationsBox,
+  CalculatorPanel,
+  NumbersPanel,
+  cardNumberRows,
+  type CalculatorHandle,
+} from "@/components/cards/number-tools";
+import { FlipCard, SwipeCard } from "@/components/study/card-formats";
+import { FlashcardFormatPreview } from "@/components/study/format-preview";
+import {
+  DEFAULT_FLASHCARD_FORMAT,
+  FLASHCARD_FORMATS,
+  FLASHCARD_FORMAT_LABELS,
+  type FlashcardFormat,
+} from "@/lib/settings-shared";
+import { setFlashcardFormat } from "@/lib/settings-actions";
+import type { CalculationStep, NumberGiven } from "@/lib/primer/types";
+import { cn } from "@/lib/utils";
+import {
   ExplainButton,
   MisconceptionList,
 } from "@/components/cards/explain-button";
@@ -74,6 +100,10 @@ export type StudyCardView = {
   /** Empty until an explanation is written, by a full run or on request. */
   commonMisconceptions?: string[];
   lastGrade: Grade | null;
+  /** Every number the question needs, each with what it is. */
+  givens?: NumberGiven[];
+  /** The working from those numbers to the answer, step by step. */
+  calculations?: CalculationStep[];
   source: {
     slideId: string;
     label: string;
@@ -109,6 +139,7 @@ export function StudyDeck({
   dueCount,
   reviewCap,
   session: initialSession,
+  initialFormat = DEFAULT_FLASHCARD_FORMAT,
 }: {
   examId: string;
   cards: StudyCardView[];
@@ -116,6 +147,7 @@ export function StudyDeck({
   dueCount: number;
   reviewCap: number | null;
   session: SessionView | null;
+  initialFormat?: FlashcardFormat;
 }) {
   const [deck, setDeck] = useState(cards);
   const [session, setSession] = useState(initialSession);
@@ -124,6 +156,9 @@ export function StudyDeck({
   const [detail, setDetail] = useState(false);
   const [editing, setEditing] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
+  const [format, setFormat] = useState<FlashcardFormat>(initialFormat);
+  const [calcOpen, setCalcOpen] = useState(false);
+  const calcRef = useRef<CalculatorHandle>(null);
   const [counts, setCounts] = useState({
     missed: initialSession?.missedCount ?? 0,
     difficult: initialSession?.difficultCount ?? 0,
@@ -282,12 +317,20 @@ export function StudyDeck({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [current, editing, grade, knowIt, move, noClue, position, star]);
 
-  async function start(filter: {
-    scope: StudyScope;
-    topic: string | null;
-    shuffled: boolean;
-    includeApplication: boolean;
-  }) {
+  async function start(
+    filter: {
+      scope: StudyScope;
+      topic: string | null;
+      shuffled: boolean;
+      includeApplication: boolean;
+    },
+    chosen: FlashcardFormat,
+  ) {
+    if (chosen !== format) {
+      setFormat(chosen);
+      // Remembered as the new default, as choosing it in settings would be.
+      void setFlashcardFormat(chosen);
+    }
     const started = await beginStudySession(examId, filter);
     setSession({
       ...started,
@@ -314,6 +357,7 @@ export function StudyDeck({
         topics={topics}
         dueCount={dueCount}
         reviewCap={reviewCap}
+        format={format}
         onStart={start}
       />
     );
@@ -330,6 +374,287 @@ export function StudyDeck({
           setSession(null);
         }}
       />
+    );
+  }
+
+  const layout: FlashcardFormat = editing ? "classic" : format;
+  const numbers = cardNumberRows(current, revealed);
+  const remaining = queue.length - position - 1;
+
+  const badges = (
+    <div className="flex flex-wrap gap-1.5">
+      <Badge variant="outline" className="font-mono">
+        #{current.number}
+      </Badge>
+      {current.topic ? <Badge variant="secondary">{current.topic}</Badge> : null}
+      <Badge variant="outline">{current.cardType}</Badge>
+      {current.isUserEdited ? <Badge variant="outline">edited</Badge> : null}
+    </div>
+  );
+
+  const header = (
+    <div className="flex flex-wrap items-start justify-between gap-2">
+      {badges}
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={star}
+          aria-label={current.starred ? "Unstar card" : "Star card"}
+        >
+          <Star className={current.starred ? "size-4 fill-current" : "size-4"} />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setEditing(true)}
+          aria-label="Edit card"
+        >
+          <Pencil className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
+  // The flip card's front never fills in a cloze card's blanks: its back does.
+  const front = (
+    <>
+      <CardQuestion card={current} revealed={layout === "flip" ? false : revealed} />
+      {current.frontImage ? <CardImage cardId={current.id} side="front" /> : null}
+    </>
+  );
+
+  // Every number the card mentions, and a calculator to work with them.
+  const tools =
+    numbers.length > 0 || (current.calculations?.length ?? 0) > 0 ? (
+      <NumbersPanel
+        rows={numbers}
+        onPick={(value) => calcRef.current?.insert(value)}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            aria-pressed={calcOpen}
+            onClick={() => setCalcOpen((value) => !value)}
+          >
+            <Calculator className="size-4" />
+            Calculator
+          </Button>
+        }
+      />
+    ) : null;
+
+  const back = (
+    <div className="space-y-3 text-left">
+      {layout === "flip" && current.cardType === "cloze" ? (
+        <CardQuestion card={current} revealed />
+      ) : null}
+
+      <p className="text-base break-words">{current.directAnswer}</p>
+
+      {current.backImage ? <CardImage cardId={current.id} side="back" /> : null}
+
+      <CalculationsBox steps={current.calculations ?? []} />
+
+      {!current.fullExplanation ? (
+        <ExplainButton
+          key={current.id}
+          cardId={current.id}
+          onExplained={(result) => {
+            setDeck((prev) =>
+              prev.map((card) =>
+                card.id === result.cardId
+                  ? {
+                      ...card,
+                      fullExplanation: result.fullExplanation,
+                      hasAiSupplement: result.hasAiSupplement,
+                      commonMisconceptions: result.commonMisconceptions,
+                    }
+                  : card,
+              ),
+            );
+            setDetail(true);
+          }}
+        />
+      ) : null}
+
+      {current.fullExplanation || current.essentialPoints.length ? (
+        <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="px-0"
+            onClick={() => setDetail((value) => !value)}
+          >
+            {detail ? "Hide detail" : "More detail"}
+          </Button>
+
+          {detail ? (
+            <div className="space-y-2 pt-1 text-sm">
+              {current.fullExplanation ? (
+                <p className="text-muted-foreground whitespace-pre-line">
+                  {current.fullExplanation}
+                  {current.hasAiSupplement ? (
+                    <Badge variant="outline" className="ml-2 gap-1 align-middle">
+                      <Sparkles className="size-3" />
+                      AI context
+                    </Badge>
+                  ) : null}
+                </p>
+              ) : null}
+              {current.essentialPoints.length > 0 ? (
+                <div>
+                  <p className="text-xs font-medium">Must include</p>
+                  <ul className="text-muted-foreground list-disc pl-5 text-xs">
+                    {current.essentialPoints.map((point) => (
+                      <li key={point}>{point}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              <MisconceptionList items={current.commonMisconceptions ?? []} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const revealControls = (
+    <div className="space-y-2">
+      <Button
+        variant="secondary"
+        onClick={() => setRevealed(true)}
+        className="w-full"
+      >
+        {layout === "flip" ? "Flip card" : "Show answer"}
+        <kbd className="text-muted-foreground ml-1 text-xs">space</kbd>
+      </Button>
+
+      {/* Skipping without flipping: the two honest shortcuts. */}
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button variant="outline" className="text-xs sm:text-sm" onClick={knowIt}>
+          <CircleCheck className="size-4" />
+          I know it
+          <kbd className="ml-1 text-xs opacity-70">k</kbd>
+        </Button>
+        <Button
+          variant="outline"
+          className="text-xs sm:text-sm"
+          onClick={() => void noClue()}
+        >
+          <CircleHelp className="size-4" />
+          No clue
+          <kbd className="ml-1 text-xs opacity-70">d</kbd>
+        </Button>
+      </div>
+    </div>
+  );
+
+  const gradeButtons =
+    revealed && !editing ? (
+      <div className="grid grid-cols-3 gap-2">
+        {(["missed", "difficult", "easy"] as const).map((value, i) => (
+          <Button
+            key={value}
+            variant={value === "missed" ? "destructive" : "outline"}
+            className="text-xs sm:text-sm"
+            onClick={() => grade(value)}
+          >
+            {GRADE_LABELS[value]}
+            <kbd className="ml-1 text-xs opacity-70">{i + 1}</kbd>
+          </Button>
+        ))}
+      </div>
+    ) : null;
+
+  let body: ReactNode;
+  if (layout === "flip") {
+    body = (
+      <div className="mx-auto w-full max-w-xl space-y-4">
+        {header}
+        <FlipCard
+          cardKey={current.id}
+          revealed={revealed}
+          onToggle={() => setRevealed((value) => !value)}
+          front={
+            <>
+              {front}
+              <p className="text-muted-foreground text-xs">Click the card to flip it</p>
+            </>
+          }
+          back={back}
+        />
+        {tools}
+        {revealed ? gradeButtons : revealControls}
+      </div>
+    );
+  } else if (layout === "stack") {
+    body = (
+      <div className="mx-auto w-full max-w-xl space-y-4">
+        {header}
+        <SwipeCard
+          cardKey={current.id}
+          revealed={revealed}
+          behind={Math.min(remaining, 2)}
+          onReveal={() => setRevealed(true)}
+          onSwipe={(direction) => grade(direction === "right" ? "easy" : "missed")}
+        >
+          {front}
+          {revealed ? (
+            <>
+              {back}
+              <p className="text-muted-foreground text-xs">
+                Drag right if you knew it, left if you missed it, or use the buttons.
+              </p>
+            </>
+          ) : (
+            <p className="text-muted-foreground text-xs">Tap the card to see the answer</p>
+          )}
+        </SwipeCard>
+        {tools}
+        {revealed ? gradeButtons : revealControls}
+      </div>
+    );
+  } else {
+    body = (
+      <>
+        <Card>
+          <CardHeader>{header}</CardHeader>
+
+          <CardContent className="space-y-4">
+            {editing ? (
+              <CardEditor
+                cardId={current.id}
+                card={{
+                  question: current.question,
+                  directAnswer: current.directAnswer,
+                  fullExplanation: current.fullExplanation,
+                }}
+                canUndo={current.canUndo}
+                onClose={() => setEditing(false)}
+                onSaved={(fields) =>
+                  setDeck((prev) =>
+                    prev.map((card) =>
+                      card.id === current.id
+                        ? { ...card, ...fields, isUserEdited: true }
+                        : card,
+                    ),
+                  )
+                }
+              />
+            ) : (
+              <>
+                {front}
+                {tools}
+                {revealed ? back : revealControls}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {gradeButtons}
+      </>
     );
   }
 
@@ -356,213 +681,14 @@ export function StudyDeck({
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="flex flex-wrap gap-1.5">
-              <Badge variant="outline" className="font-mono">
-                #{current.number}
-              </Badge>
-              {current.topic ? (
-                <Badge variant="secondary">{current.topic}</Badge>
-              ) : null}
-              <Badge variant="outline">{current.cardType}</Badge>
-              {current.isUserEdited ? (
-                <Badge variant="outline">edited</Badge>
-              ) : null}
-            </div>
-            <div className="flex gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={star}
-                aria-label={current.starred ? "Unstar card" : "Star card"}
-              >
-                <Star
-                  className={
-                    current.starred ? "size-4 fill-current" : "size-4"
-                  }
-                />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setEditing(true)}
-                aria-label="Edit card"
-              >
-                <Pencil className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
+      {body}
 
-        <CardContent className="space-y-4">
-          {editing ? (
-            <CardEditor
-              cardId={current.id}
-              card={{
-                question: current.question,
-                directAnswer: current.directAnswer,
-                fullExplanation: current.fullExplanation,
-              }}
-              canUndo={current.canUndo}
-              onClose={() => setEditing(false)}
-              onSaved={(fields) =>
-                setDeck((prev) =>
-                  prev.map((card) =>
-                    card.id === current.id
-                      ? { ...card, ...fields, isUserEdited: true }
-                      : card,
-                  ),
-                )
-              }
-            />
-          ) : (
-            <>
-              <CardQuestion card={current} revealed={revealed} />
-
-              {current.frontImage ? (
-                <CardImage cardId={current.id} side="front" />
-              ) : null}
-
-              {revealed ? (
-                <div className="space-y-3">
-                  <p className="text-base break-words">
-                    {current.directAnswer}
-                  </p>
-
-                  {current.backImage ? (
-                    <CardImage cardId={current.id} side="back" />
-                  ) : null}
-
-                  {!current.fullExplanation ? (
-                    <ExplainButton
-                      key={current.id}
-                      cardId={current.id}
-                      onExplained={(result) => {
-                        setDeck((prev) =>
-                          prev.map((card) =>
-                            card.id === result.cardId
-                              ? {
-                                  ...card,
-                                  fullExplanation: result.fullExplanation,
-                                  hasAiSupplement: result.hasAiSupplement,
-                                  commonMisconceptions:
-                                    result.commonMisconceptions,
-                                }
-                              : card,
-                          ),
-                        );
-                        setDetail(true);
-                      }}
-                    />
-                  ) : null}
-
-                  {current.fullExplanation || current.essentialPoints.length ? (
-                    <div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="px-0"
-                        onClick={() => setDetail((value) => !value)}
-                      >
-                        {detail ? "Hide detail" : "More detail"}
-                      </Button>
-
-                      {detail ? (
-                        <div className="space-y-2 pt-1 text-sm">
-                          {current.fullExplanation ? (
-                            <p className="text-muted-foreground whitespace-pre-line">
-                              {current.fullExplanation}
-                              {current.hasAiSupplement ? (
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2 gap-1 align-middle"
-                                >
-                                  <Sparkles className="size-3" />
-                                  AI context
-                                </Badge>
-                              ) : null}
-                            </p>
-                          ) : null}
-                          {current.essentialPoints.length > 0 ? (
-                            <div>
-                              <p className="text-xs font-medium">
-                                Must include
-                              </p>
-                              <ul className="text-muted-foreground list-disc pl-5 text-xs">
-                                {current.essentialPoints.map((point) => (
-                                  <li key={point}>{point}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          ) : null}
-                          <MisconceptionList
-                            items={current.commonMisconceptions ?? []}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setRevealed(true)}
-                    className="w-full"
-                  >
-                    Show answer
-                    <kbd className="text-muted-foreground ml-1 text-xs">
-                      space
-                    </kbd>
-                  </Button>
-
-                  {/* Skipping without flipping: the two honest shortcuts. */}
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <Button
-                      variant="outline"
-                      className="text-xs sm:text-sm"
-                      onClick={knowIt}
-                    >
-                      <CircleCheck className="size-4" />
-                      I know it
-                      <kbd className="ml-1 text-xs opacity-70">k</kbd>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="text-xs sm:text-sm"
-                      onClick={() => void noClue()}
-                    >
-                      <CircleHelp className="size-4" />
-                      No clue
-                      <kbd className="ml-1 text-xs opacity-70">d</kbd>
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </CardContent>
-      </Card>
-
-      {revealed && !editing ? (
-        <div className="grid grid-cols-3 gap-2">
-          {(["missed", "difficult", "easy"] as const).map((value, i) => (
-            <Button
-              key={value}
-              variant={value === "missed" ? "destructive" : "outline"}
-              className="text-xs sm:text-sm"
-              onClick={() => grade(value)}
-            >
-              {GRADE_LABELS[value]}
-              <kbd className="ml-1 text-xs opacity-70">{i + 1}</kbd>
-            </Button>
-          ))}
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2",
+          layout !== "classic" && "mx-auto w-full max-w-xl",
+        )}
+      >
         <div className="flex gap-2">
           <Button
             variant="ghost"
@@ -607,6 +733,8 @@ export function StudyDeck({
         open={sourceOpen}
         onOpenChange={setSourceOpen}
       />
+
+      <CalculatorPanel ref={calcRef} open={calcOpen} onOpenChange={setCalcOpen} />
     </div>
   );
 }
@@ -616,6 +744,7 @@ function DeckPicker({
   topics,
   dueCount,
   reviewCap,
+  format: savedFormat,
   onStart,
 }: {
   cards: StudyCardView[];
@@ -623,13 +752,18 @@ function DeckPicker({
   dueCount: number;
   /** Reviews the stated daily budget allows, if one is set. */
   reviewCap: number | null;
-  onStart: (filter: {
-    scope: StudyScope;
-    topic: string | null;
-    shuffled: boolean;
-    includeApplication: boolean;
-  }) => Promise<void>;
+  format: FlashcardFormat;
+  onStart: (
+    filter: {
+      scope: StudyScope;
+      topic: string | null;
+      shuffled: boolean;
+      includeApplication: boolean;
+    },
+    format: FlashcardFormat,
+  ) => Promise<void>;
 }) {
+  const [format, setFormat] = useState<FlashcardFormat>(savedFormat);
   const [scope, setScope] = useState<StudyScope>("all");
   const [topic, setTopic] = useState<string>(topics[0] ?? "");
   const [shuffled, setShuffled] = useState(false);
@@ -727,17 +861,46 @@ function DeckPicker({
           </div>
         ) : null}
 
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Label htmlFor="flashcard-format" className="text-sm font-normal">
+              Card style
+            </Label>
+            <Select
+              value={format}
+              onValueChange={(value) => setFormat(value as FlashcardFormat)}
+            >
+              <SelectTrigger id="flashcard-format" className="sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FLASHCARD_FORMATS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {FLASHCARD_FORMAT_LABELS[option].label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {format !== DEFAULT_FLASHCARD_FORMAT ? (
+            <FlashcardFormatPreview key={format} format={format} />
+          ) : null}
+        </div>
+
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={available === 0 || starting}
             onClick={async () => {
               setStarting(true);
-              await onStart({
-                scope,
-                topic: scope === "topic" ? topic : null,
-                shuffled,
-                includeApplication: application,
-              });
+              await onStart(
+                {
+                  scope,
+                  topic: scope === "topic" ? topic : null,
+                  shuffled,
+                  includeApplication: application,
+                },
+                format,
+              );
               setStarting(false);
             }}
           >

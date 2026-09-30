@@ -15,7 +15,7 @@ import { asc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { serverUrl } from "@/lib/app-info";
-import { readSetting, writeSetting } from "@/lib/settings";
+import { readApiKey, readProvider, readSetting, writeSetting } from "@/lib/settings";
 import { installId } from "@/lib/telemetry";
 import {
   cardRubrics,
@@ -83,7 +83,8 @@ async function remote<T>(path: string, init: RequestInit = {}): Promise<T> {
 export async function listCatalog(): Promise<{ decks: CatalogDeck[]; offline: string | null }> {
   try {
     const { decks } = await remote<{ decks: CatalogDeck[] }>("/catalog");
-    return { decks, offline: null };
+    // A reply of the wrong shape would otherwise take the whole page down.
+    return { decks: Array.isArray(decks) ? decks : [], offline: null };
   } catch (error) {
     if (error instanceof CatalogError) return { decks: [], offline: error.message };
     throw error;
@@ -212,11 +213,33 @@ const detailsBody = (fields: Details) => ({
   description: clean(fields.description),
 });
 
+type ModerationProvider = "gemini" | "anthropic" | "openai";
+
+export const NO_MODERATION_KEY =
+  "Sharing needs a Gemini, Claude or OpenAI API key in Settings: the catalog checks each deck with it before listing it. Local models can't run the check.";
+
+/**
+ * The student's own key, sent with a share so the catalog can check the deck
+ * on their account: the provider they answer with if it has a key, else the
+ * first key they have saved. The catalog uses it once and keeps nothing.
+ */
+function moderationKey(): { provider: ModerationProvider; key: string } {
+  const chosen = readProvider();
+  const order: ModerationProvider[] = ["gemini", "anthropic", "openai"];
+  if (chosen !== "local") order.unshift(chosen);
+  for (const provider of order) {
+    const key = readApiKey(provider);
+    if (key) return { provider, key };
+  }
+  throw new CatalogError(NO_MODERATION_KEY);
+}
+
 export async function publishDeck(input: PublishInput): Promise<CatalogDeck> {
   checkDetails(input);
   const cards = snapshotCards(input.examId);
   if (cards.length === 0) throw new CatalogError("That deck has no cards to share.");
   const guide = input.includeGuide ? snapshotGuide(input.examId) : null;
+  const moderation = moderationKey();
   return remote<CatalogDeck>("/catalog", {
     method: "POST",
     body: JSON.stringify({
@@ -225,6 +248,7 @@ export async function publishDeck(input: PublishInput): Promise<CatalogDeck> {
       sourceExamId: input.examId,
       cards,
       guide,
+      moderation,
     }),
   });
 }
@@ -233,7 +257,7 @@ export async function updateListing(id: string, fields: Details): Promise<Catalo
   checkDetails(fields);
   return remote<CatalogDeck>(`/catalog/${encodeURIComponent(id)}`, {
     method: "PATCH",
-    body: JSON.stringify(detailsBody(fields)),
+    body: JSON.stringify({ ...detailsBody(fields), moderation: moderationKey() }),
   });
 }
 

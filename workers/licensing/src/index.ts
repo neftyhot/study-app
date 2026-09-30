@@ -23,7 +23,8 @@
  *   GET  /revoked/:id      Whether a key has been revoked in the License
  *                          Manager (PUT /admin/revocations sets the list).
  *   /catalog, /catalog/:id The shared deck catalog, in D1, with every new
- *                          deck checked by Gemini first (catalog.ts).
+ *                          deck checked first by an AI model on the
+ *                          sharer's own key (catalog.ts).
  *   POST /feedback         A feature suggestion from the app's settings.
  *                          Stored under `feedback:`; read in the License
  *                          Manager's Suggestions tab.
@@ -76,10 +77,6 @@ export type Env = {
   LICENSES: KVLike;
   /** The deck catalog's D1 database (migrations/). */
   CATALOG?: D1Like;
-  /** The developer's Gemini key: moderates catalog shares. Unset, sharing is off. */
-  GEMINI_API_KEY?: string;
-  /** Overrides the catalog's moderation model. */
-  GEMINI_MODERATION_MODEL?: string;
 };
 
 /** How stale a webhook may be before it is treated as a replay (Stripe's default). */

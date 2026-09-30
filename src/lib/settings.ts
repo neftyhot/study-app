@@ -33,7 +33,10 @@ import { canSeal, isSealed, seal, unseal } from "@/lib/secret-box";
 import {
   PROVIDERS,
   type ApiProviderId,
+  isFlashcardFormat,
   isGradingMode,
+  DEFAULT_FLASHCARD_FORMAT,
+  type FlashcardFormat,
   type DownloadState,
   type GradingMode,
   type KeyStatus,
@@ -174,6 +177,21 @@ export function readGraderDownload(db?: Db): DownloadState | null {
 
 export function writeGraderDownload(state: DownloadState | null, db?: Db) {
   writeSetting(GRADER_DOWNLOAD_KEY, state ? JSON.stringify(state) : "", db);
+}
+
+/* -------------------------------------------------------- Flashcard format */
+
+const FLASHCARD_FORMAT_KEY = "flashcard_format";
+
+export function readFlashcardFormat(db?: Db): FlashcardFormat {
+  const value = readSetting(FLASHCARD_FORMAT_KEY, db);
+  return isFlashcardFormat(value) ? value : DEFAULT_FLASHCARD_FORMAT;
+}
+
+export function writeFlashcardFormat(format: unknown, db?: Db): boolean {
+  if (!isFlashcardFormat(format)) return false;
+  writeSetting(FLASHCARD_FORMAT_KEY, format, db);
+  return true;
 }
 
 /* ------------------------------------------------------------- Appearance */

@@ -44,3 +44,22 @@ export type GradingMode = "local" | "cloud";
 export function isGradingMode(value: unknown): value is GradingMode {
   return value === "local" || value === "cloud";
 }
+
+/**
+ * How a flashcard is shown while studying. "classic" is the card with the
+ * answer opening beneath the question; "flip" turns the card over in the
+ * middle of the page; "stack" deals cards off a pile, to be swiped away.
+ */
+export const FLASHCARD_FORMATS = ["classic", "flip", "stack"] as const;
+export type FlashcardFormat = (typeof FLASHCARD_FORMATS)[number];
+export const DEFAULT_FLASHCARD_FORMAT: FlashcardFormat = "classic";
+
+export const FLASHCARD_FORMAT_LABELS: Record<FlashcardFormat, { label: string; blurb: string }> = {
+  classic: { label: "Classic", blurb: "The answer opens beneath the question." },
+  flip: { label: "Flip card", blurb: "The card turns over in the middle of the page." },
+  stack: { label: "Swipe stack", blurb: "Cards come off a pile; swipe right if you knew it, left if you missed it." },
+};
+
+export function isFlashcardFormat(value: unknown): value is FlashcardFormat {
+  return FLASHCARD_FORMATS.includes(value as FlashcardFormat);
+}
