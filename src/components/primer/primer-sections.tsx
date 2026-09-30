@@ -447,23 +447,21 @@ function Concept({
         </div>
       ) : null}
       <CalculationsBox steps={calculations} />
-      {numbers.length > 0 ? (
-        <NumbersPanel
-          rows={numbers}
-          onPick={onPickNumber}
-          actions={
-            <Button
-              variant={calculatorOpen ? "secondary" : "outline"}
-              size="sm"
-              aria-pressed={calculatorOpen}
-              onClick={onToggleCalculator}
-            >
-              <Calculator className="size-4" />
-              Calculator
-            </Button>
-          }
-        />
-      ) : null}
+      <NumbersPanel
+        rows={numbers}
+        onPick={onPickNumber}
+        actions={
+          <Button
+            variant={calculatorOpen ? "secondary" : "outline"}
+            size="sm"
+            aria-pressed={calculatorOpen}
+            onClick={onToggleCalculator}
+          >
+            <Calculator className="size-4" />
+            Calculator
+          </Button>
+        }
+      />
 
       <div className="space-y-3" aria-live="polite">
         {examples.map((example, index) => (

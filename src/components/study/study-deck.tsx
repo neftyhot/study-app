@@ -424,25 +424,24 @@ export function StudyDeck({
     </>
   );
 
-  // Every number the card mentions, and a calculator to work with them.
-  const tools =
-    numbers.length > 0 || (current.calculations?.length ?? 0) > 0 ? (
-      <NumbersPanel
-        rows={numbers}
-        onPick={(value) => calcRef.current?.insert(value)}
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            aria-pressed={calcOpen}
-            onClick={() => setCalcOpen((value) => !value)}
-          >
-            <Calculator className="size-4" />
-            Calculator
-          </Button>
-        }
-      />
-    ) : null;
+  // A calculator on every card, and every number the card mentions.
+  const tools = (
+    <NumbersPanel
+      rows={numbers}
+      onPick={(value) => calcRef.current?.insert(value)}
+      actions={
+        <Button
+          variant="outline"
+          size="sm"
+          aria-pressed={calcOpen}
+          onClick={() => setCalcOpen((value) => !value)}
+        >
+          <Calculator className="size-4" />
+          Calculator
+        </Button>
+      }
+    />
+  );
 
   const back = (
     <div className="space-y-3 text-left">
