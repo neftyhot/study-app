@@ -77,7 +77,33 @@ export type Env = {
   LICENSES: KVLike;
   /** The deck catalog's D1 database (migrations/). */
   CATALOG?: D1Like;
+  /** Per-network rate limits (wrangler.toml `ratelimits`); absent means none. */
+  LOOKUP_LIMIT?: RateLimiter;
+  TELEMETRY_LIMIT?: RateLimiter;
+  FEEDBACK_LIMIT?: RateLimiter;
 };
+
+/** Cloudflare's rate-limiting binding. */
+type RateLimiter = { limit(options: { key: string }): Promise<{ success: boolean }> };
+
+/**
+ * Whether this network has used up its allowance. Counted per network, not
+ * per install, and generous: a campus sharing one address must never notice.
+ * A limiter that errors lets the request through.
+ */
+async function overLimit(limiter: RateLimiter | undefined, request: Request): Promise<boolean> {
+  if (!limiter) return false;
+  try {
+    const { success } = await limiter.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" });
+    return !success;
+  } catch {
+    return false;
+  }
+}
+
+function tooMany(): Response {
+  return new Response("Too many requests", { status: 429, headers: { "retry-after": "60" } });
+}
 
 /** How stale a webhook may be before it is treated as a replay (Stripe's default). */
 const SIGNATURE_TOLERANCE_S = 300;
@@ -104,6 +130,7 @@ const worker = {
     }
 
     if (request.method === "GET" && url.pathname.startsWith("/license/")) {
+      if (await overLimit(env.LOOKUP_LIMIT, request)) return tooMany();
       return handleLicenseLookup(
         decodeURIComponent(url.pathname.slice("/license/".length)),
         env,
@@ -117,6 +144,7 @@ const worker = {
     }
 
     if (request.method === "POST" && url.pathname === "/telemetry") {
+      if (await overLimit(env.TELEMETRY_LIMIT, request)) return tooMany();
       return handleTelemetry(request, env);
     }
 
@@ -154,6 +182,7 @@ const worker = {
     }
 
     if (request.method === "POST" && url.pathname === "/feedback") {
+      if (await overLimit(env.FEEDBACK_LIMIT, request)) return tooMany();
       return handleFeedback(request, env);
     }
 

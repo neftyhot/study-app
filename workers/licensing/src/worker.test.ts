@@ -776,3 +776,54 @@ describe("app status", () => {
     expect((await put("{not json" as unknown)).status).toBe(200);
   });
 });
+
+describe("rate limits", () => {
+  /** A limiter that allows `allowed` calls per key, then refuses. */
+  function limiter(allowed: number) {
+    const seen = new Map<string, number>();
+    return {
+      async limit({ key }: { key: string }) {
+        const n = (seen.get(key) ?? 0) + 1;
+        seen.set(key, n);
+        return { success: n <= allowed };
+      },
+    };
+  }
+
+  function from(ip: string, path: string, init: RequestInit = {}) {
+    return new Request(`https://licensing.example${path}`, {
+      ...init,
+      headers: { "cf-connecting-ip": ip, "content-type": "application/json" },
+    });
+  }
+
+  it("refuses a network past its allowance, and only that network", async () => {
+    const limited = {
+      ...env,
+      LOOKUP_LIMIT: limiter(2),
+      TELEMETRY_LIMIT: limiter(1),
+      FEEDBACK_LIMIT: limiter(1),
+    };
+    for (let i = 0; i < 2; i++) {
+      expect((await worker.fetch(from("198.51.100.1", "/license/machine-1"), limited)).status).toBe(404);
+    }
+    const refused = await worker.fetch(from("198.51.100.1", "/license/machine-1"), limited);
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get("retry-after")).toBe("60");
+    expect((await worker.fetch(from("198.51.100.2", "/license/machine-1"), limited)).status).toBe(404);
+
+    const feedback = { method: "POST", body: JSON.stringify({ text: "More themes" }) };
+    expect((await worker.fetch(from("198.51.100.1", "/feedback", feedback), limited)).status).toBe(201);
+    expect((await worker.fetch(from("198.51.100.1", "/feedback", feedback), limited)).status).toBe(429);
+
+    const telemetry = { method: "POST", body: JSON.stringify({ installId: "not valid!" }) };
+    expect((await worker.fetch(from("198.51.100.1", "/telemetry", telemetry), limited)).status).toBe(400);
+    expect((await worker.fetch(from("198.51.100.1", "/telemetry", telemetry), limited)).status).toBe(429);
+  });
+
+  it("lets requests through when the limiter fails", async () => {
+    const broken = { limit: async () => { throw new Error("down"); } };
+    const response = await worker.fetch(from("198.51.100.1", "/license/machine-1"), { ...env, LOOKUP_LIMIT: broken });
+    expect(response.status).toBe(404);
+  });
+});

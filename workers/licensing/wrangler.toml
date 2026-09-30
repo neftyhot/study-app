@@ -21,3 +21,21 @@ binding = "CATALOG"
 database_name = "study-app-catalog"
 database_id = "82fffa7b-b4ef-4e08-a8c7-8332a44b9509"
 migrations_dir = "migrations"
+
+# Per-network rate limits (index.ts, overLimit). Generous on purpose: a whole
+# campus can share one address. The app polls /license every 5 s while a
+# purchase is pending and sends telemetry about hourly per install.
+[[ratelimits]]
+name = "LOOKUP_LIMIT"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "TELEMETRY_LIMIT"
+namespace_id = "1002"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "FEEDBACK_LIMIT"
+namespace_id = "1003"
+simple = { limit = 10, period = 60 }
