@@ -131,18 +131,35 @@ function removeRevoked(userDataDir, id) {
 }
 
 /**
- * When the licensing server last answered a revocation check, either way.
- * Only ever moves forward, like the launch clock.
+ * How far ahead of the clock a check may be recorded before it is not
+ * believed. A day covers time zones and a clock that has drifted.
  */
-function readRevocationCheckedAt(userDataDir) {
+const FUTURE_SLACK_MS = 86_400_000;
+
+/**
+ * When the licensing server last answered a revocation check, either way.
+ * Only ever moves forward, like the launch clock, with one exception: a time
+ * well past `now` did not come from a real check (the file was edited, or the
+ * clock was far ahead then), so it is pulled back to `now`. Otherwise a date
+ * in the year 9999 would keep a key confirmed forever.
+ */
+function readRevocationCheckedAt(userDataDir, now = Date.now()) {
   const value = read(userDataDir).revocationCheckedAt;
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (value > now + FUTURE_SLACK_MS) {
+    write(userDataDir, { ...read(userDataDir), revocationCheckedAt: now });
+    return now;
+  }
+  return value;
 }
 
 function recordRevocationCheck(userDataDir, now = Date.now()) {
   const state = read(userDataDir);
+  const stored = state.revocationCheckedAt;
   const previous =
-    typeof state.revocationCheckedAt === "number" ? state.revocationCheckedAt : 0;
+    typeof stored === "number" && Number.isFinite(stored) && stored <= now + FUTURE_SLACK_MS
+      ? stored
+      : 0;
   write(userDataDir, { ...state, revocationCheckedAt: Math.max(previous, now) });
 }
 

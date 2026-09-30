@@ -483,6 +483,34 @@ describe("the gate", () => {
     expect(store.readRevocationCheckedAt(dir)).toBe(2000);
   });
 
+  it("does not believe a confirmation dated in the future", () => {
+    const now = Date.now();
+    const passed = { valid: true, payload: { id: "key-1", type: "lifetime" } };
+    const required = { confirmRequired: true };
+
+    // A little ahead is a clock that drifted, and is kept.
+    store.recordRevocationCheck(dir, now + DAY / 2);
+    expect(store.readRevocationCheckedAt(dir, now)).toBe(now + DAY / 2);
+
+    // Years ahead is an edited file: pulled back to now, so the allowance
+    // runs out as usual instead of never.
+    const far = now + 3650 * DAY;
+    store.recordRevocationCheck(dir, far);
+    expect(store.readRevocationCheckedAt(dir, now)).toBe(now);
+    const limit = now + gate.CONFIRM_DAYS * DAY;
+    expect(gate.refuseUnconfirmed(dir, passed, limit, required)).toBe(passed);
+    expect(gate.refuseUnconfirmed(dir, passed, limit + 60_000, required)).toMatchObject({
+      valid: false,
+      reason: REASON.unconfirmed,
+    });
+
+    // And a real check afterwards is not held back by the bad value.
+    const recorded = { revocationCheckedAt: far };
+    writeFileSync(join(dir, "license.json"), JSON.stringify(recorded));
+    store.recordRevocationCheck(dir, now);
+    expect(store.readRevocationCheckedAt(dir, now)).toBe(now);
+  });
+
   it("keeps a revoked key's reason once the trial is over", () => {
     const first = Date.now();
     gate.evaluate(dir, first);

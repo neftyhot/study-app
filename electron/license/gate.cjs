@@ -76,7 +76,7 @@ function refuseRevoked(userDataDir, result) {
 function refuseUnconfirmed(userDataDir, result, now, options) {
   if (!options.confirmRequired || !result.valid) return result;
   if (result.payload?.type === "admin") return result;
-  const checkedAt = store.readRevocationCheckedAt(userDataDir);
+  const checkedAt = store.readRevocationCheckedAt(userDataDir, now);
   if (checkedAt === null) {
     store.recordRevocationCheck(userDataDir, now);
     return result;
@@ -87,7 +87,7 @@ function refuseUnconfirmed(userDataDir, result, now, options) {
 
 /** Whether the next launch is close enough to the limit to check first. */
 function confirmationDue(userDataDir, now = Date.now()) {
-  const checkedAt = store.readRevocationCheckedAt(userDataDir);
+  const checkedAt = store.readRevocationCheckedAt(userDataDir, now);
   return checkedAt !== null && now - checkedAt > (CONFIRM_DAYS - 7) * DAY_MS;
 }
 
