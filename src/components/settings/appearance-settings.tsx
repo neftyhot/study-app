@@ -11,7 +11,7 @@
  * A colour that would leave text hard to read is not accepted as picked: it
  * comes back moved just far enough to read, with a note saying so.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { Check, RotateCcw, TriangleAlert } from "lucide-react";
 
@@ -73,8 +73,16 @@ const FIELD_NAMES: Record<keyof Palette, string> = {
   primary: "accent colour",
 };
 
+const noSubscription = () => () => {};
+
 export function AppearanceSettings({ initial }: { initial: Appearance }) {
-  const { theme, resolvedTheme, setTheme } = useTheme();
+  const themeState = useTheme();
+  // The saved style is only known in the browser; until the page has hydrated,
+  // render as the server did (nothing picked) so the two match.
+  const hydrated = useSyncExternalStore(noSubscription, () => true, () => false);
+  const theme = hydrated ? themeState.theme : undefined;
+  const resolvedTheme = hydrated ? themeState.resolvedTheme : undefined;
+  const { setTheme } = themeState;
   const [appearance, setAppearance] = useState(initial);
   const [notice, setNotice] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
