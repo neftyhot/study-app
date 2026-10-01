@@ -3,10 +3,13 @@ import { notFound } from "next/navigation";
 import { ListPlus, Plus } from "lucide-react";
 
 import { CardBuilder } from "@/components/cards/card-builder";
+import { CardStyleDefault } from "@/components/study/card-style-switch";
 import { DeckCardList, type DeckCardView } from "@/components/search/deck-card-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { db } from "@/db";
 import { getExam, listCoursesWithExams, listFlashcards } from "@/lib/queries";
+import { readFlashcardFormat } from "@/lib/settings";
 
 export default async function CardsPage(
   props: PageProps<"/exams/[examId]/cards">,
@@ -100,6 +103,12 @@ export default async function CardsPage(
             ) : null}
           </div>
         </div>
+        {cards.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-muted-foreground text-xs">Study them as</span>
+            <CardStyleDefault initial={readFlashcardFormat(db)} />
+          </div>
+        ) : null}
       </div>
 
       {cards.length === 0 ? (

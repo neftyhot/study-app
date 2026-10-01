@@ -46,8 +46,11 @@ export function FlipCard({
   className?: string;
   faceClassName?: string;
 }) {
+  // About the shape of an index card: centred, landscape, never stretched
+  // across the page. The faces share one grid cell, so both take the taller
+  // one's height; a long answer scrolls instead of making the front cavernous.
   const face =
-    "bg-card text-card-foreground [grid-area:1/1] flex flex-col rounded-xl border p-6 shadow-sm [backface-visibility:hidden]";
+    "bg-card text-card-foreground ring-foreground/5 relative [grid-area:1/1] flex max-h-[30rem] min-h-72 flex-col rounded-2xl border bg-gradient-to-b from-card to-muted/40 px-7 pt-11 pb-10 shadow-md ring-1 [backface-visibility:hidden]";
   return (
     <div className={cn("[perspective:1600px]", className)}>
       <div
@@ -64,14 +67,14 @@ export function FlipCard({
         <div
           inert={revealed}
           aria-hidden={revealed}
-          className={cn(face, "min-h-64 items-center justify-center gap-4 text-center", faceClassName)}
+          className={cn(face, "items-center justify-center gap-4 text-center", faceClassName)}
         >
           {front}
         </div>
         <div
           inert={!revealed}
           aria-hidden={!revealed}
-          className={cn(face, "min-h-64 justify-center gap-3 [transform:rotateY(180deg)]", faceClassName)}
+          className={cn(face, "justify-center-safe gap-3 overflow-y-auto [transform:rotateY(180deg)]", faceClassName)}
         >
           {back}
         </div>

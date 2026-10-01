@@ -54,6 +54,7 @@ import {
   type CalculatorHandle,
 } from "@/components/cards/number-tools";
 import { FlipCard, SwipeCard } from "@/components/study/card-formats";
+import { CardStyleSwitch } from "@/components/study/card-style-switch";
 import { FlashcardFormatPreview } from "@/components/study/format-preview";
 import {
   DEFAULT_FLASHCARD_FORMAT,
@@ -570,7 +571,7 @@ export function StudyDeck({
   let body: ReactNode;
   if (layout === "flip") {
     body = (
-      <div className="mx-auto w-full max-w-xl space-y-4">
+      <div className="mx-auto w-full max-w-lg space-y-4">
         {header}
         <FlipCard
           cardKey={current.id}
@@ -578,11 +579,23 @@ export function StudyDeck({
           onToggle={() => setRevealed((value) => !value)}
           front={
             <>
-              {front}
-              <p className="text-muted-foreground text-xs">Click the card to flip it</p>
+              <FaceLabel side="Question" topic={current.topic} />
+              <CardQuestion
+                card={current}
+                className="text-xl leading-snug font-medium break-words sm:text-2xl"
+              />
+              {current.frontImage ? <CardImage cardId={current.id} side="front" /> : null}
+              <p className="text-muted-foreground absolute inset-x-0 bottom-3 text-center text-xs">
+                Click to flip · <kbd>space</kbd>
+              </p>
             </>
           }
-          back={back}
+          back={
+            <>
+              <FaceLabel side="Answer" topic={current.topic} />
+              {back}
+            </>
+          }
         />
         {tools}
         {revealed ? gradeButtons : revealControls}
@@ -678,6 +691,16 @@ export function StudyDeck({
             {counts.easy} easy
           </span>
         </div>
+      </div>
+
+      <div className="flex justify-center">
+        <CardStyleSwitch
+          value={format}
+          onChange={(option) => {
+            setFormat(option);
+            setRevealed(false);
+          }}
+        />
       </div>
 
       {body}
@@ -946,5 +969,15 @@ function SessionSummary({
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+/** The small heading in a flip card's corner, so a face is never bare. */
+function FaceLabel({ side, topic }: { side: string; topic: string | null }) {
+  return (
+    <div className="text-muted-foreground absolute inset-x-5 top-4 flex justify-between gap-3 text-[11px] font-medium tracking-wide uppercase">
+      <span>{side}</span>
+      {topic ? <span className="truncate">{topic}</span> : null}
+    </div>
   );
 }
