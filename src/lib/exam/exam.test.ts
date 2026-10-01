@@ -27,6 +27,8 @@ import {
   assignFormats,
   createPaper,
   diagnostic,
+  paperOptionInputs,
+  replaceOptions,
   difference,
   interleave,
   paperQuestions,
@@ -292,6 +294,33 @@ describe("sitting a paper", () => {
       const wrong = question.options.filter((option) => option !== question.correctOption);
       expect(wrong.every((option) => option.startsWith("Wrong"))).toBe(true);
     }
+  });
+
+  it("rewrites the options on a paper being sat, keeping its questions", () => {
+    const paper = createPaper(db, examId, { questionCount: 8, seed: 5 })!;
+    const before = paperQuestions(db, paper.id);
+    const inputs = paperOptionInputs(db, paper.id);
+    expect(inputs.length).toBe(before.filter((q) => q.format === "mcq").length);
+
+    const right = before.find((q) => q.format === "mcq")!;
+    saveAnswer(db, right.id, right.correctOption!);
+    const other = before.filter((q) => q.format === "mcq")[1];
+    if (other) saveAnswer(db, other.id, other.options.find((o) => o !== other.correctOption)!);
+
+    const written = new Map(inputs.map((input) => [input.id, ["New A", "New B", "New C"]]));
+    expect(replaceOptions(db, paper.id, written, 3)).toBe(inputs.length);
+
+    const after = paperQuestions(db, paper.id);
+    expect(after.map((q) => q.prompt)).toEqual(before.map((q) => q.prompt));
+    for (const question of after.filter((q) => q.format === "mcq")) {
+      expect(question.options).toContain(question.correctOption);
+      expect(
+        question.options.filter((o) => o !== question.correctOption).sort(),
+      ).toEqual(["New A", "New B", "New C"]);
+    }
+    // The right answer is still an option, so it stays chosen; an old wrong one is gone.
+    expect(after.find((q) => q.id === right.id)!.answer).toBe(right.correctOption);
+    if (other) expect(after.find((q) => q.id === other.id)!.answer).toBeNull();
   });
 
   it("reveals nothing about correctness while the paper is open", () => {

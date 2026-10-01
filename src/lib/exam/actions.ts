@@ -14,7 +14,9 @@ import {
   assignFormats,
   createPaper,
   loadPaperCards,
+  paperOptionInputs,
   paperQuestions,
+  replaceOptions,
   saveAnswer,
   selectCards,
   submitPaper,
@@ -140,6 +142,31 @@ export async function submit(examId: string, paperId: string) {
 export async function abandon(examId: string, paperId: string) {
   abandonPaper(db, paperId);
   revalidatePath(`/exams/${examId}/practice`);
+}
+
+/**
+ * Rewrites the wrong options on a paper being sat, for a paper set before they
+ * were written. Needs a model; with none, the paper is left as it was.
+ */
+export async function rewriteOptions(examId: string, paperId: string) {
+  const inputs = paperOptionInputs(db, paperId);
+  if (inputs.length === 0) {
+    return { ok: false as const, error: "This paper has no multiple-choice questions to rewrite." };
+  }
+
+  let written: Map<string, string[]>;
+  try {
+    written = await writeOptions(getProvider(), inputs);
+  } catch {
+    return { ok: false as const, error: "Could not reach the model. The paper is unchanged." };
+  }
+  if (written.size === 0) {
+    return { ok: false as const, error: "No usable options came back. The paper is unchanged." };
+  }
+
+  const changed = replaceOptions(db, paperId, written);
+  revalidatePath(`/exams/${examId}/practice`);
+  return { ok: true as const, changed, of: inputs.length };
 }
 
 export async function loadQuestions(paperId: string) {

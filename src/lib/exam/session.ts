@@ -365,3 +365,76 @@ export function diagnostic(db: Db, paperId: string) {
           },
   }));
 }
+
+/** The multiple-choice questions of a paper still being sat, as `writeOptions` takes them. */
+export function paperOptionInputs(db: Db, paperId: string) {
+  const paper = db.select().from(practiceExams).where(eq(practiceExams.id, paperId)).get();
+  if (!paper || paper.status !== "sitting") return [];
+
+  const misconceptions = new Map(
+    loadPaperCards(db, paper.examId).map((card) => [card.id, card.misconceptions]),
+  );
+
+  return paperQuestions(db, paperId)
+    .filter((question) => question.format === "mcq" && question.correctOption)
+    .map((question) => ({
+      // Keyed by question, not card: the options belong to this question.
+      id: question.id,
+      question: question.prompt,
+      answer: question.correctOption as string,
+      misconceptions: misconceptions.get(question.flashcardId ?? "") ?? [],
+    }));
+}
+
+/**
+ * Replaces the wrong options on a paper being sat, keeping its questions.
+ *
+ * For a paper set before options were written for it. Only questions that got
+ * written options change; an answer already given is kept only if it is still
+ * one of the options (the right answer always is).
+ */
+export function replaceOptions(
+  db: Db,
+  paperId: string,
+  written: Map<string, string[]>,
+  seed = Math.floor(Math.random() * 2 ** 31),
+): number {
+  const questions = paperQuestions(db, paperId).filter(
+    (question) => question.format === "mcq" && question.correctOption && written.has(question.id),
+  );
+
+  const built = questions.map((question) =>
+    buildMcq(
+      {
+        id: question.id,
+        topic: "",
+        question: question.prompt,
+        directAnswer: question.correctOption as string,
+        misconceptions: [],
+      },
+      [],
+      { seed: seed + question.position, written: written.get(question.id) },
+    ),
+  );
+  const slots = dealPositions(
+    built.map((options) => options.length),
+    seed,
+  );
+
+  db.transaction((tx) => {
+    questions.forEach((question, i) => {
+      const placed = placeCorrect(built[i], slots[i]);
+      const options = placed.map((option) => option.text);
+      tx.update(practiceQuestions)
+        .set({
+          options,
+          correctOption: placed.find((option) => option.correct)?.text ?? question.correctOption,
+          answer: question.answer && options.includes(question.answer) ? question.answer : null,
+        })
+        .where(eq(practiceQuestions.id, question.id))
+        .run();
+    });
+  });
+
+  return questions.length;
+}

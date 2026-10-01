@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, Clock, FileText, Layers, Loader2, Send } from "lucide-react";
+import { Calculator, Clock, FileText, Layers, Loader2, RefreshCw, Send } from "lucide-react";
 import { toast } from "@/lib/notify";
 
 import { CalculatorPanel } from "@/components/cards/number-tools";
@@ -37,6 +37,7 @@ import {
   answerQuestion,
   loadQuestions,
   regroupTopicsAction,
+  rewriteOptions,
   startPaper,
   submit,
 } from "@/lib/exam/actions";
@@ -109,6 +110,7 @@ export function PracticeRunner({
   const [busy, setBusy] = useState(false);
   const [remaining, setRemaining] = useState(paper?.remainingMs ?? null);
   const [calcOpen, setCalcOpen] = useState(false);
+  const [rewriting, setRewriting] = useState(false);
 
   // Setup form
   const [count, setCount] = useState("20");
@@ -207,6 +209,28 @@ export function PracticeRunner({
     const next = await loadQuestions(result.paperId);
     setQuestions(next);
     setAnswers(Object.fromEntries(next.map((q) => [q.id, q.answer ?? ""])));
+    router.refresh();
+  }
+
+  async function handleRewrite() {
+    if (!paper) return;
+    setRewriting(true);
+    const result = await rewriteOptions(examId, paper.id);
+    setRewriting(false);
+
+    if (!result.ok) {
+      toast.error(result.error);
+      return;
+    }
+
+    const next = await loadQuestions(paper.id);
+    setQuestions(next);
+    setAnswers(Object.fromEntries(next.map((q) => [q.id, q.answer ?? ""])));
+    toast.success(
+      result.changed < result.of
+        ? `Rewrote the options on ${result.changed} of ${result.of} questions.`
+        : "Rewrote the answer options.",
+    );
     router.refresh();
   }
 
@@ -416,7 +440,7 @@ export function PracticeRunner({
             ) : null}
           </p>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {remaining !== null ? (
               <Badge variant={remaining < 60_000 ? "destructive" : "secondary"} className="gap-1 tabular-nums">
                 <Clock className="size-3" />
@@ -435,7 +459,22 @@ export function PracticeRunner({
               Calculator
             </Button>
 
-            <Button size="sm" disabled={busy} onClick={() => void handleSubmit()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy || rewriting}
+              title="Write new wrong options for the multiple-choice questions. Questions stay the same."
+              onClick={() => void handleRewrite()}
+            >
+              {rewriting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              Rewrite options
+            </Button>
+
+            <Button size="sm" disabled={busy || rewriting} onClick={() => void handleSubmit()}>
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
               Submit
             </Button>
