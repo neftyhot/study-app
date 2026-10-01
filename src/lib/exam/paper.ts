@@ -44,12 +44,18 @@ export type PaperScope = {
   ranges?: Record<string, { from: number; to: number }>;
   /** Broad topics within those files. Empty means all of them. */
   topics?: string[];
+  /** Particular cards, e.g. the ones missed last time. Empty means any. */
+  cardIds?: string[];
 };
 
 export function inScope(card: PaperCard, scope: PaperScope): boolean {
   const sources = scope.sources ?? [];
   const topics = scope.topics ?? [];
   const file = card.sourceFileId ?? OWN_CARDS;
+
+  if (scope.cardIds && scope.cardIds.length > 0 && !scope.cardIds.includes(card.id)) {
+    return false;
+  }
 
   if (sources.length > 0 && !sources.includes(file)) return false;
 

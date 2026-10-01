@@ -34,6 +34,8 @@ export type StartRequest = {
   rephrase: boolean;
   /** How hard typed answers are marked; left out, the Settings choice. */
   strictness?: string;
+  /** Only these cards — a retake of the questions missed. */
+  cardIds?: string[];
 };
 
 /**
@@ -48,6 +50,7 @@ export async function startPaper(examId: string, request: StartRequest) {
     sources: request.sources,
     ranges: request.ranges,
     topics: request.topics,
+    cardIds: request.cardIds,
   };
   // One seed for both picks: the cards reworded here must be the cards the
   // paper is then built from, or the rewrites land on questions not asked.

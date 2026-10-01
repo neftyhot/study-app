@@ -92,6 +92,7 @@ export function createPaper(
     sources: request.sources,
     ranges: request.ranges,
     topics: request.topics,
+    cardIds: request.cardIds,
     seed: request.seed,
   });
 
@@ -302,6 +303,8 @@ export async function submitPaper(
       .run();
   }
 
+  recordMisses(db, paperId);
+
   db.update(practiceExams)
     .set({
       status: "submitted",
@@ -312,6 +315,41 @@ export async function submitPaper(
     .run();
 
   return { score, total: questions.length, questions: questions.length };
+}
+
+/**
+ * Carries a paper's misses back into study, so the cards behind them turn up
+ * under "Missed" in Flashcards and Learn.
+ *
+ * Only as a flip-card miss would: a lapse and the grade, never a demotion or
+ * a change to the schedule — one wrong answer on a paper is not evidence that
+ * multi-day retention is gone. A right answer changes nothing, because an
+ * exam measures and is not where credit is earned.
+ */
+function recordMisses(db: Db, paperId: string) {
+  const now = new Date().toISOString();
+  const missed = paperQuestions(db, paperId).filter(
+    (question) => question.flashcardId && question.verdict !== "correct",
+  );
+
+  for (const cardId of new Set(missed.map((question) => question.flashcardId!))) {
+    const current = db
+      .select({ lapses: studyProgress.lapses })
+      .from(studyProgress)
+      .where(eq(studyProgress.flashcardId, cardId))
+      .get();
+
+    if (current) {
+      db.update(studyProgress)
+        .set({ lapses: current.lapses + 1, lastGrade: "missed", lastReviewedAt: now })
+        .where(eq(studyProgress.flashcardId, cardId))
+        .run();
+    } else {
+      db.insert(studyProgress)
+        .values({ flashcardId: cardId, lapses: 1, lastGrade: "missed", lastReviewedAt: now })
+        .run();
+    }
+  }
 }
 
 export function abandonPaper(db: Db, paperId: string) {
@@ -437,4 +475,25 @@ export function replaceOptions(
   });
 
   return questions.length;
+}
+
+/** Marked papers, newest first, for the history list and the score trend. */
+export function paperHistory(db: Db, examId: string, limit = 12) {
+  return db
+    .select({
+      id: practiceExams.id,
+      score: practiceExams.score,
+      questionCount: practiceExams.questionCount,
+      topics: practiceExams.topics,
+      strictness: practiceExams.strictness,
+      submittedAt: practiceExams.submittedAt,
+      startedAt: practiceExams.startedAt,
+    })
+    .from(practiceExams)
+    .where(
+      and(eq(practiceExams.examId, examId), eq(practiceExams.status, "submitted")),
+    )
+    .orderBy(desc(practiceExams.startedAt))
+    .limit(limit)
+    .all();
 }

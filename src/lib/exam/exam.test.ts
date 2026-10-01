@@ -18,6 +18,7 @@ import {
   exams,
   flashcards,
   practiceExams,
+  studyProgress,
 } from "@/db/schema";
 import { createKeywordGrader } from "@/lib/learn/typed";
 
@@ -31,6 +32,7 @@ import {
   replaceOptions,
   difference,
   interleave,
+  paperHistory,
   paperQuestions,
   rejectRewrite,
   saveAnswer,
@@ -487,5 +489,61 @@ describe("the diagnostic", () => {
     const rows = diagnostic(db, paper.id);
     expect(rows).toHaveLength(2);
     expect(rows[0].source).toBeNull();
+  });
+});
+
+describe("retakes and history", () => {
+  const grader = createKeywordGrader();
+
+  it("sets a paper from only the cards asked for", () => {
+    const cards = Array.from({ length: 20 }, () => paperCard());
+    const wanted = [cards[3].id, cards[11].id];
+
+    const picked = selectCards(cards, { questionCount: 10, cardIds: wanted });
+
+    expect(picked.map((card) => card.id).sort()).toEqual([...wanted].sort());
+  });
+
+  it("retakes the missed questions as a paper of their own", async () => {
+    const first = createPaper(db, examId, { questionCount: 6, typedShare: 0, seed: 11 })!;
+    const questions = paperQuestions(db, first.id);
+    saveAnswer(db, questions[0].id, questions[0].correctOption!);
+    await submitPaper(db, first.id, grader);
+
+    const missed = paperQuestions(db, first.id)
+      .filter((q) => q.verdict !== "correct")
+      .map((q) => q.flashcardId!);
+    const retake = createPaper(db, examId, { questionCount: missed.length, cardIds: missed })!;
+
+    expect(
+      paperQuestions(db, retake.id).map((q) => q.flashcardId).sort(),
+    ).toEqual([...missed].sort());
+  });
+
+  it("feeds misses back to study without touching what was right", async () => {
+    const paper = createPaper(db, examId, { questionCount: 4, typedShare: 0, seed: 12 })!;
+    const questions = paperQuestions(db, paper.id);
+    saveAnswer(db, questions[0].id, questions[0].correctOption!);
+    await submitPaper(db, paper.id, grader);
+
+    const progress = (cardId: string) =>
+      db.select().from(studyProgress).where(eq(studyProgress.flashcardId, cardId)).get();
+
+    expect(progress(questions[0].flashcardId!)).toBeUndefined();
+    for (const question of questions.slice(1)) {
+      const row = progress(question.flashcardId!);
+      expect(row?.lastGrade).toBe("missed");
+      expect(row?.lapses).toBe(1);
+    }
+  });
+
+  it("lists only marked papers", async () => {
+    const marked = createPaper(db, examId, { questionCount: 3, seed: 13 })!;
+    await submitPaper(db, marked.id, grader);
+    createPaper(db, examId, { questionCount: 3, seed: 14 });
+
+    const history = paperHistory(db, examId);
+    expect(history.map((row) => row.id)).toEqual([marked.id]);
+    expect(history[0].questionCount).toBe(3);
   });
 });
