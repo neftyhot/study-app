@@ -26,7 +26,9 @@ export function seal(plain: string, box: SecretCipher | null = cipher()): string
   if (!box || !plain) return plain;
   try {
     return PREFIX + box.encryptString(plain).toString("base64");
-  } catch {
+  } catch (error) {
+    // Still saved, so the key works, but say so: it is now readable on disk.
+    console.warn("Keychain encryption failed; storing this key unencrypted.", error);
     return plain;
   }
 }

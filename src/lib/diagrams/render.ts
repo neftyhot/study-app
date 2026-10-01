@@ -13,7 +13,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 
 import { eq } from "drizzle-orm";
-import JSZip from "jszip";
+import { loadZipWithinLimits } from "@/lib/ingest/zip-limits";
 
 import type { Db } from "@/db/client";
 import { sourceFiles, sourceSlides } from "@/db/schema";
@@ -137,7 +137,7 @@ async function extractPptxImage(
   source: Buffer,
   slideNumber: number,
 ): Promise<Buffer | null> {
-  const zip = await JSZip.loadAsync(source);
+  const zip = await loadZipWithinLimits(source);
 
   const rels = zip.file(`ppt/slides/_rels/slide${slideNumber}.xml.rels`);
   if (!rels) return null;

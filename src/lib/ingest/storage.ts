@@ -63,7 +63,10 @@ export async function storeUpload(
   filename: string,
   data: Buffer,
 ) {
-  const ext = filename.split(".").pop()?.toLowerCase() ?? "bin";
+  // Only a plain extension: the name came from outside, and anything after its
+  // last dot ("x./../y") would otherwise become part of the path.
+  const tail = filename.includes(".") ? filename.split(".").pop()!.toLowerCase() : "";
+  const ext = /^[a-z0-9]{1,10}$/.test(tail) ? tail : "bin";
   const dir = absolutePathFor(examId);
   await mkdir(dir, { recursive: true });
 

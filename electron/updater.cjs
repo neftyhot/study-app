@@ -25,6 +25,29 @@ const REPO = "neftyhot/study-app";
 /** The bundle a release's DMG holds; the first is the current name. */
 const APP_NAMES = ["Megan Study.app", "Study App.app"];
 
+/**
+ * Where an update may come from: this repository's own release downloads,
+ * over HTTPS. Whatever a cache or a network says, nothing else is installed.
+ */
+const DOWNLOAD_PREFIX = `https://github.com/${REPO}/releases/download/`;
+
+function trustedDownload(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.href.startsWith(DOWNLOAD_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
+/** A bundle's identifier, from its Info.plist. */
+async function bundleId(appPath) {
+  const { stdout } = await run("plutil", [
+    "-extract", "CFBundleIdentifier", "raw", "-o", "-", path.join(appPath, "Contents", "Info.plist"),
+  ]);
+  return stdout.trim();
+}
+
 function newer(a, b) {
   const parts = (v) => String(v).replace(/^v/, "").split(/[.-]/).map((p) => Number.parseInt(p, 10) || 0);
   const [x, y] = [parts(a), parts(b)];
@@ -134,6 +157,9 @@ async function installUpdate(app) {
     dmgs.find((asset) => !/(arm64|x64)/.test(asset.name)) ??
     (process.arch === "arm64" ? dmgs[0] : undefined);
   if (!dmg) return { ok: false, error: "That release has no download for this Mac." };
+  if (!trustedDownload(dmg.url)) {
+    return { ok: false, error: "That update did not come from the app's own releases, so it was not installed." };
+  }
 
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "megan-study-update-"));
   const file = path.join(work, "update.dmg");
@@ -152,6 +178,10 @@ async function installUpdate(app) {
     // Dock, Launchpad and relaunch all point there.
     const source = APP_NAMES.map((name) => path.join(mount, name)).find((candidate) => fs.existsSync(candidate));
     if (!source) throw new Error("The downloaded update has no app in it.");
+    // The same app, not merely something with the right name.
+    if ((await bundleId(source)) !== (await bundleId(bundle))) {
+      throw new Error("The downloaded update is not this app, so it was not installed.");
+    }
     await run("ditto", [source, staged]);
     await run("xattr", ["-dr", "com.apple.quarantine", staged]).catch(() => undefined);
 
@@ -174,4 +204,4 @@ async function installUpdate(app) {
   return { ok: true, version };
 }
 
-module.exports = { installUpdate, cleanUpAfterUpdate, newer };
+module.exports = { installUpdate, cleanUpAfterUpdate, newer, trustedDownload };

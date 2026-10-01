@@ -13,6 +13,7 @@
  */
 import mammoth from "mammoth";
 
+import { loadZipWithinLimits } from "./zip-limits";
 import { splitLongUnits } from "./chunk";
 import {
   classifyLegibility,
@@ -208,6 +209,9 @@ export function sectionize(blocks: Block[], imageCount = 0): ExtractedUnit[] {
 
 export async function extractDocx(buffer: Buffer): Promise<ExtractionResult> {
   const warnings: ExtractionWarning[] = [];
+
+  // mammoth unpacks the whole archive itself, so its size is checked first.
+  await loadZipWithinLimits(buffer);
 
   const { value: html, messages } = await mammoth.convertToHtml(
     { buffer },

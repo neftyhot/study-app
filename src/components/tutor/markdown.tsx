@@ -62,15 +62,37 @@ export function Markdown({ children }: { children: string }) {
             <th className="border p-1.5 text-left font-medium">{children}</th>
           ),
           td: ({ children }) => <td className="border p-1.5">{children}</td>,
+          // Off to the browser, never in place of the app.
           a: ({ children, href }) => (
-            <a href={href} className="underline underline-offset-2">
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline underline-offset-2"
+            >
               {children}
             </a>
           ),
+          // An image the tutor names is fetched the moment it shows, so one
+          // from elsewhere could carry whatever was in the conversation off in
+          // its address. Only pictures already on this computer are drawn.
+          img: ({ src, alt }) =>
+            typeof src === "string" && localImage(src) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={src} alt={alt ?? ""} className="my-2 max-w-full rounded-md" />
+            ) : alt ? (
+              <span className="text-muted-foreground italic">[{alt}]</span>
+            ) : null,
         }}
       >
         {children}
       </ReactMarkdown>
     </div>
   );
+}
+
+function localImage(src: string): boolean {
+  if (/^(data:image\/|blob:)/i.test(src)) return true;
+  // A path on this app's own server, not "//elsewhere".
+  return src.startsWith("/") && !src.startsWith("//");
 }

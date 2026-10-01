@@ -14,6 +14,7 @@
  */
 import { XMLParser } from "fast-xml-parser";
 import JSZip from "jszip";
+import { loadZipWithinLimits } from "./zip-limits";
 
 import {
   classifyLegibility,
@@ -154,7 +155,7 @@ function parseRels(xml: string): Rel[] {
 }
 
 export async function extractPptx(buffer: Buffer): Promise<ExtractionResult> {
-  const zip = await JSZip.loadAsync(buffer);
+  const zip = await loadZipWithinLimits(buffer);
   const warnings: ExtractionWarning[] = [];
 
   const read = async (path: string) => {

@@ -22,6 +22,9 @@ import {
 const ROLES = ["slides", "study_guide", "notes"] as const;
 type Role = (typeof ROLES)[number];
 
+/** Far past any lecture deck; past it, a file is read into memory for nothing. */
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+
 export async function POST(
   request: NextRequest,
   ctx: RouteContext<"/api/exams/[examId]/files">,
@@ -55,6 +58,15 @@ export async function POST(
         filename: upload.name,
         status: "rejected" as const,
         error: `Unsupported file type. The MVP ingests ${SUPPORTED_TYPES.join(" and ")}.`,
+      });
+      continue;
+    }
+
+    if (upload.size > MAX_UPLOAD_BYTES) {
+      results.push({
+        filename: upload.name,
+        status: "rejected" as const,
+        error: "This file is over 500 MB, too large to read.",
       });
       continue;
     }

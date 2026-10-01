@@ -351,11 +351,75 @@ function createWindow(url) {
 
   // Anything aimed elsewhere opens in the real browser, not in the app frame.
   window.webContents.setWindowOpenHandler(({ url: target }) => {
-    shell.openExternal(target);
+    openOutside(target);
     return { action: "deny" };
   });
 
+  // A plain link to another site, say one in a tutor answer, would otherwise
+  // replace the app itself: send it to the browser and stay put.
+  const stayHome = (event, target) => {
+    if (sameOrigin(target, url)) return;
+    event.preventDefault();
+    openOutside(target);
+  };
+  window.webContents.on("will-navigate", stayHome);
+  window.webContents.on("will-redirect", stayHome);
+
   return window;
+}
+
+/** Whether two URLs share an origin; anything unreadable does not. */
+function sameOrigin(a, b) {
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hands a link to the system browser, but only a web or mail link: a
+ * file:// or custom-scheme URL could start a program instead.
+ */
+function openOutside(target) {
+  let parsed;
+  try {
+    parsed = new URL(target);
+  } catch {
+    return;
+  }
+  if (!["https:", "http:", "mailto:"].includes(parsed.protocol)) return;
+  shell.openExternal(parsed.href).catch(() => {});
+}
+
+/**
+ * Nothing in the app needs a camera, microphone, location or devices; a page
+ * that asks is not one of ours. Clipboard writes (copy buttons) still work.
+ */
+const REFUSED_PERMISSIONS = new Set([
+  "media",
+  "geolocation",
+  "midi",
+  "midiSysex",
+  "hid",
+  "serial",
+  "usb",
+  "idle-detection",
+  "display-capture",
+]);
+
+function refuseUnneededPermissions() {
+  const { session } = require("electron");
+  session.defaultSession.setPermissionRequestHandler(
+    (_webContents, permission, callback, details) => {
+      // A link to another program (zoommtg:, file:) is refused; mail is fine.
+      if (permission === "openExternal") {
+        callback(String(details?.externalURL ?? "").startsWith("mailto:"));
+        return;
+      }
+      callback(!REFUSED_PERMISSIONS.has(permission));
+    },
+  );
 }
 
 /**
@@ -397,6 +461,7 @@ app.whenReady().then(async () => {
   // Before anything reaches out: lets requests through school proxies and
   // HTTPS filters that Node's own fetch cannot pass (network.cjs).
   installSystemFetch();
+  refuseUnneededPermissions();
   const { userData } = configureDataDirectories();
   installCrashLog(app, userData);
   process.env.STUDY_APP_CRASH_LOG = crashLogPath(userData);
@@ -418,10 +483,14 @@ app.whenReady().then(async () => {
     }
   };
 
-  ipcMain.handle("get-machine-id", () => gate.machineId());
+  ipcMain.handle("get-machine-id", (event) =>
+    fromActivation(event) ? gate.machineId() : null,
+  );
 
-  ipcMain.handle("validate-license", (_event, token) =>
-    gate.validate(userData, token),
+  ipcMain.handle("validate-license", (event, token) =>
+    fromActivation(event)
+      ? gate.validate(userData, token)
+      : { valid: false, message: "Not allowed." },
   );
 
   let appLaunched = false;
@@ -545,7 +614,7 @@ app.whenReady().then(async () => {
   // The same two, for the app window during the trial (see app-preload.cjs).
   const fromApp = (event) => {
     const url = event.senderFrame?.url;
-    return Boolean(appUrl && url && new URL(url).origin === new URL(appUrl).origin);
+    return Boolean(appUrl && url && sameOrigin(url, appUrl));
   };
 
   ipcMain.handle("license:purchase", async (event) => {

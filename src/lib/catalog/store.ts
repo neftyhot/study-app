@@ -19,6 +19,7 @@ import { readApiKey, readProvider, readSetting, writeSetting } from "@/lib/setti
 import { installId } from "@/lib/telemetry";
 import {
   cardRubrics,
+  cardTypes,
   courses,
   exams,
   flashcards,
@@ -324,7 +325,10 @@ export async function addToMyDecks(id: string): Promise<string> {
           question: card.question,
           directAnswer: card.directAnswer,
           fullExplanation: card.fullExplanation,
-          cardType: card.cardType as (typeof flashcards.$inferInsert)["cardType"],
+          // Whatever the server sends, only a type this app knows is stored.
+          cardType: (cardTypes as readonly string[]).includes(card.cardType)
+            ? (card.cardType as (typeof cardTypes)[number])
+            : "atomic",
           sourceExcerpt: card.sourceExcerpt,
         })
         .returning({ id: flashcards.id })
