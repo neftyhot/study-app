@@ -11,6 +11,7 @@ import { regroupTopics } from "@/lib/topics";
 
 import {
   abandonPaper,
+  assignFormats,
   createPaper,
   loadPaperCards,
   paperQuestions,
@@ -18,6 +19,7 @@ import {
   selectCards,
   submitPaper,
 } from "./session";
+import { writeOptions } from "./options";
 import { rewriteQuestions } from "./rewrite";
 
 export type StartRequest = {
@@ -61,19 +63,40 @@ export async function startPaper(examId: string, request: StartRequest) {
     };
   }
 
-  let rephrased: Map<string, string> | undefined;
+  // The multiple-choice questions get wrong options written for them, so no
+  // question offers another card's answer — or the right one, reworded. The
+  // same seed and share as `createPaper`, so these are the questions it sets
+  // as multiple choice. Both calls are optional and run side by side.
+  const multipleChoice = assignFormats(selected, undefined, seed)
+    .filter((draft) => draft.format === "mcq")
+    .map(({ card }) => ({
+      id: card.id,
+      question: card.question,
+      answer: card.directAnswer,
+      misconceptions: card.misconceptions,
+    }));
 
-  if (request.rephrase) {
+  // No model, or it failed: the paper is still worth sitting, in the deck's
+  // own wording and with the deck's own options.
+  const soft = async <T,>(work: () => Promise<T>) => {
     try {
-      rephrased = await rewriteQuestions(
-        getProvider(),
-        selected.map((card) => ({ id: card.id, question: card.question })),
-      );
+      return await work();
     } catch {
-      // No model, or it failed. The paper is still worth sitting.
-      rephrased = undefined;
+      return undefined;
     }
-  }
+  };
+
+  const [rephrased, written] = await Promise.all([
+    request.rephrase
+      ? soft(() =>
+          rewriteQuestions(
+            getProvider(),
+            selected.map((card) => ({ id: card.id, question: card.question })),
+          ),
+        )
+      : undefined,
+    soft(() => writeOptions(getProvider(), multipleChoice)),
+  ]);
 
   const paper = createPaper(db, examId, {
     questionCount: request.questionCount,
@@ -81,6 +104,7 @@ export async function startPaper(examId: string, request: StartRequest) {
     seed,
     durationMinutes: request.durationMinutes,
     rephrased,
+    written,
     strictness: isStrictness(request.strictness) ? request.strictness : null,
   });
 

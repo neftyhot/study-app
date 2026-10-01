@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Clock, FileText, Layers, Loader2, Send } from "lucide-react";
+import { Calculator, Clock, FileText, Layers, Loader2, Send } from "lucide-react";
 import { toast } from "@/lib/notify";
 
+import { CalculatorPanel } from "@/components/cards/number-tools";
 import { SourceRangePicker } from "@/components/generate/source-range-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -107,6 +108,7 @@ export function PracticeRunner({
   );
   const [busy, setBusy] = useState(false);
   const [remaining, setRemaining] = useState(paper?.remainingMs ?? null);
+  const [calcOpen, setCalcOpen] = useState(false);
 
   // Setup form
   const [count, setCount] = useState("20");
@@ -423,6 +425,16 @@ export function PracticeRunner({
               </Badge>
             ) : null}
 
+            <Button
+              variant="outline"
+              size="sm"
+              aria-pressed={calcOpen}
+              onClick={() => setCalcOpen((value) => !value)}
+            >
+              <Calculator className="size-3.5" />
+              Calculator
+            </Button>
+
             <Button size="sm" disabled={busy} onClick={() => void handleSubmit()}>
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
               Submit
@@ -490,6 +502,8 @@ export function PracticeRunner({
           Discard
         </Button>
       </div>
+
+      <CalculatorPanel open={calcOpen} onOpenChange={setCalcOpen} />
     </div>
   );
 }

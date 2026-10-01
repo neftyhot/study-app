@@ -31,6 +31,7 @@ export type UsageFeature =
   | "diagnose"
   | "search"
   | "exam_rewrite"
+  | "exam_options"
   | "tutor"
   | "tutor_extract"
   | "topics"

@@ -33,6 +33,12 @@ export type McqOption = {
 export type McqOptions = {
   optionCount?: number;
   seed?: number;
+  /**
+   * Wrong answers written for this question (a practice paper's, from
+   * `lib/exam/options`). Given, they replace the deck's: no borrowed answers,
+   * no family variants, no misconceptions.
+   */
+  written?: readonly string[];
 };
 
 const FILLER = new Set(
@@ -188,6 +194,42 @@ function contentStems(value: string): Set<string> {
   );
 }
 
+/**
+ * Whether two cards ask the same thing, so one's answer cannot be a wrong
+ * option for the other.
+ *
+ * Decks often ask a fact twice in different words, and the second card's
+ * answer is then the right answer reworded: a student shown both has no way
+ * to choose. Judged on the questions, and on the answers only when both are
+ * long enough that near-identical wording means the same claim — "DNA
+ * polymerase I" and "III" share most of their words and are rightly rivals.
+ */
+export function sameFact(a: McqCard, b: McqCard): boolean {
+  const jaccard = (x: Set<string>, y: Set<string>) => {
+    if (x.size === 0 || y.size === 0) return 0;
+    let shared = 0;
+    for (const key of x) if (y.has(key)) shared += 1;
+    return shared / (x.size + y.size - shared);
+  };
+
+  // Same wording, different figures: two worked problems, not one fact.
+  const figures = (text: string) => (text.match(/\d[\d,.]*/g) ?? []).join(" ");
+  const figuresA = figures(a.directAnswer);
+  const figuresB = figures(b.directAnswer);
+  if (figuresA && figuresB && figuresA !== figuresB) return false;
+
+  // Too few words to compare and any two questions look alike.
+  const questionA = contentStems(a.question);
+  const questionB = contentStems(b.question);
+  if (questionA.size >= 3 && questionB.size >= 3 && jaccard(questionA, questionB) >= 0.6) {
+    return true;
+  }
+
+  const answerA = contentStems(a.directAnswer);
+  const answerB = contentStems(b.directAnswer);
+  return answerA.size >= 3 && answerB.size >= 3 && jaccard(answerA, answerB) >= 0.85;
+}
+
 function normalize(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:]+$/, "").trim();
 }
@@ -197,7 +239,8 @@ export function buildMcq(
   deck: readonly McqCard[],
   options: McqOptions = {},
 ): McqOption[] {
-  const { optionCount = 4, seed } = options;
+  const { optionCount = 4, seed, written = [] } = options;
+  const fromDeck = written.length === 0;
   const target = normalize(card.directAnswer);
   const taken = new Set([target]);
 
@@ -210,23 +253,38 @@ export function buildMcq(
     distractors.push({ text, correct: false, debrief });
   };
 
+  for (const text of written) {
+    add(text, "A common mistake on this — compare it with the right answer.");
+  }
+
   // Siblings of a numbered answer first, but only a couple: a question whose
   // every option is "DNA polymerase N" tests the numeral, not the concept.
-  for (const variant of familyVariants(card.directAnswer).slice(0, 2)) {
+  for (const variant of fromDeck ? familyVariants(card.directAnswer).slice(0, 2) : []) {
     add(
       variant,
       "A different member of the same family — check which one does this particular job.",
     );
   }
 
-  for (const misconception of card.misconceptions) {
+  for (const misconception of fromDeck ? card.misconceptions : []) {
     add(
       misconception,
       "This is the mistake this card is designed to catch — check the direction and the mechanism.",
     );
   }
 
-  const siblings = deck.filter((other) => other.id !== card.id);
+  // A card asking the same thing would lend the right answer, reworded.
+  const siblings = fromDeck
+    ? deck.filter((other) => other.id !== card.id && !sameFact(card, other))
+    : [];
+  const lent: McqCard[] = [];
+  const lend = (sibling: McqCard) => {
+    // Two borrowed answers to one fact are the same option twice.
+    if (lent.some((other) => sameFact(other, sibling))) return;
+    const before = distractors.length;
+    add(sibling.directAnswer, `That is the answer to "${sibling.question}"`);
+    if (distractors.length > before) lent.push(sibling);
+  };
 
   // Length gate first, topic second. An option three times the length of the
   // others is answerable without reading it, and that artifact costs more than
@@ -258,7 +316,7 @@ export function buildMcq(
 
   for (const sibling of byRelevance(plausible)) {
     if (distractors.length >= optionCount - 1) break;
-    add(sibling.directAnswer, `That is the answer to "${sibling.question}"`);
+    lend(sibling);
   }
 
   // A question with three options is fine; a fourth that is obviously wrong on
@@ -268,7 +326,7 @@ export function buildMcq(
     const rest = siblings.filter((other) => !plausible.includes(other));
     for (const sibling of byRelevance(rest)) {
       if (distractors.length >= MIN_DISTRACTORS) break;
-      add(sibling.directAnswer, `That is the answer to "${sibling.question}"`);
+      lend(sibling);
     }
   }
 

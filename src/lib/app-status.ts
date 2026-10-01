@@ -34,6 +34,7 @@ const FEATURE_GROUP: Record<UsageFeature, StatusFeature> = {
   coverage: "decks",
   topics: "decks",
   exam_rewrite: "decks",
+  exam_options: "decks",
   primer: "guides",
   primer_example: "guides",
   counter_example: "guides",

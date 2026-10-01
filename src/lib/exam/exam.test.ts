@@ -278,6 +278,22 @@ describe("sitting a paper", () => {
     expect(paperQuestions(db, paper.id).every((q) => q.prompt.startsWith("Rewritten:"))).toBe(true);
   });
 
+  it("uses written wrong options when they are supplied", () => {
+    const cards = db.select().from(flashcards).all();
+    const written = new Map(
+      cards.map((card) => [card.id, [`Wrong A ${card.id}`, `Wrong B ${card.id}`, `Wrong C ${card.id}`]]),
+    );
+
+    const paper = createPaper(db, examId, { questionCount: 8, written, seed: 5 })!;
+    const mcq = paperQuestions(db, paper.id).filter((q) => q.format === "mcq");
+
+    expect(mcq.length).toBeGreaterThan(0);
+    for (const question of mcq) {
+      const wrong = question.options.filter((option) => option !== question.correctOption);
+      expect(wrong.every((option) => option.startsWith("Wrong"))).toBe(true);
+    }
+  });
+
   it("reveals nothing about correctness while the paper is open", () => {
     const paper = createPaper(db, examId, { questionCount: 6, seed: 4 })!;
     const questions = paperQuestions(db, paper.id);

@@ -35,6 +35,7 @@ import {
 
 export * from "./paper";
 export { difference, rejectRewrite, rewriteQuestions } from "./rewrite";
+export { acceptOptions, writeOptions } from "./options";
 
 export function loadPaperCards(db: Db, examId: string): PaperCard[] {
   return db
@@ -73,6 +74,11 @@ export type PaperRequest = PaperScope & {
   rephrased?: Map<string, string>;
   /** How hard typed answers on this paper are marked. */
   strictness?: string | null;
+  /**
+   * Wrong options written for each question by card id (`writeOptions`);
+   * anything missing takes its options from the deck.
+   */
+  written?: Map<string, string[]>;
 };
 
 export function createPaper(
@@ -132,7 +138,10 @@ export function createPaper(
             misconceptions: card.misconceptions,
           },
           mcqDeck,
-          { seed: request.seed === undefined ? undefined : request.seed + position },
+          {
+            seed: request.seed === undefined ? undefined : request.seed + position,
+            written: request.written?.get(card.id),
+          },
         )
       : [],
   );
