@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Calculator, Clock, FileText, Layers, Loader2, RefreshCw, Send } from "lucide-react";
+import { ArrowDown, Calculator, Clock, FileText, Layers, Loader2, RefreshCw, Send } from "lucide-react";
 import { toast } from "@/lib/notify";
 
 import { CalculatorPanel } from "@/components/cards/number-tools";
@@ -111,6 +111,8 @@ export function PracticeRunner({
   const [remaining, setRemaining] = useState(paper?.remainingMs ?? null);
   const [calcOpen, setCalcOpen] = useState(false);
   const [rewriting, setRewriting] = useState(false);
+  // Set when Submit is pressed with questions left blank, to ask once.
+  const [confirmBlank, setConfirmBlank] = useState(false);
 
   // Setup form
   const [count, setCount] = useState("20");
@@ -155,6 +157,11 @@ export function PracticeRunner({
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper?.id, remaining !== null]);
+
+  function choose(questionId: string, option: string) {
+    setAnswers((prev) => ({ ...prev, [questionId]: option }));
+    void answerQuestion(questionId, option);
+  }
 
   async function handleStart() {
     setBusy(true);
@@ -236,6 +243,11 @@ export function PracticeRunner({
 
   async function handleSubmit(automatic = false) {
     if (!paper) return;
+    if (!automatic && !confirmBlank && answered < questions.length) {
+      setConfirmBlank(true);
+      return;
+    }
+    setConfirmBlank(false);
     setBusy(true);
 
     const marked = await submit(examId, paper.id);
@@ -481,12 +493,56 @@ export function PracticeRunner({
           </div>
         </div>
         <Progress value={(answered / Math.max(questions.length, 1)) * 100} />
+        <TimeAnnouncer remaining={remaining} />
+        {confirmBlank && answered < questions.length ? (
+          <div
+            role="alert"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm"
+          >
+            <span>
+              {questions.length - answered === 1
+                ? "One question is"
+                : `${questions.length - answered} questions are`}{" "}
+              still blank. Blank answers are marked wrong.
+            </span>
+            <span className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setConfirmBlank(false);
+                  goToBlank(questions, answers);
+                }}
+              >
+                Keep going
+              </Button>
+              <Button size="sm" disabled={busy} onClick={() => void handleSubmit()}>
+                Submit anyway
+              </Button>
+            </span>
+          </div>
+        ) : answered > 0 && answered < questions.length ? (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => goToBlank(questions, answers)}
+            >
+              <ArrowDown className="size-3" />
+              Next unanswered
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {questions.map((question) => (
-        <Card key={question.id}>
+        <Card key={question.id} id={`question-${question.id}`} className="scroll-mt-40">
           <CardHeader>
-            <CardTitle className="text-base leading-snug break-words">
+            <CardTitle
+              id={`prompt-${question.id}`}
+              className="text-base leading-snug break-words"
+            >
               <span className="text-muted-foreground mr-2 tabular-nums">
                 {question.position + 1}.
               </span>
@@ -495,25 +551,68 @@ export function PracticeRunner({
           </CardHeader>
           <CardContent>
             {question.format === "mcq" ? (
-              <div className="space-y-2">
-                {question.options.map((option) => (
-                  <Button
-                    key={option}
-                    variant={answers[question.id] === option ? "default" : "outline"}
-                    className="h-auto w-full justify-start py-2.5 text-left whitespace-normal"
-                    onClick={() => {
-                      setAnswers((prev) => ({ ...prev, [question.id]: option }));
-                      void answerQuestion(question.id, option);
-                    }}
-                  >
-                    {option}
-                  </Button>
-                ))}
+              <div
+                role="radiogroup"
+                aria-labelledby={`prompt-${question.id}`}
+                className="space-y-2"
+                onKeyDown={(event) => {
+                  // 1-4 or A-D picks an option; arrows move between them.
+                  const pick = optionForKey(event.key, question.options.length);
+                  const buttons = [
+                    ...event.currentTarget.querySelectorAll<HTMLButtonElement>("[role=radio]"),
+                  ];
+                  if (pick !== null) {
+                    event.preventDefault();
+                    choose(question.id, question.options[pick]);
+                    buttons[pick]?.focus();
+                    return;
+                  }
+                  const step =
+                    event.key === "ArrowDown" || event.key === "ArrowRight"
+                      ? 1
+                      : event.key === "ArrowUp" || event.key === "ArrowLeft"
+                        ? -1
+                        : 0;
+                  if (step === 0) return;
+                  event.preventDefault();
+                  const at = buttons.indexOf(document.activeElement as HTMLButtonElement);
+                  const next = (Math.max(at, 0) + step + buttons.length) % buttons.length;
+                  buttons[next]?.focus();
+                }}
+              >
+                {question.options.map((option, i) => {
+                  const selected = answers[question.id] === option;
+                  const anySelected = question.options.includes(answers[question.id] ?? "");
+                  return (
+                    <Button
+                      key={option}
+                      role="radio"
+                      aria-checked={selected}
+                      tabIndex={selected || (!anySelected && i === 0) ? 0 : -1}
+                      variant={selected ? "default" : "outline"}
+                      className="h-auto w-full justify-start gap-3 py-2.5 text-left whitespace-normal"
+                      onClick={() => choose(question.id, option)}
+                    >
+                      <span
+                        aria-hidden
+                        className={
+                          selected
+                            ? "border-primary-foreground/50 flex size-5 shrink-0 items-center justify-center rounded border text-[11px] font-semibold"
+                            : "text-muted-foreground flex size-5 shrink-0 items-center justify-center rounded border text-[11px] font-semibold"
+                        }
+                      >
+                        {String.fromCharCode(65 + i)}
+                      </span>
+                      {option}
+                    </Button>
+                  );
+                })}
               </div>
             ) : (
               <Textarea
                 value={answers[question.id] ?? ""}
                 placeholder="Your answer…"
+                aria-labelledby={`prompt-${question.id}`}
                 className="min-h-24"
                 onChange={(event) =>
                   setAnswers((prev) => ({ ...prev, [question.id]: event.target.value }))
@@ -544,5 +643,44 @@ export function PracticeRunner({
 
       <CalculatorPanel open={calcOpen} onOpenChange={setCalcOpen} />
     </div>
+  );
+}
+
+/** The option a key picks: 1-9 or A-I, within the options there are. */
+function optionForKey(key: string, count: number): number | null {
+  const index = /^[1-9]$/.test(key)
+    ? Number(key) - 1
+    : /^[a-i]$/i.test(key)
+      ? key.toLowerCase().charCodeAt(0) - 97
+      : -1;
+  return index >= 0 && index < count ? index : null;
+}
+
+/** Scrolls to the first blank question and puts focus in it. */
+function goToBlank(questions: Question[], answers: Record<string, string>) {
+  const blank = questions.find((question) => (answers[question.id] ?? "").trim() === "");
+  if (!blank) return;
+  const card = document.getElementById(`question-${blank.id}`);
+  card?.scrollIntoView({ behavior: "smooth", block: "start" });
+  card?.querySelector<HTMLElement>("textarea, [role=radio]")?.focus({ preventScroll: true });
+}
+
+/**
+ * Says the time left aloud to a screen reader at five minutes and at one,
+ * rather than every second the badge ticks.
+ */
+function TimeAnnouncer({ remaining }: { remaining: number | null }) {
+  const message =
+    remaining === null
+      ? ""
+      : remaining <= 60_000 && remaining > 0
+        ? "One minute left."
+        : remaining <= 5 * 60_000 && remaining > 60_000
+          ? "Five minutes left."
+          : "";
+  return (
+    <p aria-live="polite" className="sr-only">
+      {message}
+    </p>
   );
 }
