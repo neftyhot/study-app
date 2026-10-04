@@ -6,7 +6,7 @@
  * it is `isUserEdited`, which is what stops a regeneration from deleting work
  * the model did not do.
  */
-import { inArray } from "drizzle-orm";
+import { and, eq, gt, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import { cardRubrics, flashcards, type cardTypes } from "@/db/schema";
@@ -14,6 +14,7 @@ import { cardRubrics, flashcards, type cardTypes } from "@/db/schema";
 type CardType = (typeof cardTypes)[number];
 
 import { isSafeStoredPath } from "@/lib/ingest/safe-path";
+import { chronologicalCardOrder } from "@/lib/order";
 
 import { clozeAnswers, clozeQuestion, hasCloze } from "./cloze";
 
@@ -136,6 +137,93 @@ export function createManualCard(db: Db, input: ManualCardInput) {
   });
 }
 
+/**
+ * Where new cards go in a deck: after everything (the default), before
+ * everything, or straight after one card that is already there.
+ */
+export type CardPlacement = "end" | "start" | { after: string };
+
+/**
+ * Moves freshly written cards to a place in the deck's order.
+ *
+ * A card's place is its order key (see lib/order.ts), so the new cards take
+ * the key of the card they sit next to and the cards behind them in that
+ * group shift along. Nothing is linked to a slide: a card typed in between
+ * two cards from slide 14 was still not written from slide 14.
+ */
+export function placeCards(
+  db: Db,
+  examId: string,
+  cardIds: string[],
+  placement: CardPlacement,
+): void {
+  if (placement === "end" || cardIds.length === 0) return;
+
+  const others = db
+    .select({
+      id: flashcards.id,
+      topic: flashcards.topic,
+      sourceDocumentIndex: flashcards.sourceDocumentIndex,
+      sourcePageNumber: flashcards.sourcePageNumber,
+      documentOrderIndex: flashcards.documentOrderIndex,
+    })
+    .from(flashcards)
+    .where(eq(flashcards.examId, examId))
+    .orderBy(...chronologicalCardOrder())
+    .all()
+    .filter((card) => !cardIds.includes(card.id));
+
+  const anchor =
+    placement === "start"
+      ? others[0]
+      : others.find((card) => card.id === placement.after);
+  // An empty deck, or a card deleted while the editor was open: the end is
+  // where the cards already are.
+  if (!anchor) return;
+
+  const before = placement === "start";
+  const first = anchor.documentOrderIndex + (before ? 0 : 1);
+  const group = and(
+    eq(flashcards.examId, examId),
+    anchor.sourceDocumentIndex === null
+      ? isNull(flashcards.sourceDocumentIndex)
+      : eq(flashcards.sourceDocumentIndex, anchor.sourceDocumentIndex),
+    anchor.sourcePageNumber === null
+      ? isNull(flashcards.sourcePageNumber)
+      : eq(flashcards.sourcePageNumber, anchor.sourcePageNumber),
+  );
+
+  db.transaction((tx) => {
+    tx.update(flashcards)
+      .set({
+        documentOrderIndex: sql`${flashcards.documentOrderIndex} + ${cardIds.length}`,
+      })
+      .where(
+        and(
+          group,
+          before
+            ? gte(flashcards.documentOrderIndex, anchor.documentOrderIndex)
+            : gt(flashcards.documentOrderIndex, anchor.documentOrderIndex),
+        ),
+      )
+      .run();
+
+    cardIds.forEach((id, offset) => {
+      tx.update(flashcards)
+        .set({
+          // A card with no topic of its own joins its neighbour's, so it does
+          // not split that topic's run of cards in two.
+          topic: sql`coalesce(${flashcards.topic}, ${anchor.topic})`,
+          sourceDocumentIndex: anchor.sourceDocumentIndex,
+          sourcePageNumber: anchor.sourcePageNumber,
+          documentOrderIndex: first + offset,
+        })
+        .where(eq(flashcards.id, id))
+        .run();
+    });
+  });
+}
+
 /** Problems with one card of a set, by its position in the set. */
 export type SetProblem = { index: number; problems: string[] };
 
@@ -150,6 +238,7 @@ export function createManualCards(
   db: Db,
   examId: string,
   inputs: Omit<ManualCardInput, "examId">[],
+  placement: CardPlacement = "end",
 ): { created: number } | { problems: SetProblem[] } {
   const rows = inputs
     .map((input, index) => ({ input: { ...input, examId }, index }))
@@ -163,7 +252,8 @@ export function createManualCards(
   if (problems.length > 0) return { problems };
 
   db.transaction(() => {
-    for (const { input } of rows) createManualCard(db, input);
+    const ids = rows.map(({ input }) => createManualCard(db, input).id);
+    placeCards(db, examId, ids, placement);
   });
 
   return { created: rows.length };

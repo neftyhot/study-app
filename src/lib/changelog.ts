@@ -6,6 +6,16 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.8.0",
+    date: "2026-10-04",
+    notes: [
+      "Decks you type in yourself can be studied: the deck page now shows Study, Learn and Practice Exam for them, with no file upload needed.",
+      "Add a card anywhere in a deck: every card in the flashcard list has an \"Add a card here\" button under it, and Add cards lets you pick where a whole batch goes.",
+      "Import from Quizlet: on Quizlet choose Export and Copy text, then paste it into Import from Quizlet when creating a deck or adding cards.",
+      "The flashcard list has a Learn these button next to Study these.",
+    ],
+  },
+  {
     version: "1.7.2",
     date: "2026-10-04",
     notes: [

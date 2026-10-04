@@ -5,6 +5,7 @@ import {
   ClipboardCheck,
   FolderOpen,
   Layers,
+  ListPlus,
   MessageCircleQuestion,
   Upload,
 } from "lucide-react";
@@ -94,6 +95,8 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
     hasCoverage: planData.hasCoverage,
   });
 
+  const hasFiles = stats.sourceFiles > 0;
+
   return (
     <div className="space-y-8">
       <div className="flex items-start justify-between gap-3">
@@ -148,7 +151,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
         <StatCard label="Flashcards" value={stats.flashcards} />
       </div>
 
-      {stats.sourceFiles === 0 ? (
+      {stats.sourceFiles === 0 && stats.flashcards === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
@@ -160,11 +163,17 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
               them.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-wrap gap-2">
             <Button asChild size="lg">
               <Link href={`/exams/${examId}/sources`}>
                 <Upload className="size-4" />
                 Add your slides
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href={`/exams/${examId}/cards/new`}>
+                <ListPlus className="size-4" />
+                Type in your own cards
               </Link>
             </Button>
           </CardContent>
@@ -215,18 +224,24 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
             )}
           </CardHeader>
           <CardContent>
-            <ol className="grid gap-3 sm:grid-cols-3">
+            <ol
+              className={`grid gap-3 ${hasFiles ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}
+            >
+              {/* A deck typed in by hand has no slides to summarise, so its
+                  path starts at the cards. */}
+              {hasFiles ? (
+                <PathStep
+                  step={1}
+                  icon={<BookOpen className="size-4" />}
+                  title="Study Guide"
+                  blurb="A plain-English summary of your slides, with each point linked to its slide."
+                  href={`/exams/${examId}/primer`}
+                  action="Read Study Guide"
+                  primary={stats.flashcards === 0}
+                />
+              ) : null}
               <PathStep
-                step={1}
-                icon={<BookOpen className="size-4" />}
-                title="Study Guide"
-                blurb="A plain-English summary of your slides, with each point linked to its slide."
-                href={`/exams/${examId}/primer`}
-                action="Read Study Guide"
-                primary={stats.flashcards === 0}
-              />
-              <PathStep
-                step={2}
+                step={hasFiles ? 2 : 1}
                 icon={<Layers className="size-4" />}
                 title="Flashcards"
                 blurb={
@@ -256,7 +271,7 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
                 }
               />
               <PathStep
-                step={3}
+                step={hasFiles ? 3 : 2}
                 icon={<ClipboardCheck className="size-4" />}
                 title="Practice Exam"
                 blurb="A timed test from your cards, marked as you'd be marked."

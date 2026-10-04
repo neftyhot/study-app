@@ -11,13 +11,22 @@
  */
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Loader2, Plus, Star, Trash2 } from "lucide-react";
+import { ClipboardPaste, Loader2, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "@/lib/notify";
 
 import { ImageField, type Attachment } from "@/components/cards/card-builder";
 import { DetailToggle, useDetailMode } from "@/components/cards/detail-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -33,6 +42,12 @@ import {
   createDeckAction,
   type SetCardInput,
 } from "@/lib/cards/actions";
+import {
+  guessSideSeparator,
+  parseImportedCards,
+  type ImportedCard,
+} from "@/lib/cards/import";
+import type { CardPlacement } from "@/lib/cards/manual";
 import { createCourseAction } from "@/lib/manage/actions";
 
 type Row = {
@@ -48,6 +63,8 @@ type Row = {
 
 const NEW_SUBJECT = "__new_subject__";
 const STARTING_ROWS = 3;
+const AT_END = "__end__";
+const AT_START = "__start__";
 
 let nextKey = 0;
 function blankRow(): Row {
@@ -74,6 +91,10 @@ export function CardSetEditor(
         /** Adding to a deck that exists. */
         examId: string;
         deckTitle: string;
+        /** The deck as it stands, so the new cards can go between two of them. */
+        cards?: { id: string; number: number; question: string }[];
+        /** The card to start with as "after this one". */
+        defaultAfter?: string;
       }
     | {
         /** Making a new deck; the subjects it can go in. */
@@ -97,6 +118,12 @@ export function CardSetEditor(
       : (props.defaultCourseId ?? props.courses[0]?.id ?? NEW_SUBJECT),
   );
   const [newSubject, setNewSubject] = useState("");
+  const deckCards = existing ? (props.cards ?? []) : [];
+  const [place, setPlace] = useState(() =>
+    existing && deckCards.some((card) => card.id === props.defaultAfter)
+      ? (props.defaultAfter ?? AT_END)
+      : AT_END,
+  );
   const [saving, setSaving] = useState(false);
   const [invalid, setInvalid] = useState<Set<number>>(new Set());
 
@@ -140,6 +167,19 @@ export function CardSetEditor(
     const row = blankRow();
     focusKey.current = row.key;
     setRows((current) => [...current, row]);
+  }
+
+  /** Pasted cards fill the empty rows' place rather than sitting under them. */
+  function addImported(cards: ImportedCard[]) {
+    const imported = cards.map((card) => ({
+      ...blankRow(),
+      front: card.front,
+      back: card.back,
+    }));
+    setRows((current) => [...current.filter(filled), ...imported]);
+    toast.success(
+      `Brought in ${imported.length} card${imported.length === 1 ? "" : "s"} — check them, then save`,
+    );
   }
 
   function removeRow(key: number) {
@@ -219,7 +259,9 @@ export function CardSetEditor(
           : { question: row.front, directAnswer: row.back },
       );
 
-      const result = await createCardSetAction(target, cards);
+      const placement: CardPlacement =
+        place === AT_END ? "end" : place === AT_START ? "start" : { after: place };
+      const result = await createCardSetAction(target, cards, placement);
       if (!result.ok) {
         setInvalid(new Set(result.problems.map((problem) => toSave[problem.index]?.key)));
         for (const problem of result.problems.slice(0, 3)) {
@@ -254,6 +296,7 @@ export function CardSetEditor(
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <ImportDialog onImport={addImported} />
           <DetailToggle value={mode} onChange={setMode} />
           <Button onClick={() => void save()} disabled={saving}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : null}
@@ -299,6 +342,28 @@ export function CardSetEditor(
           </div>
         </div>
       )}
+
+      {deckCards.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="place" className="text-sm">
+            Put them
+          </Label>
+          <Select value={place} onValueChange={setPlace}>
+            <SelectTrigger id="place" className="w-full max-w-md">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-80">
+              <SelectItem value={AT_END}>At the end of the deck</SelectItem>
+              <SelectItem value={AT_START}>At the start of the deck</SelectItem>
+              {deckCards.map((card) => (
+                <SelectItem key={card.id} value={card.id}>
+                  After #{card.number}: {clip(card.question)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
 
       <ol className="space-y-4">
         {rows.map((row, index) => (
@@ -426,6 +491,198 @@ export function CardSetEditor(
           {saving ? <Loader2 className="size-4 animate-spin" /> : null}
           {existing ? "Add cards" : "Create"}
         </Button>
+      </div>
+    </div>
+  );
+}
+
+function clip(text: string, length = 48) {
+  const line = text.replace(/\s+/g, " ").trim();
+  return line.length > length ? `${line.slice(0, length)}…` : line;
+}
+
+const SIDE_SEPARATORS = [
+  { id: "\t", label: "Tab" },
+  { id: ",", label: "Comma" },
+  { id: " - ", label: "Dash ( - )" },
+] as const;
+
+const CARD_SEPARATORS = [
+  { id: "\n", label: "New line" },
+  { id: ";", label: "Semicolon" },
+] as const;
+
+const CUSTOM = "__custom__";
+
+/**
+ * Bringing a set over from Quizlet.
+ *
+ * Quizlet will not hand a set to another app, and it turns away anything that
+ * is not a browser, so a link cannot be fetched. What it does have is Export,
+ * which gives the whole set as text — and pasting that here is three clicks.
+ */
+function ImportDialog({ onImport }: { onImport: (cards: ImportedCard[]) => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [side, setSide] = useState<string>("\t");
+  const [customSide, setCustomSide] = useState("");
+  const [between, setBetween] = useState<string>("\n");
+  const [customBetween, setCustomBetween] = useState("");
+
+  const result = parseImportedCards(text, {
+    sideSeparator: side === CUSTOM ? customSide : side,
+    cardSeparator: between === CUSTOM ? customBetween : between,
+  });
+  const usable = result.cards.filter((card) => card.front || card.back);
+
+  function paste(value: string) {
+    // Only on the first paste: after that the choice is the student's.
+    if (!text.trim() && value.trim()) setSide(guessSideSeparator(value));
+    setText(value);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline">
+          <ClipboardPaste className="size-4" />
+          Import from Quizlet
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Import from Quizlet</DialogTitle>
+          <DialogDescription>
+            Open the set on Quizlet, click the <strong>⋯</strong> menu, choose{" "}
+            <strong>Export</strong>, then <strong>Copy text</strong> and paste it
+            here. A list copied from Word, Excel or Google Docs works too.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <Textarea
+            value={text}
+            rows={8}
+            autoFocus
+            aria-label="Pasted cards"
+            placeholder={"Term 1\tDefinition 1\nTerm 2\tDefinition 2"}
+            className="max-h-64 font-mono text-xs"
+            onChange={(event) => paste(event.target.value)}
+            onKeyDown={(event) => {
+              // A real tab, so a set can be typed or fixed up by hand here.
+              if (event.key !== "Tab" || event.shiftKey) return;
+              event.preventDefault();
+              const area = event.currentTarget;
+              const { selectionStart, selectionEnd } = area;
+              area.setRangeText("\t", selectionStart, selectionEnd, "end");
+              paste(area.value);
+            }}
+          />
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <SeparatorChoice
+              label="Between term and definition"
+              options={SIDE_SEPARATORS}
+              value={side}
+              custom={customSide}
+              onChange={setSide}
+              onCustom={setCustomSide}
+            />
+            <SeparatorChoice
+              label="Between cards"
+              options={CARD_SEPARATORS}
+              value={between}
+              custom={customBetween}
+              onChange={setBetween}
+              onCustom={setCustomBetween}
+            />
+          </div>
+
+          {usable.length > 0 ? (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                {usable.length} card{usable.length === 1 ? "" : "s"} found
+                {result.incomplete > 0 ? (
+                  <span className="text-muted-foreground font-normal">
+                    {" "}
+                    · {result.incomplete} missing a side — try another separator,
+                    or finish them after importing
+                  </span>
+                ) : null}
+              </p>
+              <ul className="divide-y rounded-lg border text-sm">
+                {usable.slice(0, 3).map((card, index) => (
+                  <li key={index} className="grid grid-cols-2 gap-3 px-3 py-2">
+                    <span className="break-words">{clip(card.front, 80)}</span>
+                    <span className="text-muted-foreground break-words">
+                      {clip(card.back, 80)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        <DialogFooter>
+          <Button
+            disabled={usable.length === 0}
+            onClick={() => {
+              onImport(usable);
+              setText("");
+              setOpen(false);
+            }}
+          >
+            Import {usable.length > 0 ? usable.length : ""} card
+            {usable.length === 1 ? "" : "s"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SeparatorChoice({
+  label,
+  options,
+  value,
+  custom,
+  onChange,
+  onCustom,
+}: {
+  label: string;
+  options: readonly { id: string; label: string }[];
+  value: string;
+  custom: string;
+  onChange: (value: string) => void;
+  onCustom: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}</Label>
+      <div className="flex gap-2">
+        <Select value={value} onValueChange={onChange}>
+          <SelectTrigger className="flex-1" aria-label={label}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
+              </SelectItem>
+            ))}
+            <SelectItem value={CUSTOM}>Something else…</SelectItem>
+          </SelectContent>
+        </Select>
+        {value === CUSTOM ? (
+          <Input
+            value={custom}
+            placeholder="e.g. ::"
+            aria-label={`${label}, custom`}
+            className="w-24"
+            onChange={(event) => onCustom(event.target.value)}
+          />
+        ) : null}
       </div>
     </div>
   );

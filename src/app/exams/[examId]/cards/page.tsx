@@ -101,6 +101,11 @@ export default async function CardsPage(
                 <Link href={`/exams/${examId}/study`}>Study these</Link>
               </Button>
             ) : null}
+            {cards.length > 0 ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/exams/${examId}/learn`}>Learn these</Link>
+              </Button>
+            ) : null}
           </div>
         </div>
         {cards.length > 0 ? (
@@ -129,6 +134,7 @@ export default async function CardsPage(
           examId={examId}
           cards={views}
           decks={decks.filter((deck) => deck.id !== examId)}
+          builderDecks={decks}
         />
       )}
     </div>

@@ -9,11 +9,13 @@ import {
   CardInputError,
   createManualCard,
   createManualCards,
+  placeCards,
   deleteCards,
   duplicateCards,
   moveCards,
   retagCards,
   setStarred,
+  type CardPlacement,
   type ManualCardInput,
 } from "./manual";
 
@@ -23,9 +25,14 @@ export type CreateResult =
 
 export async function createCardAction(
   input: ManualCardInput,
+  placement: CardPlacement = "end",
 ): Promise<CreateResult> {
   try {
-    const card = createManualCard(db, input);
+    const card = db.transaction(() => {
+      const created = createManualCard(db, input);
+      placeCards(db, input.examId, [created.id], placement);
+      return created;
+    });
     revalidatePath(`/exams/${input.examId}`);
     revalidatePath(`/exams/${input.examId}/cards`);
     return { ok: true, cardId: card.id };
@@ -40,8 +47,12 @@ export async function createCardAction(
 export type SetCardInput = Omit<ManualCardInput, "examId">;
 
 /** Saves a whole set of cards at once — the "type a deck in" editor. */
-export async function createCardSetAction(examId: string, cards: SetCardInput[]) {
-  const result = createManualCards(db, examId, cards);
+export async function createCardSetAction(
+  examId: string,
+  cards: SetCardInput[],
+  placement: CardPlacement = "end",
+) {
+  const result = createManualCards(db, examId, cards, placement);
   if ("problems" in result) return { ok: false as const, problems: result.problems };
 
   revalidatePath("/exams/[examId]", "layout");

@@ -17,8 +17,11 @@ import {
   courses,
   exams,
   flashcards,
+  sourceFiles,
+  sourceSlides,
   studyProgress,
 } from "@/db/schema";
+import { chronologicalCardOrder } from "@/lib/order";
 import { clearGeneratedCards } from "@/lib/generate";
 
 import {
@@ -293,6 +296,137 @@ describe("bulk actions", () => {
 });
 
 describe("createManualCards", () => {
+  const fronts = () =>
+    db
+      .select({ question: flashcards.question })
+      .from(flashcards)
+      .where(eq(flashcards.examId, examId))
+      .orderBy(...chronologicalCardOrder())
+      .all()
+      .map((card) => card.question);
+
+  it("puts new cards after the one they were added after", () => {
+    createManualCards(db, examId, [
+      { question: "A", directAnswer: "a" },
+      { question: "B", directAnswer: "b" },
+      { question: "C", directAnswer: "c" },
+    ]);
+    const a = db
+      .select()
+      .from(flashcards)
+      .where(eq(flashcards.question, "A"))
+      .get()!;
+
+    createManualCards(
+      db,
+      examId,
+      [
+        { question: "A1", directAnswer: "x" },
+        { question: "A2", directAnswer: "y" },
+      ],
+      { after: a.id },
+    );
+    expect(fronts()).toEqual(["A", "A1", "A2", "B", "C"]);
+
+    // A second insert at the same place lands directly after the card again.
+    createManualCards(db, examId, [{ question: "A0", directAnswer: "z" }], {
+      after: a.id,
+    });
+    expect(fronts()).toEqual(["A", "A0", "A1", "A2", "B", "C"]);
+  });
+
+  it("puts new cards first, or last by default", () => {
+    createManualCards(db, examId, [
+      { question: "A", directAnswer: "a" },
+      { question: "B", directAnswer: "b" },
+    ]);
+
+    createManualCards(
+      db,
+      examId,
+      [{ question: "First", directAnswer: "x" }],
+      "start",
+    );
+    createManualCards(db, examId, [{ question: "Last", directAnswer: "y" }]);
+    createManualCards(db, examId, [{ question: "Gone", directAnswer: "z" }], {
+      after: "no-such-card",
+    });
+
+    expect(fronts()).toEqual(["First", "A", "B", "Last", "Gone"]);
+  });
+
+  it("places cards among ones made from slides, without claiming the slide", () => {
+    const file = db
+      .insert(sourceFiles)
+      .values({
+        examId,
+        filename: "heart.pptx",
+        fileType: "pptx",
+        role: "slides",
+        rawPath: "x",
+      })
+      .returning()
+      .get();
+    const slide = (index: number) =>
+      db
+        .insert(sourceSlides)
+        .values({ sourceFileId: file.id, index, rawText: "" } as never)
+        .returning()
+        .get();
+    const [one, two] = [slide(1), slide(2)];
+    const card = (question: string, sourceSlideId: string) =>
+      db
+        .insert(flashcards)
+        .values({ examId, question, directAnswer: "-", sourceSlideId })
+        .returning()
+        .get();
+    const s1 = card("S1", one.id);
+    card("S1b", one.id);
+    card("S2", two.id);
+
+    createManualCards(db, examId, [{ question: "Mine", directAnswer: "m" }], {
+      after: s1.id,
+    });
+
+    expect(fronts()).toEqual(["S1", "Mine", "S1b", "S2"]);
+    const mine = db
+      .select()
+      .from(flashcards)
+      .where(eq(flashcards.question, "Mine"))
+      .get()!;
+    expect(mine.sourceSlideId).toBeNull();
+  });
+
+  it("gives a card with no topic the topic of the card it follows", () => {
+    createManualCards(db, examId, [
+      { question: "A", directAnswer: "a", topic: "Valves" },
+    ]);
+    const a = db
+      .select()
+      .from(flashcards)
+      .where(eq(flashcards.question, "A"))
+      .get()!;
+
+    createManualCards(
+      db,
+      examId,
+      [
+        { question: "Plain", directAnswer: "p" },
+        { question: "Own", directAnswer: "o", topic: "Nodes" },
+      ],
+      { after: a.id },
+    );
+
+    const topicOf = (question: string) =>
+      db
+        .select()
+        .from(flashcards)
+        .where(eq(flashcards.question, question))
+        .get()!.topic;
+    expect(topicOf("Plain")).toBe("Valves");
+    expect(topicOf("Own")).toBe("Nodes");
+  });
+
   it("writes a whole set and skips the blank row at the end", () => {
     const result = createManualCards(db, examId, [
       { question: "Mitral valve", directAnswer: "Left AV valve" },

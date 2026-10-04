@@ -61,10 +61,13 @@ export { ImageField, type Attachment };
 export function CardBuilder({
   decks,
   defaultExamId,
+  after,
   trigger,
 }: {
   decks: DeckOption[];
   defaultExamId?: string;
+  /** The card of `defaultExamId` the new one goes straight after. */
+  after?: { id: string; number: number };
   trigger?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -88,6 +91,7 @@ export function CardBuilder({
           <BuilderForm
             decks={decks}
             defaultExamId={defaultExamId}
+            after={after}
             onSaved={() => {
               setOpen(false);
               router.refresh();
@@ -102,10 +106,12 @@ export function CardBuilder({
 function BuilderForm({
   decks,
   defaultExamId,
+  after,
   onSaved,
 }: {
   decks: DeckOption[];
   defaultExamId?: string;
+  after?: { id: string; number: number };
   onSaved: () => void;
 }) {
   const [examId, setExamId] = useState(defaultExamId ?? decks[0]?.id ?? "");
@@ -173,6 +179,8 @@ function BuilderForm({
               commonMisconceptions: lines(misconceptions),
             }
           : { examId: targetId, question, directAnswer: answer },
+        // A place in one deck means nothing in another.
+        after && targetId === defaultExamId ? { after: after.id } : "end",
       );
 
       if (!result.ok) {
@@ -191,7 +199,11 @@ function BuilderForm({
     <>
       <DialogHeader>
         <div className="flex flex-wrap items-center justify-between gap-2 pr-6">
-          <DialogTitle>New card</DialogTitle>
+          <DialogTitle>
+            {after && examId === defaultExamId
+              ? `New card after #${after.number}`
+              : "New card"}
+          </DialogTitle>
           <DetailToggle value={mode} onChange={setMode} />
         </div>
         <DialogDescription>

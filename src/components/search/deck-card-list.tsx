@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { FileText, Pencil, Sparkles } from "lucide-react";
+import { FileText, Pencil, Plus, Sparkles } from "lucide-react";
 
 import { BulkBar, type DeckTarget } from "@/components/cards/bulk-bar";
+import { CardBuilder, type DeckOption } from "@/components/cards/card-builder";
 import { CardEditor } from "@/components/cards/card-editor";
 import { DeckSearch } from "@/components/search/deck-search";
 import { SourceViewer } from "@/components/sources/source-viewer";
@@ -53,11 +54,14 @@ export function DeckCardList({
   examId,
   cards,
   decks = [],
+  builderDecks = [],
 }: {
   examId: string;
   cards: DeckCardView[];
   /** Other decks, for moving and copying a selection. */
   decks?: DeckTarget[];
+  /** Every deck, this one included, for the "add a card here" form. */
+  builderDecks?: DeckOption[];
 }) {
   const [matches, setMatches] = useState<string[] | null>(null);
   const [query, setQuery] = useState("");
@@ -142,128 +146,145 @@ export function DeckCardList({
 
           <div className="space-y-3">
             {topicCards.map((card) => (
-              <Card
-                key={card.id}
-                className={selected.has(card.id) ? "border-primary" : undefined}
-              >
-                <CardHeader>
-                  <CardTitle className="flex items-start gap-2 text-base leading-snug break-words">
-                    <Checkbox
-                      checked={selected.has(card.id)}
-                      onCheckedChange={() => toggle(card.id)}
-                      aria-label={`Select "${card.question.slice(0, 40)}"`}
-                      className="mt-1 shrink-0"
-                    />
-                    <span
-                      className="text-muted-foreground mt-0.5 shrink-0 font-mono text-xs"
-                      title={`Flashcard #${card.number} — ask the tutor about "flashcard ${card.number}"`}
-                    >
-                      #{card.number}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      {card.cardType === "cloze" ? (
-                        // Shown whole here: the browser is for reading the
-                        // deck, not for being tested by it.
-                        <Highlighted
-                          text={clozeRevealed(card.question)}
-                          query={query}
-                        />
-                      ) : (
-                        <Highlighted text={card.question} query={query} />
-                      )}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="shrink-0"
-                      aria-label="Edit card"
-                      aria-pressed={editing === card.id}
-                      onClick={() =>
-                        setEditing((current) => (current === card.id ? null : card.id))
-                      }
-                    >
-                      <Pencil />
-                    </Button>
-                  </CardTitle>
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    <Badge variant="outline">{card.cardType}</Badge>
-                    {card.hasAiSupplement ? (
-                      <Badge variant="outline" className="gap-1">
-                        <Sparkles className="size-3" />
-                        AI context added
-                      </Badge>
-                    ) : null}
-                    {card.isUserEdited ? (
-                      <Badge variant="outline">edited</Badge>
-                    ) : null}
-                  </div>
-                </CardHeader>
+              <div key={card.id} className="space-y-3">
+                <Card
+                  className={selected.has(card.id) ? "border-primary" : undefined}
+                >
+                  <CardHeader>
+                    <CardTitle className="flex items-start gap-2 text-base leading-snug break-words">
+                      <Checkbox
+                        checked={selected.has(card.id)}
+                        onCheckedChange={() => toggle(card.id)}
+                        aria-label={`Select "${card.question.slice(0, 40)}"`}
+                        className="mt-1 shrink-0"
+                      />
+                      <span
+                        className="text-muted-foreground mt-0.5 shrink-0 font-mono text-xs"
+                        title={`Flashcard #${card.number} — ask the tutor about "flashcard ${card.number}"`}
+                      >
+                        #{card.number}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        {card.cardType === "cloze" ? (
+                          // Shown whole here: the browser is for reading the
+                          // deck, not for being tested by it.
+                          <Highlighted
+                            text={clozeRevealed(card.question)}
+                            query={query}
+                          />
+                        ) : (
+                          <Highlighted text={card.question} query={query} />
+                        )}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="shrink-0"
+                        aria-label="Edit card"
+                        aria-pressed={editing === card.id}
+                        onClick={() =>
+                          setEditing((current) => (current === card.id ? null : card.id))
+                        }
+                      >
+                        <Pencil />
+                      </Button>
+                    </CardTitle>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <Badge variant="outline">{card.cardType}</Badge>
+                      {card.hasAiSupplement ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Sparkles className="size-3" />
+                          AI context added
+                        </Badge>
+                      ) : null}
+                      {card.isUserEdited ? (
+                        <Badge variant="outline">edited</Badge>
+                      ) : null}
+                    </div>
+                  </CardHeader>
 
-                {editing === card.id ? (
-                  <CardContent>
-                    <CardEditor
-                      cardId={card.id}
-                      card={{
-                        question: card.question,
-                        directAnswer: card.directAnswer,
-                        fullExplanation: card.fullExplanation,
-                      }}
-                      onSaved={() => undefined}
-                      onClose={() => {
-                        setEditing(null);
-                        router.refresh();
-                      }}
-                    />
-                  </CardContent>
-                ) : (
-                  <CardContent className="space-y-3 text-sm">
-                    <p className="break-words">
-                      <Highlighted text={card.directAnswer} query={query} />
-                    </p>
+                  {editing === card.id ? (
+                    <CardContent>
+                      <CardEditor
+                        cardId={card.id}
+                        card={{
+                          question: card.question,
+                          directAnswer: card.directAnswer,
+                          fullExplanation: card.fullExplanation,
+                        }}
+                        onSaved={() => undefined}
+                        onClose={() => {
+                          setEditing(null);
+                          router.refresh();
+                        }}
+                      />
+                    </CardContent>
+                  ) : (
+                    <CardContent className="space-y-3 text-sm">
+                      <p className="break-words">
+                        <Highlighted text={card.directAnswer} query={query} />
+                      </p>
 
-                    <Explanation
-                      // Re-read when an edit changes it; the state is only a seed.
-                      key={card.fullExplanation ?? ""}
-                      examId={examId}
-                      card={card}
-                      query={query}
-                    />
+                      <Explanation
+                        // Re-read when an edit changes it; the state is only a seed.
+                        key={card.fullExplanation ?? ""}
+                        examId={examId}
+                        card={card}
+                        query={query}
+                      />
 
-                    {card.essentialPoints.length > 0 ? (
-                      <div>
-                        <p className="text-xs font-medium">Must include</p>
-                        <ul className="text-muted-foreground list-disc pl-5 text-xs">
-                          {card.essentialPoints.map((point) => (
-                            <li key={point}>{point}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
+                      {card.essentialPoints.length > 0 ? (
+                        <div>
+                          <p className="text-xs font-medium">Must include</p>
+                          <ul className="text-muted-foreground list-disc pl-5 text-xs">
+                            {card.essentialPoints.map((point) => (
+                              <li key={point}>{point}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
 
-                    {card.source ? (
-                      <details className="bg-muted/50 rounded p-2">
-                        <summary className="cursor-pointer text-xs font-medium">
-                          Source: {card.source.label}
-                        </summary>
-                        {card.source.excerpt ? (
-                          <blockquote className="text-muted-foreground mt-2 border-l-2 pl-2 text-xs italic break-words">
-                            <Highlighted text={card.source.excerpt} query={query} />
-                          </blockquote>
-                        ) : null}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="mt-1 h-7 px-2 text-xs"
-                          onClick={() => setViewing(card.source)}
-                        >
-                          <FileText className="size-3" />
-                          Show original slide
-                        </Button>
-                      </details>
-                    ) : null}
-                  </CardContent>
-                )}
-              </Card>
+                      {card.source ? (
+                        <details className="bg-muted/50 rounded p-2">
+                          <summary className="cursor-pointer text-xs font-medium">
+                            Source: {card.source.label}
+                          </summary>
+                          {card.source.excerpt ? (
+                            <blockquote className="text-muted-foreground mt-2 border-l-2 pl-2 text-xs italic break-words">
+                              <Highlighted text={card.source.excerpt} query={query} />
+                            </blockquote>
+                          ) : null}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="mt-1 h-7 px-2 text-xs"
+                            onClick={() => setViewing(card.source)}
+                          >
+                            <FileText className="size-3" />
+                            Show original slide
+                          </Button>
+                        </details>
+                      ) : null}
+                    </CardContent>
+                  )}
+                </Card>
+                {builderDecks.length > 0 ? (
+                  <CardBuilder
+                    decks={builderDecks}
+                    defaultExamId={examId}
+                    after={{ id: card.id, number: card.number }}
+                    trigger={
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground hover:border-primary flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed py-1.5 text-xs font-medium transition-colors"
+                      >
+                        <Plus className="size-3.5" />
+                        Add a card here
+                      </button>
+                    }
+                  />
+                ) : null}
+              </div>
             ))}
           </div>
         </section>
