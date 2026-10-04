@@ -6,6 +6,18 @@ export type ChangelogEntry = { version: string; date: string; notes: string[] };
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.7.2",
+    date: "2026-10-04",
+    notes: [
+      "Fixed: slideshows and other files over 10 MB failed to upload with a JSON error. Files of any size up to 500 MB upload now, and if one does fail you get a message saying why.",
+      "Practice exams: retake just the questions you missed, look back at past papers, and review every question in full.",
+      "Practice exams: answer with the 1-4 or A-D keys, move with the arrow keys, jump to the next unanswered question, and get a check before handing in blank answers.",
+      "Practice exams have the calculator, better wrong options with no reworded duplicates, and a Rewrite options button.",
+      "Switch flashcard style right on the study and card list pages.",
+      "Security improvements to the desktop app.",
+    ],
+  },
+  {
     version: "1.7.1",
     date: "2026-09-30",
     notes: [

@@ -4,6 +4,20 @@ on:
   push:
     tags:
       - 'v*'
+  # Builds some of the platforms for the version in package.json, from the
+  # branch or tag it is run on. Run on a branch, no tag is pushed: publishing
+  # the draft makes the tag. To add the rest to a release already published,
+  # set it back to a draft, run this on its tag, and publish it again.
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Which builds to make'
+        type: choice
+        default: mac-arm64
+        options:
+          - mac-arm64
+          - rest
+          - all
 
 permissions:
   contents: write
@@ -15,19 +29,42 @@ jobs:
   # and can run side by side.
   create-draft:
     runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.draft.outputs.targets }}
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Create release draft
+        id: draft
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          TARGETS: ${{ inputs.targets }}
         run: |
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
-            || gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
-                 --title "${TAG#v}" --notes "" --verify-tag
+          if [ "$EVENT" = "push" ]; then
+            TAG="$REF_NAME"
+            TARGETS=all
+          else
+            TAG="v$(jq -r .version package.json)"
+          fi
+          DRAFT=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)
+          if [ -z "$DRAFT" ]; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
+              --title "${TAG#v}" --notes "" --target "$GITHUB_SHA"
+          elif [ "$DRAFT" = "false" ]; then
+            # Already published: electron-builder won't upload to it. This is
+            # also the tag push that publishing a draft built here sets off.
+            echo "Release $TAG is already published; nothing to build."
+            TARGETS=none
+          fi
+          echo "targets=$TARGETS" >> "$GITHUB_OUTPUT"
 
   build-macos:
     runs-on: macos-14
     needs: create-draft
+    if: contains(fromJSON('["all", "mac-arm64"]'), needs.create-draft.outputs.targets)
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -72,6 +109,7 @@ jobs:
   build-macos-x64:
     runs-on: macos-15-intel
     needs: create-draft
+    if: contains(fromJSON('["all", "rest"]'), needs.create-draft.outputs.targets)
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -114,6 +152,7 @@ jobs:
   build-windows:
     runs-on: windows-latest
     needs: create-draft
+    if: contains(fromJSON('["all", "rest"]'), needs.create-draft.outputs.targets)
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -150,6 +189,7 @@ jobs:
   build-windows-arm64:
     runs-on: windows-11-arm
     needs: create-draft
+    if: contains(fromJSON('["all", "rest"]'), needs.create-draft.outputs.targets)
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
