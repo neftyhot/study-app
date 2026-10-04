@@ -4,6 +4,14 @@ const nextConfig: NextConfig = {
   experimental: {
     cpus: 1,
     workerThreads: false,
+    /**
+     * src/proxy.ts runs in front of every request, and with a proxy in place
+     * Next buffers the request body and silently cuts it off past this size
+     * (10MB unless set). A cut-off upload can't be read as a form, so the
+     * route answered a bare 500. Sized to the upload route's 500 MB per-file
+     * cap plus the form's own framing; the panel sends one file per request.
+     */
+    proxyClientMaxBodySize: "512mb",
   },
   /**
    * better-sqlite3 is a native module — it must stay external to the server

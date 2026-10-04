@@ -87,18 +87,28 @@ export function QuickStart({
   async function uploadRole(examId: string, role: Role) {
     const files = picked.filter((p) => p.role === role);
     if (files.length === 0) return 0;
-    const body = new FormData();
-    body.set("role", role);
-    for (const { file } of files) body.append("files", file);
-    const response = await fetch(`/api/exams/${examId}/files`, {
-      method: "POST",
-      body,
-    });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error ?? "Upload failed");
-    return (payload.results as { status: string }[]).filter(
-      (r) => r.status === "ready" || r.status === "unchanged",
-    ).length;
+    // One file per request: several decks in a single body can run past what
+    // the server will buffer (proxyClientMaxBodySize in next.config.ts).
+    let ready = 0;
+    for (const { file } of files) {
+      const body = new FormData();
+      body.set("role", role);
+      body.append("files", file);
+      const response = await fetch(`/api/exams/${examId}/files`, {
+        method: "POST",
+        body,
+      });
+      // A reply that isn't JSON means the server fell over before the route
+      // could answer; don't let the parse error be what the user reads.
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) {
+        throw new Error(payload?.error ?? `Couldn't upload ${file.name}`);
+      }
+      ready += (payload.results as { status: string }[]).filter(
+        (r) => r.status === "ready" || r.status === "unchanged",
+      ).length;
+    }
+    return ready;
   }
 
   async function generate() {

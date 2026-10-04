@@ -47,39 +47,55 @@ export function UploadPanel({ examId }: { examId: string }) {
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
 
-    const body = new FormData();
-    body.set("role", role);
-    for (const file of Array.from(files)) body.append("files", file);
-
     setBusy(true);
     setResults([]);
+
+    // One file per request: a batch of decks in a single body can run past
+    // what the server will buffer, and one bad file shouldn't sink the rest.
+    let ready = 0;
+    for (const file of Array.from(files)) {
+      const result = await uploadOne(file);
+      if (result.status === "ready") ready += 1;
+      setResults((previous) => [...previous, result]);
+    }
+
+    if (ready > 0) toast.success(`Extracted ${ready} file(s)`);
+
+    // Refresh the server components so counts and the source list update.
+    router.refresh();
+
+    setBusy(false);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  async function uploadOne(file: File): Promise<UploadResult> {
+    const failed = (error: string): UploadResult => ({
+      filename: file.name,
+      status: "failed",
+      error,
+    });
+
+    const body = new FormData();
+    body.set("role", role);
+    body.append("files", file);
 
     try {
       const response = await fetch(`/api/exams/${examId}/files`, {
         method: "POST",
         body,
       });
-      const payload = await response.json();
+      // A reply that isn't JSON means the server fell over before the route
+      // could answer; don't let the parse error be what the user reads.
+      const payload = await response.json().catch(() => null);
 
-      if (!response.ok) {
-        toast.error(payload.error ?? "Upload failed");
-        return;
+      if (!response.ok || !payload?.results?.[0]) {
+        return failed(
+          payload?.error ?? `Upload failed (server answered ${response.status})`,
+        );
       }
-
-      setResults(payload.results);
-
-      const ready = payload.results.filter(
-        (r: UploadResult) => r.status === "ready",
-      ).length;
-      if (ready > 0) toast.success(`Extracted ${ready} file(s)`);
-
-      // Refresh the server components so counts and the source list update.
-      router.refresh();
+      return payload.results[0];
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Upload failed");
-    } finally {
-      setBusy(false);
-      if (inputRef.current) inputRef.current.value = "";
+      return failed(error instanceof Error ? error.message : "Upload failed");
     }
   }
 

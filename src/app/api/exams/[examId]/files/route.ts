@@ -36,7 +36,21 @@ export async function POST(
     return Response.json({ error: "Exam not found" }, { status: 404 });
   }
 
-  const form = await request.formData();
+  // A body that arrives cut short (see proxyClientMaxBodySize in
+  // next.config.ts) or otherwise mangled can't be read as a form. Answer in
+  // JSON so the panel can say what happened instead of choking on the reply.
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return Response.json(
+      {
+        error:
+          "That upload didn't arrive in one piece — it may be too large. Try adding the files one at a time.",
+      },
+      { status: 413 },
+    );
+  }
   const uploads = form.getAll("files").filter((f) => f instanceof File);
   const roleInput = form.get("role");
   const role: Role =
