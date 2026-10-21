@@ -9,6 +9,9 @@
  */
 import type { Db } from "@/db/client";
 import { readSetting, writeSetting } from "@/lib/settings";
+import { isSource, SOURCES, type Source } from "@/lib/sources";
+
+export { isSource, SOURCE_LABELS, SOURCES, type Source } from "@/lib/sources";
 
 export const FUNNEL_EVENTS = [
   "first_launch",
@@ -35,17 +38,6 @@ export type GenerationBucket = (typeof GENERATION_BUCKETS)[number];
 /** A failed first generation, by kind only. */
 export const GENERATION_ERRORS = ["key", "quota", "network", "file", "model", "other"] as const;
 export type GenerationError = (typeof GENERATION_ERRORS)[number];
-
-export const SOURCES = ["poster", "friend", "professor", "social", "other"] as const;
-export type Source = (typeof SOURCES)[number];
-
-export const SOURCE_LABELS: Record<Source, string> = {
-  poster: "A poster",
-  friend: "A friend",
-  professor: "A professor",
-  social: "Social media",
-  other: "Somewhere else",
-};
 
 const FUNNEL_KEY = "funnel";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -74,10 +66,6 @@ function read(db: Db): FunnelState {
 
 function write(db: Db, state: FunnelState) {
   writeSetting(FUNNEL_KEY, JSON.stringify(state), db);
-}
-
-export function isSource(value: unknown): value is Source {
-  return SOURCES.includes(value as Source);
 }
 
 export function generationBucket(ms: number): GenerationBucket {

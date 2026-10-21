@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SOURCE_LABELS, SOURCES, type Source } from "@/lib/funnel";
+import { SOURCE_LABELS, SOURCES, type Source } from "@/lib/sources";
 import type { LocalModel } from "@/lib/llm/catalog";
 import { openSampleDeck } from "@/lib/sample/actions";
 import { PROVIDER_LABELS, type DownloadState } from "@/lib/settings-shared";
