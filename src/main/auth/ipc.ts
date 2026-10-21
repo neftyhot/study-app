@@ -199,6 +199,24 @@ export type LecturesApi = {
   onChange(listener: (snapshot: LecturesSnapshot) => void): () => void;
 };
 
+/** A `.meganstudy` file the operating system opened the app with. */
+export type OpenedShareFile = { name: string; text: string } | { name: string; error: string };
+
+/** What the preload puts on `window.studyApp.shareFiles` (electron/share-files.cjs). */
+export type ShareFilesApi = {
+  /** Files waiting to be opened; each is returned once. */
+  take(): Promise<OpenedShareFile[]>;
+  /** Called when another file arrives; returns an unsubscribe. */
+  onAvailable(listener: () => void): () => void;
+};
+
+/** "Open at login" (electron/reminders.cjs). Unsupported outside a packaged app. */
+export type LoginItemState = { supported: boolean; openAtLogin: boolean };
+export type RemindersApi = {
+  loginItem(): Promise<LoginItemState | null>;
+  setLoginItem(open: boolean): Promise<LoginItemState | null>;
+};
+
 declare global {
   interface Window {
     /** Present only inside the desktop app. */
@@ -208,6 +226,8 @@ declare global {
       update?: UpdateApi;
       tutor?: TutorApi;
       lectures?: LecturesApi;
+      shareFiles?: ShareFilesApi;
+      reminders?: RemindersApi;
     };
   }
 }

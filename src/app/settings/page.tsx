@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { FlashcardFormatSettings } from "@/components/settings/flashcard-format-settings";
+import { ReminderSettings } from "@/components/settings/reminder-settings";
 import { FeedbackCard } from "@/components/settings/feedback-card";
 import { StatsCard } from "@/components/settings/stats-card";
 import { APP_VERSION } from "@/lib/app-info";
@@ -29,6 +30,7 @@ import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/statu
 import { readAppearance, readFlashcardFormat, readGradingStrictness } from "@/lib/settings";
 import { db } from "@/db";
 import { installId } from "@/lib/telemetry";
+import { readReminders } from "@/lib/reminders/reminders";
 import { DeleteStatistics } from "@/components/settings/delete-statistics";
 import { getGradingSnapshot, getSetupSnapshot } from "@/lib/settings-actions";
 
@@ -85,6 +87,8 @@ export default async function SettingsPage() {
       <AppearanceSettings initial={readAppearance(db)} />
 
       <FlashcardFormatSettings initial={readFlashcardFormat(db)} />
+
+      <ReminderSettings initial={readReminders(db)} />
 
       <ProviderSettings
         snapshot={snapshot}

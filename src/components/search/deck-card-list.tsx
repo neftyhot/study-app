@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
-import { FileText, Pencil, Plus, Sparkles } from "lucide-react";
+import { Camera, FileText, Pencil, Plus, Sparkles } from "lucide-react";
 
 import { BulkBar, type DeckTarget } from "@/components/cards/bulk-bar";
 import { CardBuilder, type DeckOption } from "@/components/cards/card-builder";
@@ -35,6 +35,8 @@ export type DeckCardView = {
   fullExplanation: string | null;
   cardType: string;
   hasAiSupplement: boolean;
+  /** Read off a photo of the student's notes; worth checking against them. */
+  fromScan?: boolean;
   isUserEdited: boolean;
   essentialPoints: string[];
   source: { label: string; excerpt: string | null; slideId: string } | null;
@@ -195,6 +197,12 @@ export function DeckCardList({
                         <Badge variant="outline" className="gap-1">
                           <Sparkles className="size-3" />
                           AI context added
+                        </Badge>
+                      ) : null}
+                      {card.fromScan ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Camera className="size-3" />
+                          from a scan
                         </Badge>
                       ) : null}
                       {card.isUserEdited ? (

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ListPlus, Plus } from "lucide-react";
 
 import { CardBuilder } from "@/components/cards/card-builder";
+import { ScanNotesDialog } from "@/components/cards/scan-notes-dialog";
 import { CardStyleDefault } from "@/components/study/card-style-switch";
 import { DeckCardList, type DeckCardView } from "@/components/search/deck-card-list";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +48,7 @@ export default async function CardsPage(
       fullExplanation: card.fullExplanation,
       cardType: card.cardType,
       hasAiSupplement: card.hasAiSupplement,
+      fromScan: card.fromScan,
       isUserEdited: card.isUserEdited,
       essentialPoints: card.rubric?.essentialPoints ?? [],
       source: label && card.sourceSlide
@@ -96,6 +98,7 @@ export default async function CardsPage(
                 </Button>
               }
             />
+            <ScanNotesDialog examId={examId} />
             {cards.length > 0 ? (
               <Button asChild size="sm" variant="outline">
                 <Link href={`/exams/${examId}/study`}>Study these</Link>

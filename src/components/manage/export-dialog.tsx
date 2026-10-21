@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
-type Format = "anki" | "quizlet" | "remnote" | "csv" | "backup";
+type Format = "share" | "anki" | "quizlet" | "remnote" | "csv" | "backup";
 
 const TARGETS: {
   id: Format;
@@ -39,6 +39,13 @@ const TARGETS: {
   extension: string;
   keeps: string;
 }[] = [
+  {
+    id: "share",
+    name: "Share with a friend",
+    extension: ".meganstudy",
+    keeps:
+      "The cards and their rubrics, for someone else's Megan Study. Your review history stays with you; they open it as a new deck.",
+  },
   {
     id: "anki",
     name: "Anki",
@@ -98,7 +105,9 @@ export function ExportDialog({
     if (!controlled) setOwnOpen(next);
     onOpenChange?.(next);
   };
-  const [format, setFormat] = useState<Format>("anki");
+  const [format, setFormat] = useState<Format>("share");
+  // Off by default, like the catalog: a guide can quote the course materials.
+  const [withGuide, setWithGuide] = useState(false);
   const [term, setTerm] = useState<"tab" | "semicolon">("tab");
   const [text, setText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -108,6 +117,7 @@ export function ExportDialog({
 
   function href(inline = false) {
     if (format === "backup") return `/api/exams/${examId}/export`;
+    if (format === "share") return `/api/exams/${examId}/share${withGuide ? "?guide=1" : ""}`;
     const params = new URLSearchParams({ format });
     if (format === "quizlet") params.set("term", term);
     if (inline) params.set("inline", "1");
@@ -264,12 +274,30 @@ export function ExportDialog({
             </p>
           </div>
         ) : (
+          <>
+          {format === "share" ? (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="accent-primary mt-0.5 size-4"
+                checked={withGuide}
+                onChange={(event) => setWithGuide(event.target.checked)}
+              />
+              <span>
+                Include the study guide
+                <span className="text-muted-foreground block text-xs">
+                  Only if it doesn&apos;t copy your course materials word for word.
+                </span>
+              </span>
+            </label>
+          ) : null}
           <Button asChild className="w-fit">
             <a href={href()} download>
               <Download className="size-4" />
               Download {target.extension === "paste" ? ".txt" : target.extension}
             </a>
           </Button>
+          </>
         )}
       </DialogContent>
     </Dialog>

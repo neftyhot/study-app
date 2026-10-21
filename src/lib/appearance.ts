@@ -146,7 +146,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
     radius: 1,
     font: "rounded",
     cardStyle: "shadow",
-    palette: { background: "#effaf4", foreground: "#12352a", card: "#ffffff", primary: "#0d8a5c" },
+    palette: { background: "#effaf4", foreground: "#12352a", card: "#ffffff", primary: "#0b7a51" },
   },
 
   forest: {
@@ -250,13 +250,14 @@ export function themeBootScript(saved: ThemePreference | null): string {
 
 /* --------------------------------------------------------------- Settings */
 
-export const FONT_IDS = ["style", "sans", "rounded", "serif", "mono", "system"] as const;
+export const FONT_IDS = ["style", "sans", "rounded", "readable", "serif", "mono", "system"] as const;
 export type FontId = (typeof FONT_IDS)[number];
 
 export const FONT_LABELS: Record<FontId, string> = {
   style: "Style default",
   sans: "Geist",
   rounded: "Rounded (Nunito)",
+  readable: "Easy to read (Atkinson Hyperlegible)",
   serif: "Serif",
   mono: "Monospace",
   system: "System",
@@ -265,6 +266,7 @@ export const FONT_LABELS: Record<FontId, string> = {
 const FONT_STACKS: Record<Exclude<FontId, "style">, string> = {
   sans: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif",
   rounded: "var(--font-nunito), ui-rounded, ui-sans-serif, system-ui, sans-serif",
+  readable: "var(--font-atkinson), ui-sans-serif, system-ui, sans-serif",
   serif: 'ui-serif, Charter, "Iowan Old Style", Georgia, Cambria, "Times New Roman", serif',
   mono: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, monospace",
   system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',

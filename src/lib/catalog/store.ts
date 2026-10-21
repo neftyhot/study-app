@@ -17,41 +17,11 @@ import { db } from "@/db";
 import { serverUrl } from "@/lib/app-info";
 import { readApiKey, readProvider, readSetting, writeSetting } from "@/lib/settings";
 import { installId } from "@/lib/telemetry";
-import {
-  cardRubrics,
-  courses,
-  exams,
-  flashcards,
-  primerGuides,
-  primerSections,
-  primerTopics,
-} from "@/db/schema";
-import { insertDeck } from "@/lib/decks/insert";
-import type { CitedSentence } from "@/lib/primer/types";
+import { courses, exams } from "@/db/schema";
+import { insertDeck, type DeckCard, type DeckGuide } from "@/lib/decks/insert";
+import { snapshotCards, snapshotGuide } from "@/lib/decks/snapshot";
 
 import type { CatalogDeck, CatalogDeckDetail, CatalogKind, PublishInput } from "./types";
-
-type CardSnapshot = {
-  topic: string | null;
-  question: string;
-  directAnswer: string;
-  fullExplanation: string | null;
-  cardType: string;
-  sourceExcerpt: string | null;
-  essentialPoints: string[];
-};
-
-type GuideSnapshot = {
-  overview: string | null;
-  topics: { title: string; intro: string; sections: SectionSnapshot[] }[];
-};
-
-type SectionSnapshot = {
-  conceptName: string;
-  definition: string[];
-  breakdown: string[];
-  example: string[];
-};
 
 export class CatalogError extends Error {}
 
@@ -106,87 +76,6 @@ export function listOwnDecks() {
     .all();
 }
 
-function snapshotCards(examId: string): CardSnapshot[] {
-  const rows = db
-    .select({
-      topic: flashcards.topic,
-      question: flashcards.question,
-      directAnswer: flashcards.directAnswer,
-      fullExplanation: flashcards.fullExplanation,
-      cardType: flashcards.cardType,
-      sourceExcerpt: flashcards.sourceExcerpt,
-      excluded: flashcards.excluded,
-      essentialPoints: cardRubrics.essentialPoints,
-    })
-    .from(flashcards)
-    .leftJoin(cardRubrics, eq(cardRubrics.flashcardId, flashcards.id))
-    .where(eq(flashcards.examId, examId))
-    .orderBy(
-      asc(flashcards.sourceDocumentIndex),
-      asc(flashcards.sourcePageNumber),
-      asc(flashcards.documentOrderIndex),
-    )
-    .all();
-  return rows
-    .filter((r) => !r.excluded)
-    .map((r) => ({
-      topic: r.topic,
-      question: r.question,
-      directAnswer: r.directAnswer,
-      fullExplanation: r.fullExplanation,
-      cardType: r.cardType,
-      sourceExcerpt: r.sourceExcerpt,
-      essentialPoints: r.essentialPoints ?? [],
-    }));
-}
-
-const texts = (sentences: CitedSentence[] | null) => (sentences ?? []).map((s) => s.text);
-
-/** The fullest guide the deck has: the one with the most sections. */
-function snapshotGuide(examId: string): GuideSnapshot | null {
-  const guides = db.select().from(primerGuides).where(eq(primerGuides.examId, examId)).all();
-  let best: { guide: (typeof guides)[number]; count: number } | null = null;
-  for (const guide of guides) {
-    const count = db
-      .select({ id: primerSections.id })
-      .from(primerSections)
-      .where(eq(primerSections.guideId, guide.id))
-      .all().length;
-    if (count > 0 && (!best || count > best.count)) best = { guide, count };
-  }
-  if (!best) return null;
-
-  const topics = db
-    .select()
-    .from(primerTopics)
-    .where(eq(primerTopics.guideId, best.guide.id))
-    .orderBy(asc(primerTopics.orderIndex))
-    .all();
-  const sections = db
-    .select()
-    .from(primerSections)
-    .where(eq(primerSections.guideId, best.guide.id))
-    .orderBy(asc(primerSections.orderIndex))
-    .all();
-
-  const toSection = (s: (typeof sections)[number]): SectionSnapshot => ({
-    conceptName: s.conceptName,
-    definition: texts(s.definition),
-    breakdown: texts(s.breakdown),
-    example: texts(s.example),
-  });
-
-  const grouped = topics.map((t) => ({
-    title: t.title,
-    intro: t.intro,
-    sections: sections.filter((s) => s.topicId === t.id).map(toSection),
-  }));
-  const loose = sections.filter((s) => !s.topicId || !topics.some((t) => t.id === s.topicId));
-  if (loose.length > 0) grouped.push({ title: "Concepts", intro: "", sections: loose.map(toSection) });
-
-  return { overview: best.guide.overview, topics: grouped.filter((t) => t.sections.length > 0) };
-}
-
 const KINDS: CatalogKind[] = ["exam", "quiz", "test", "module", "assignment", "custom"];
 
 type Details = Pick<PublishInput, "title" | "college" | "professor" | "course" | "kind" | "customKind" | "term" | "description">;
@@ -237,9 +126,9 @@ function moderationKey(): { provider: ModerationProvider; key: string } {
 
 export async function publishDeck(input: PublishInput): Promise<CatalogDeck> {
   checkDetails(input);
-  const cards = snapshotCards(input.examId);
+  const cards = snapshotCards(db, input.examId);
   if (cards.length === 0) throw new CatalogError("That deck has no cards to share.");
-  const guide = input.includeGuide ? snapshotGuide(input.examId) : null;
+  const guide = input.includeGuide ? snapshotGuide(db, input.examId) : null;
   const moderation = moderationKey();
   return remote<CatalogDeck>("/catalog", {
     method: "POST",
@@ -294,8 +183,8 @@ export async function addToMyDecks(id: string): Promise<string> {
     title: string;
     course: string;
     term: string | null;
-    cards: CardSnapshot[];
-    guide: GuideSnapshot | null;
+    cards: DeckCard[];
+    guide: DeckGuide | null;
   }>(`/catalog/${encodeURIComponent(id)}/add`, { method: "POST" });
   if (row.cards.length === 0) throw new CatalogError("That deck has no cards.");
   const examId = insertDeck(db, {

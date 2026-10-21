@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Nunito } from "next/font/google";
+import localFont from "next/font/local";
 
 import { BootScript } from "@/components/boot-script";
 import { StatusBanner, StatusScreen, StatusWatcher } from "@/components/layout/app-status";
@@ -7,6 +8,7 @@ import { LaunchSplash } from "@/components/layout/launch-splash";
 import { SiteHeader } from "@/components/layout/site-header";
 import { RecorderProvider } from "@/components/lectures/recorder";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
+import { ShareFileListener } from "@/components/share/share-import";
 import { readLicenseStatus, TRIAL_DAYS } from "@/lib/license/status";
 import { TimeTracker } from "@/components/layout/time-tracker";
 import { WhatsNew } from "@/components/layout/whats-new";
@@ -52,6 +54,21 @@ const nunito = Nunito({
   subsets: ["latin"],
 });
 
+/**
+ * Atkinson Hyperlegible, the readable choice in Appearance. Shipped in the app
+ * (OFL, see fonts/atkinson/OFL.txt) so it works offline and loads nothing.
+ */
+const atkinson = localFont({
+  variable: "--font-atkinson",
+  display: "swap",
+  src: [
+    { path: "./fonts/atkinson/atkinson-hyperlegible-latin-400-normal.woff2", weight: "400", style: "normal" },
+    { path: "./fonts/atkinson/atkinson-hyperlegible-latin-400-italic.woff2", weight: "400", style: "italic" },
+    { path: "./fonts/atkinson/atkinson-hyperlegible-latin-700-normal.woff2", weight: "700", style: "normal" },
+    { path: "./fonts/atkinson/atkinson-hyperlegible-latin-700-italic.woff2", weight: "700", style: "italic" },
+  ],
+});
+
 export const metadata: Metadata = {
   title: "Megan Study",
   description:
@@ -87,7 +104,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${nunito.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${nunito.variable} ${atkinson.variable} h-full antialiased`}
     >
       <head>
         {/* The student's colors, corners and sizes, in place before first
@@ -137,6 +154,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 notes={CHANGELOG.find((entry) => entry.version === APP_VERSION)?.notes ?? []}
               />
               <TimeTracker />
+              <ShareFileListener />
               <UpgradeGuideHost />
               <main data-reveal className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
                 {children}

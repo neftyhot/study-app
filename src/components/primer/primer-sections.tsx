@@ -1,6 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { ReadAloudButton } from "@/components/speech/read-aloud-button";
+import { sectionSpeech } from "@/lib/speech/read-aloud";
 import {
   ChevronDown,
   ChevronRight,
@@ -433,10 +435,16 @@ function Concept({
 
   return (
     <article id={anchor} className="scroll-mt-6 space-y-3">
-      <h3 className="text-lg font-semibold">
-        <span className="text-muted-foreground mr-2 tabular-nums">{number}</span>
-        {section.conceptName}
-      </h3>
+      <div className="flex items-start gap-1">
+        <h3 className="flex-1 text-lg font-semibold">
+          <span className="text-muted-foreground mr-2 tabular-nums">{number}</span>
+          {section.conceptName}
+        </h3>
+        <ReadAloudButton
+          label={`Read "${section.conceptName}" aloud`}
+          text={() => sectionSpeech(section)}
+        />
+      </div>
       <CitedText sentences={section.definition} slides={slides} />
       <Breakdown format={format} sentences={section.breakdown} slides={slides} />
       {hasBuiltIn ? (

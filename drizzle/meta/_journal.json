@@ -218,6 +218,20 @@
       "when": 1792590414581,
       "tag": "0030_known_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1792602507077,
+      "tag": "0031_sync_ready",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792603473188,
+      "tag": "0032_scanned_cards",
+      "breakpoints": true
     }
   ]
 }

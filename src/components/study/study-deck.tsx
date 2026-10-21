@@ -18,6 +18,8 @@ import {
   Shuffle,
   Sparkles,
   Star,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 import { toast } from "@/lib/notify";
 
@@ -64,6 +66,7 @@ import {
 import { setFlashcardFormat } from "@/lib/settings-actions";
 import type { CalculationStep, NumberGiven } from "@/lib/primer/types";
 import { cn } from "@/lib/utils";
+import { canReadAloud, readAloud, speechText, stopReading } from "@/lib/speech/read-aloud";
 import {
   ExplainButton,
   MisconceptionList,
@@ -330,6 +333,31 @@ export function StudyDeck({
     void toggleCardStar(id);
   }, [current]);
 
+  // Read aloud: the side being shown. Hidden where the system has no voices;
+  // stops when the card changes so it never reads the next card's answer.
+  const [canSpeak, setCanSpeak] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCanSpeak(canReadAloud());
+  }, []);
+  useEffect(() => {
+    stopReading();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSpeaking(false);
+  }, [current?.id, revealed]);
+  useEffect(() => () => stopReading(), []);
+  const speak = useCallback(() => {
+    if (!current || !canSpeak) return;
+    if (speaking) {
+      stopReading();
+      setSpeaking(false);
+      return;
+    }
+    setSpeaking(true);
+    readAloud(speechText(current, revealed ? "answer" : "question"), () => setSpeaking(false));
+  }, [canSpeak, current, revealed, speaking]);
+
   // Keyboard shortcuts (PRD §4). Suppressed while typing so editing a card
   // does not grade it.
   useEffect(() => {
@@ -389,6 +417,10 @@ export function StudyDeck({
         case "D":
           void noClue();
           break;
+        case "r":
+        case "R":
+          speak();
+          break;
         default:
           break;
       }
@@ -396,7 +428,7 @@ export function StudyDeck({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [current, editing, grade, knowIt, move, noClue, position, star]);
+  }, [current, editing, grade, knowIt, move, noClue, position, speak, star]);
 
   async function start(
     filter: {
@@ -482,6 +514,18 @@ export function StudyDeck({
     <div className="flex flex-wrap items-start justify-between gap-2">
       {badges}
       <div className="flex gap-1">
+        {canSpeak ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={speak}
+            aria-pressed={speaking}
+            aria-label={speaking ? "Stop reading" : revealed ? "Read the answer aloud (R)" : "Read the question aloud (R)"}
+            title={speaking ? "Stop reading" : "Read aloud (R)"}
+          >
+            {speaking ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+          </Button>
+        ) : null}
         <Button
           variant="ghost"
           size="icon"
@@ -756,7 +800,7 @@ export function StudyDeck({
       ) : null}
 
       <div className="space-y-2">
-        <Progress value={(position / Math.max(queue.length, 1)) * 100} />
+        <Progress aria-label="Progress through this deck" value={(position / Math.max(queue.length, 1)) * 100} />
         <div className="text-muted-foreground flex flex-wrap justify-between gap-2 text-xs">
           <span title={`Card #${current.number} in lecture order`}>
             Card {uniqueSeen} of {uniqueTotal}

@@ -36,6 +36,21 @@ contextBridge.exposeInMainWorld("studyApp", {
   tutor: {
     captureScreen: () => ipcRenderer.invoke("tutor:capture-screen"),
   },
+  // `.meganstudy` files the operating system opened the app with; their text,
+  // never a path. See share-files.cjs.
+  shareFiles: {
+    take: () => ipcRenderer.invoke("share:take"),
+    onAvailable: (listener) => {
+      const forward = () => listener();
+      ipcRenderer.on("share:available", forward);
+      return () => ipcRenderer.removeListener("share:available", forward);
+    },
+  },
+  // "Open at login", for review reminders; see reminders.cjs.
+  reminders: {
+    loginItem: () => ipcRenderer.invoke("reminders:login-item"),
+    setLoginItem: (open) => ipcRenderer.invoke("reminders:set-login-item", open),
+  },
   // Lecture transcription, which runs in the main process; see lectures.cjs.
   lectures: {
     state: () => ipcRenderer.invoke("lectures:state"),

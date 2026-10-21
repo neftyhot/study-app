@@ -308,6 +308,7 @@ export function LearnMode({
     <div className="space-y-4">
       <div className="space-y-2">
         <Progress
+          aria-label="Progress through this round"
           value={
             roundTotal === 0
               ? 0
@@ -547,7 +548,7 @@ function RevealPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
+      <div className="flex flex-wrap items-center gap-2 text-sm font-medium" role="status">
         {reveal.correct ? (
           <>
             <CircleCheck className="size-4" />

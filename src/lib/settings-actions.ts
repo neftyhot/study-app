@@ -5,6 +5,7 @@ import { totalmem } from "node:os";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
+import { writeReminders } from "@/lib/reminders/reminders";
 import {
   clearDownload,
   startModelDownload,
@@ -213,6 +214,11 @@ export async function saveAppearanceAction(appearance: unknown) {
   const saved = writeAppearance(appearance, db);
   revalidatePath("/", "layout");
   return saved;
+}
+
+/** Review reminders: on or off, and when. Returns what was kept. */
+export async function saveRemindersAction(reminders: unknown) {
+  return writeReminders(reminders, db);
 }
 
 /**

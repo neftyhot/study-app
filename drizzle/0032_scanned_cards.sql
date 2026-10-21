@@ -1,0 +1,1 @@
+ALTER TABLE `flashcards` ADD `from_scan` integer DEFAULT false NOT NULL;

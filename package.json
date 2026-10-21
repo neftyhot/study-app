@@ -129,6 +129,16 @@
       "output": "release",
       "buildResources": "build"
     },
+    "fileAssociations": [
+      {
+        "ext": "meganstudy",
+        "name": "Megan Study Deck",
+        "description": "A Megan Study flashcard deck",
+        "mimeType": "application/vnd.meganstudy+json",
+        "role": "Editor",
+        "rank": "Owner"
+      }
+    ],
     "mac": {
       "target": [
         "dmg"

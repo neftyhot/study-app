@@ -38,6 +38,19 @@ const createdAt = () =>
     .notNull()
     .default(sql`(current_timestamp)`);
 
+/**
+ * Sync-ready bookkeeping (migration 0031). Nothing syncs yet and no read
+ * filters on `deleted_at`: the columns exist so a later sync has a clock and
+ * tombstones to work from without another migration over every table.
+ * Both nullable, for the same reason as `flashcards.updated_at`: SQLite can't
+ * add a `current_timestamp` default to a table that already has rows. The
+ * migration backfills `updated_at` from `created_at` (progress: from
+ * `last_reviewed_at`). `flashcards.updated_at` keeps its "null = never
+ * edited" meaning and is not backfilled.
+ */
+const updatedAt = () => text("updated_at");
+const deletedAt = () => text("deleted_at");
+
 /* ------------------------------------------------------------------ Course */
 
 export const courses = sqliteTable("courses", {
@@ -45,6 +58,8 @@ export const courses = sqliteTable("courses", {
   title: text("title").notNull(),
   term: text("term"),
   createdAt: createdAt(),
+  updatedAt: updatedAt(),
+  deletedAt: deletedAt(),
 });
 
 /* -------------------------------------------------------------------- Exam */
@@ -97,6 +112,8 @@ export const exams = sqliteTable(
     /** Cards per source unit when the density is "custom". */
     extractionRatio: real("extraction_ratio"),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
   },
   (t) => [index("exams_course_idx").on(t.courseId)],
 );
@@ -143,6 +160,8 @@ export const sourceFiles = sqliteTable(
     errorMessage: text("error_message"),
     unitCount: integer("unit_count").notNull().default(0),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
   },
   (t) => [index("source_files_exam_idx").on(t.examId)],
 );
@@ -212,6 +231,8 @@ export const studyGuideObjectives = sqliteTable(
       .default(false),
     excluded: integer("excluded", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
   },
   (t) => [index("objectives_exam_idx").on(t.examId)],
 );
@@ -264,6 +285,11 @@ export const flashcards = sqliteTable(
     frontImagePath: text("front_image_path"),
     backImagePath: text("back_image_path"),
     /**
+     * Made by reading a photo of the student's notes. Shown on the card, since
+     * a model read the handwriting and could have misread it.
+     */
+    fromScan: integer("from_scan", { mode: "boolean" }).notNull().default(false),
+    /**
      * Every number the question states, labelled, and every step from them to
      * the answer. Null on cards that involve no numbers and on cards written
      * before these were asked for.
@@ -280,6 +306,7 @@ export const flashcards = sqliteTable(
      * and because "never edited" is a fact worth being able to state.
      */
     updatedAt: text("updated_at"),
+    deletedAt: deletedAt(),
     /**
      * Where the card sits in the lecture, so a deck plays back in the order
      * it was taught: Slideshow 1 before Slideshow 2, slide 3 before slide 4,
@@ -504,6 +531,8 @@ export const studyProgress = sqliteTable(
       .$type<string[]>()
       .notNull()
       .default([]),
+    updatedAt: updatedAt(),
+    deletedAt: deletedAt(),
   },
   (t) => [
     uniqueIndex("study_progress_card_idx").on(t.flashcardId),
@@ -877,6 +906,7 @@ export const diagramOcclusions = sqliteTable(
       .default([]),
     createdAt: createdAt(),
     updatedAt: text("updated_at"),
+    deletedAt: deletedAt(),
   },
   (t) => [
     uniqueIndex("diagram_occlusions_card_idx").on(t.flashcardId),

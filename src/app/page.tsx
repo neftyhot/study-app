@@ -14,6 +14,7 @@ import {
 import { QuickStart } from "@/components/ingest/quick-start";
 import { CourseActions } from "@/components/manage/course-actions";
 import { DeleteDeckButton } from "@/components/manage/delete-deck-button";
+import { OpenSharedDeckButton } from "@/components/share/share-import";
 import {
   EditCourseDialog,
   EditExamDialog,
@@ -93,6 +94,7 @@ export default async function DashboardPage() {
           <CreateExamDialog courses={courseOptions} />
         ) : null}
         <CreateCourseDialog />
+        <OpenSharedDeckButton />
       </div>
 
       {courses.length === 0 ? null : (

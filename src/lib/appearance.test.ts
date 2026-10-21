@@ -116,3 +116,11 @@ describe("appearanceCss", () => {
     expect(css).toContain("--radius:0.25rem;");
   });
 });
+
+describe("the readable font", () => {
+  it("is kept when chosen and uses the bundled Atkinson face", () => {
+    const appearance = sanitizeAppearance({ font: "readable" });
+    expect(appearance.font).toBe("readable");
+    expect(appearanceCss(appearance)).toContain("--font-sans:var(--font-atkinson)");
+  });
+});

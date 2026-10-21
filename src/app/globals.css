@@ -302,7 +302,7 @@
   --card-foreground: #12352a;
   --popover: #ffffff;
   --popover-foreground: #12352a;
-  --primary: #0d8a5c;
+  --primary: #0b7a51;
   --primary-foreground: #ffffff;
   --secondary: #dcf2e6;
   --secondary-foreground: #12352a;
@@ -313,8 +313,8 @@
   --destructive: #c62f2a;
   --border: #c4e4d3;
   --input: #c4e4d3;
-  --ring: #0d8a5c;
-  --chart-1: #0d8a5c;
+  --ring: #0b7a51;
+  --chart-1: #0b7a51;
   --chart-2: #3fb8a0;
   --chart-3: #e0a82e;
   --chart-4: #e5675f;
@@ -629,5 +629,17 @@ html[data-splash="exit"] .launch-splash {
   html[data-splash=""] [data-reveal],
   html[data-splash=""] [data-launch-target] {
     animation-duration: 4s !important;
+  }
+}
+
+/*
+ * A visible focus ring for anything focusable that didn't style its own.
+ * `:where` keeps this at zero specificity, so components with their own
+ * focus-visible ring (every shadcn control) keep it.
+ */
+@layer base {
+  :where(button, a[href], summary, [role="button"], [role="radio"], [role="tab"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

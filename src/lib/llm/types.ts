@@ -37,7 +37,8 @@ export type UsageFeature =
   | "topics"
   | "primer"
   | "counter_example"
-  | "primer_example";
+  | "primer_example"
+  | "scan";
 
 export type StructuredRequest = {
   feature?: UsageFeature;

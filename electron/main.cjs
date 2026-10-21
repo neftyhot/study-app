@@ -29,6 +29,7 @@ const {
   BrowserWindow,
   dialog,
   ipcMain,
+  Notification,
   powerMonitor,
   powerSaveBlocker,
   shell,
@@ -45,6 +46,8 @@ const { installSystemFetch } = require("./network.cjs");
 const { backupDatabase, backupDir } = require("./backup.cjs");
 const { crashLogPath, installCrashLog, logCrash } = require("./crash-log.cjs");
 const { registerLectures } = require("./lectures.cjs");
+const { installShareFileHandlers, registerShareFiles } = require("./share-files.cjs");
+const { registerLoginItem, startReminders } = require("./reminders.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
@@ -108,6 +111,13 @@ function adoptFormerUserData(appData, target) {
   const target = path.join(appData, APP_NAME);
   app.setPath("userData", app.isPackaged ? adoptFormerUserData(appData, target) : target);
 }
+
+// `.meganstudy` files opened from Finder or Explorer. One copy of the app at a
+// time once installed, so a file double-clicked on Windows reaches the window
+// that is already open. Not in development: `electron:dev` would otherwise
+// refuse to start beside the installed app, which shares its data folder.
+const isSecondCopy = !installShareFileHandlers({ app, singleInstance: app.isPackaged });
+if (isSecondCopy) app.quit();
 
 if (process.platform === "win32") {
   // Must match build.appId, or the taskbar will not group the window with the
@@ -509,9 +519,27 @@ async function launchApp(license) {
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(url);
   });
+
+  // Off unless turned on in Settings; see reminders.cjs.
+  startReminders({
+    app,
+    Notification,
+    url,
+    secret: globalThis.__studyAppLaunchSecret ?? null,
+    userData: app.getPath("userData"),
+    showWindow: () => {
+      const [window] = BrowserWindow.getAllWindows();
+      if (!window) return createWindow(url);
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+    },
+  });
 }
 
 app.whenReady().then(async () => {
+  // The copy already running has been handed this launch's files.
+  if (isSecondCopy) return;
   // Before anything reaches out: lets requests through school proxies and
   // HTTPS filters that Node's own fetch cannot pass (network.cjs).
   installSystemFetch();
@@ -703,6 +731,21 @@ app.whenReady().then(async () => {
       return null;
     }
   });
+
+  // Shared decks opened from the file manager; see share-files.cjs.
+  registerShareFiles({
+    app,
+    ipcMain,
+    fromApp,
+    getWindows: () =>
+      BrowserWindow.getAllWindows().filter(
+        (window) =>
+          !window.isDestroyed() && appUrl && sameOrigin(window.webContents.getURL(), appUrl),
+      ),
+  });
+
+  // "Open at login" for review reminders; off unless the student turns it on.
+  registerLoginItem({ app, ipcMain, fromApp });
 
   // Lecture recordings to transcripts, on this machine; see lectures.cjs.
   registerLectures({
