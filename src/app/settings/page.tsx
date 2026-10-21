@@ -86,11 +86,16 @@ export default async function SettingsPage() {
 
       <FlashcardFormatSettings initial={readFlashcardFormat(db)} />
 
-      <ProviderSettings snapshot={snapshot} models={LOCAL_MODELS} />
-
-      <SpeedUpCard provider={snapshot.provider} />
-
-      <GradingSettings initial={readGradingStrictness()} grading={grading} />
+      <ProviderSettings
+        snapshot={snapshot}
+        models={LOCAL_MODELS}
+        advanced={
+          <>
+            <SpeedUpCard provider={snapshot.provider} />
+            <GradingSettings initial={readGradingStrictness()} grading={grading} />
+          </>
+        }
+      />
 
       <Card id="privacy" className="scroll-mt-20">
         <CardHeader>

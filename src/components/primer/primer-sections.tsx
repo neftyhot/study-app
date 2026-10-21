@@ -2,7 +2,6 @@
 
 import { useRef, useState } from "react";
 import {
-  Calculator,
   ChevronDown,
   ChevronRight,
   Lightbulb,
@@ -291,7 +290,7 @@ export function PrimerDocument({
                       slides={slides}
                       format={format}
                       calculatorOpen={calcOpen}
-                      onToggleCalculator={() => setCalcOpen((value) => !value)}
+                      onCalculatorChange={setCalcOpen}
                       onPickNumber={(value) => calcRef.current?.insert(value)}
                     />
                   ))}
@@ -359,7 +358,7 @@ function Concept({
   slides,
   format,
   calculatorOpen,
-  onToggleCalculator,
+  onCalculatorChange,
   onPickNumber,
 }: {
   examId: string;
@@ -370,7 +369,7 @@ function Concept({
   slides: CitationSlides;
   format: PrimerFormat;
   calculatorOpen: boolean;
-  onToggleCalculator: () => void;
+  onCalculatorChange: (open: boolean) => void;
   onPickNumber: (value: string) => void;
 }) {
   const hasBuiltIn = section.example.length > 0;
@@ -450,17 +449,8 @@ function Concept({
       <NumbersPanel
         rows={numbers}
         onPick={onPickNumber}
-        actions={
-          <Button
-            variant={calculatorOpen ? "secondary" : "outline"}
-            size="sm"
-            aria-pressed={calculatorOpen}
-            onClick={onToggleCalculator}
-          >
-            <Calculator className="size-4" />
-            Calculator
-          </Button>
-        }
+        calculatorOpen={calculatorOpen}
+        onCalculatorChange={onCalculatorChange}
       />
 
       <div className="space-y-3" aria-live="polite">

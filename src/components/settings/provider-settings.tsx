@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, Cloud, Download, HardDrive, KeyRound, Loader2 } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Check, ChevronRight, Cloud, Download, HardDrive, KeyRound, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ExperimentalLocalSection } from "@/components/settings/experimental-local";
@@ -36,12 +36,21 @@ const KEY_HELP: Record<(typeof API_PROVIDERS)[number], string> = {
   openai: "platform.openai.com/api-keys",
 };
 
+/**
+ * The AI section of Settings: which provider, the key, and whether it works —
+ * nothing more on first look. Everything else (other providers, model level,
+ * grading, offline models) sits under "Advanced AI settings", closed unless
+ * the student is already using an offline model.
+ */
 export function ProviderSettings({
   snapshot,
   models,
+  advanced,
 }: {
   snapshot: SetupSnapshot;
   models: LocalModel[];
+  /** More cards for the Advanced section, from the page. */
+  advanced?: ReactNode;
 }) {
   const [state, setState] = useState(snapshot);
   const [busy, setBusy] = useState(false);
@@ -55,21 +64,58 @@ export function ProviderSettings({
   }
 
   const usingLocal = state.provider === "local";
+  const downloading = state.download?.status === "downloading";
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-            <Cloud className="size-4" />
-            Cloud (Google Gemini)
-            <Badge>Recommended</Badge>
+            {usingLocal ? <HardDrive className="size-4" /> : <Cloud className="size-4" />}
+            AI
           </CardTitle>
           <CardDescription>
-            Generating cards and grading typed answers need a model. Paste
-            your own free Google AI Studio key to use Gemini, or a Claude or
-            OpenAI key. Everything else — studying, reviews, browsing,
-            editing — works with no model and no network at all.
+            Making cards and guides, and feedback on typed answers, use AI.
+            Studying what you already have never needs it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Provider</span>
+            <span className="font-medium">
+              {usingLocal ? "Offline model (experimental)" : PROVIDER_LABELS[state.provider]}
+            </span>
+            {state.answerable ? (
+              <Badge variant="secondary" className="gap-1">
+                <Check className="size-3" />
+                Working
+              </Badge>
+            ) : (
+              <Badge variant="outline">Not set up yet</Badge>
+            )}
+          </div>
+          {usingLocal ? null : <ApiKeySection snapshot={state} onChange={setState} />}
+        </CardContent>
+      </Card>
+
+      <details
+        open={usingLocal || downloading}
+        className="group rounded-lg border"
+      >
+        <summary className="hover:bg-muted/60 flex cursor-pointer list-none items-center gap-2 rounded-lg p-4 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+          Advanced AI settings
+          <span className="text-muted-foreground font-normal">
+            — other providers, model, grading, offline models
+          </span>
+        </summary>
+        <div className="space-y-6 border-t p-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Provider</CardTitle>
+          <CardDescription>
+            Google Gemini is recommended and free with your own key. A Claude
+            or OpenAI key works too.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -118,7 +164,6 @@ export function ProviderSettings({
 
       {usingLocal ? null : (
         <>
-          <ApiKeySection snapshot={state} onChange={setState} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Model</CardTitle>
@@ -134,6 +179,8 @@ export function ProviderSettings({
           </Card>
         </>
       )}
+
+      {advanced}
 
       {/*
         Closed unless the student is already on a local model or one is
@@ -160,6 +207,8 @@ export function ProviderSettings({
           onChange={setState}
         />
       </ExperimentalLocalSection>
+        </div>
+      </details>
     </div>
   );
 }
@@ -232,21 +281,20 @@ function ApiKeySection({
   const status = snapshot.keys.find((key) => key.provider === provider);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
+  // A working key needs no form on screen; replacing it is one click away.
+  const [replacing, setReplacing] = useState(false);
+  const showForm = !status?.present || replacing;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <KeyRound className="size-4" />
-          {PROVIDER_LABELS[provider]} key
-        </CardTitle>
-        <CardDescription>
-          {provider === "gemini"
-            ? "Gemini runs on your own key, so its free quota and any billing are on your Google account."
-            : <>Get one from <span className="font-mono">{KEY_HELP[provider]}</span>.</>}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <div className="space-y-3">
+        <p className="text-muted-foreground flex items-start gap-2 text-sm">
+          <KeyRound className="mt-0.5 size-4 shrink-0" />
+          <span>
+            {provider === "gemini"
+              ? "Gemini runs on your own free key, so its quota and any billing are on your Google account."
+              : <>Get a {PROVIDER_LABELS[provider]} key from <span className="font-mono">{KEY_HELP[provider]}</span>.</>}
+          </span>
+        </p>
         {provider === "gemini" && !status?.present ? <GeminiKeySteps /> : null}
         {status?.present ? (
           <p className="flex flex-wrap items-center gap-2 text-sm">
@@ -263,6 +311,14 @@ function ApiKeySection({
           </p>
         ) : null}
 
+        {showForm ? null : (
+          <Button size="sm" variant="outline" onClick={() => setReplacing(true)}>
+            Replace the key
+          </Button>
+        )}
+
+        {showForm ? (
+        <>
         <div className="space-y-1.5">
           <Label htmlFor={`key-${provider}`}>
             {status?.present ? "Replace the key" : "Paste your key"}
@@ -295,6 +351,7 @@ function ApiKeySection({
                 keys: snapshot.keys.map((item) => (item.provider === provider ? saved : item)),
               });
               setValue("");
+              setReplacing(false);
               toast.success("Key saved on this device");
             } finally {
               setBusy(false);
@@ -304,8 +361,9 @@ function ApiKeySection({
           {busy ? <Loader2 className="size-4 animate-spin" /> : null}
           Save key
         </Button>
-      </CardContent>
-    </Card>
+        </>
+        ) : null}
+    </div>
   );
 }
 

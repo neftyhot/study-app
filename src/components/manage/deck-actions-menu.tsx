@@ -76,7 +76,7 @@ export function DeckActionsMenu({
   return (
     <>
       <DropdownMenu>
-        <Hint label="More actions: export, files, reset">
+        <Hint label="Maintenance: files, export, repeats, reset">
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" aria-label="More actions">
               <MoreHorizontal className="size-4" />

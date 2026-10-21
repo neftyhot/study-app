@@ -2,11 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   BookOpen,
+  ChevronRight,
   ClipboardCheck,
   FolderOpen,
   Layers,
   ListPlus,
   MessageCircleQuestion,
+  Play,
   Upload,
 } from "lucide-react";
 
@@ -21,6 +23,7 @@ import {
 } from "@/components/ui/card";
 import { GeneratePanel } from "@/components/generate/generate-panel";
 import { TutorPanel } from "@/components/tutor/tutor-panel";
+import { CustomizeButton } from "@/components/manage/customize-button";
 import { DeckActionsMenu } from "@/components/manage/deck-actions-menu";
 import { Hint } from "@/components/ui/tooltip";
 import { EditExamDialog } from "@/components/manage/edit-dialogs";
@@ -96,6 +99,20 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
   });
 
   const hasFiles = stats.sourceFiles > 0;
+  const hasCards = stats.flashcards > 0;
+
+  // One button for "what should I do now": due reviews first, then new cards,
+  // then a flip through everything.
+  const studyNowHref =
+    dueCount > 0
+      ? `/exams/${examId}/study`
+      : plan.totals.unstudied > 0
+        ? `/exams/${examId}/learn`
+        : `/exams/${examId}/study`;
+
+  // Making and tuning cards is set-up work. Once a deck has cards it folds
+  // away under Customize, unless a run is in progress and worth watching.
+  const customizeOpen = !hasCards || job?.status === "running";
 
   return (
     <div className="space-y-8">
@@ -136,13 +153,24 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
             </p>
           ) : null}
         </div>
-        <DeckActionsMenu
-          examId={examId}
-          examTitle={exam.title}
-          cardCount={stats.flashcards}
-          hasStudyGuide={stats.objectives > 0}
-          hasDate={Boolean(exam.date)}
-        />
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {hasCards ? (
+            <Button asChild>
+              <Link href={studyNowHref}>
+                <Play className="size-4" />
+                Study now
+              </Link>
+            </Button>
+          ) : null}
+          {hasCards ? <CustomizeButton /> : null}
+          <DeckActionsMenu
+            examId={examId}
+            examTitle={exam.title}
+            cardCount={stats.flashcards}
+            hasStudyGuide={stats.objectives > 0}
+            hasDate={Boolean(exam.date)}
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -290,16 +318,6 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {stats.sourceFiles > 0 ? (
-          <Hint label="Add, remove or replace the slides and notes this deck is built from">
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/exams/${examId}/sources`}>
-                <FolderOpen className="size-4" />
-                Your files ({stats.sourceFiles})
-              </Link>
-            </Button>
-          </Hint>
-        ) : null}
         {drills.length > 0 ? (
           <Hint label="Label the parts of diagrams from your slides">
             <Button asChild variant="outline" size="sm">
@@ -319,6 +337,30 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
           }
         />
       </div>
+
+      <details
+        id="customize"
+        open={customizeOpen}
+        className="group scroll-mt-20 rounded-lg border"
+      >
+        <summary className="hover:bg-muted/60 flex cursor-pointer list-none items-center gap-2 rounded-lg p-4 text-sm font-medium [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90 motion-reduce:transition-none" />
+          Customize
+          <span className="text-muted-foreground font-normal">
+            — make more cards, files, study-guide check
+          </span>
+        </summary>
+        <div className="space-y-6 border-t p-4">
+      {stats.sourceFiles > 0 ? (
+        <Hint label="Add, remove or replace the slides and notes this deck is built from">
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/exams/${examId}/sources`}>
+              <FolderOpen className="size-4" />
+              Your files ({stats.sourceFiles})
+            </Link>
+          </Button>
+        </Hint>
+      ) : null}
 
       <GeneratePanel
         examId={examId}
@@ -373,6 +415,8 @@ export default async function ExamPage(props: PageProps<"/exams/[examId]">) {
           </CardContent>
         </Card>
       ) : null}
+        </div>
+      </details>
 
       {diagnoses.length > 0 ? (
         <Card>

@@ -24,8 +24,13 @@ export function WhatsNew({ version, notes }: { version: string; notes: string[] 
       const seen = window.localStorage.getItem(SEEN_KEY);
       // A fresh install has nothing to compare against: start from this version.
       if (seen === null) window.localStorage.setItem(SEEN_KEY, version);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      else if (seen !== version) setShow(true);
+      else if (seen !== version) {
+        // Shown once: this window keeps it until dismissed, the next launch
+        // doesn't bring it back. The full notes stay in Settings.
+        window.localStorage.setItem(SEEN_KEY, version);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShow(true);
+      }
     } catch {
       // No storage: skip it rather than show it every time.
     }

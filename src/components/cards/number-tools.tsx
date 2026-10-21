@@ -13,7 +13,6 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
-  type ReactNode,
   type Ref,
 } from "react";
 import { Calculator, Delete, GripHorizontal, Hash, X } from "lucide-react";
@@ -122,44 +121,60 @@ export function cardNumberRows(
   return numberRows(givens, shown, card.calculations ?? [], revealed);
 }
 
-/** The "Numbers" button and the list it opens. */
+/**
+ * The one "Math help" button, shown only where there are numbers: it opens
+ * the list of them and the calculator together.
+ */
 export function NumbersPanel({
   rows,
   onPick,
-  actions,
+  calculatorOpen,
+  onCalculatorChange,
   className,
 }: {
   rows: NumberRow[];
   /** Pressing a value sends it here, to the calculator. */
   onPick?: (value: string) => void;
-  /** Shown beside the button, such as the calculator's. */
-  actions?: ReactNode;
+  /** The page's calculator, opened and closed along with the list. */
+  calculatorOpen?: boolean;
+  onCalculatorChange?: (open: boolean) => void;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  if (rows.length === 0 && !actions) return null;
+  if (rows.length === 0) return null;
   return (
     <div className={cn("space-y-2", className)}>
-      <div className="flex flex-wrap gap-2">
-        {rows.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            aria-expanded={open}
-            onClick={() => setOpen((value) => !value)}
-          >
-            <Hash className="size-4" />
-            {open ? "Hide numbers" : `Numbers (${rows.length})`}
-          </Button>
-        ) : null}
-        {actions}
-      </div>
-      {open && rows.length > 0 ? (
+      <Button
+        variant={open ? "secondary" : "outline"}
+        size="sm"
+        aria-expanded={open}
+        onClick={() => {
+          setOpen(!open);
+          onCalculatorChange?.(!open);
+        }}
+      >
+        <Calculator className="size-4" />
+        {open ? "Hide math help" : "Math help"}
+      </Button>
+      {open ? (
         <div className="bg-muted/40 w-fit max-w-full rounded-md border p-3">
-          <p className="text-muted-foreground mb-2 text-xs">
-            Every number here, with what it is.
-            {onPick ? " Press one to put it in the calculator." : ""}
-          </p>
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+              <Hash className="size-3.5" />
+              Every number here, with what it is.
+              {onPick ? " Press one to put it in the calculator." : ""}
+            </p>
+            {onCalculatorChange ? (
+              <button
+                type="button"
+                className="text-primary text-xs underline-offset-2 hover:underline"
+                aria-pressed={calculatorOpen}
+                onClick={() => onCalculatorChange(!calculatorOpen)}
+              >
+                {calculatorOpen ? "Hide calculator" : "Show calculator"}
+              </button>
+            ) : null}
+          </div>
           {/* Sized to the words, so each number sits next to its label. */}
           <dl className="grid grid-cols-[minmax(0,auto)_auto] items-baseline gap-x-3 gap-y-1.5 text-sm">
             {rows.map((row, i) => (

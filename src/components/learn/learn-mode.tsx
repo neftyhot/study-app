@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  Calculator,
   CircleCheck,
   CircleHelp,
   CircleX,
@@ -360,22 +359,13 @@ export function LearnMode({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* A calculator on every question, and the numbers it gives. */}
+          {/* Math help, only when the question has numbers in it. */}
           <NumbersPanel
             key={shown.cardId}
             rows={numberRows(shown.givens ?? [], shown.question, [], false)}
             onPick={(value) => calcRef.current?.insert(value)}
-            actions={
-              <Button
-                variant="outline"
-                size="sm"
-                aria-pressed={calcOpen}
-                onClick={() => setCalcOpen((value) => !value)}
-              >
-                <Calculator className="size-4" />
-                Calculator
-              </Button>
-            }
+            calculatorOpen={calcOpen}
+            onCalculatorChange={setCalcOpen}
           />
 
           {!reveal ? (

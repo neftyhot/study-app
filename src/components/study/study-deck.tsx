@@ -9,7 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Calculator,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -511,22 +510,14 @@ export function StudyDeck({
     </>
   );
 
-  // A calculator on every card, and every number the card mentions.
+  // Math help — the card's numbers and a calculator — only on cards with numbers.
   const tools = (
     <NumbersPanel
+      key={current.id}
       rows={numbers}
       onPick={(value) => calcRef.current?.insert(value)}
-      actions={
-        <Button
-          variant="outline"
-          size="sm"
-          aria-pressed={calcOpen}
-          onClick={() => setCalcOpen((value) => !value)}
-        >
-          <Calculator className="size-4" />
-          Calculator
-        </Button>
-      }
+      calculatorOpen={calcOpen}
+      onCalculatorChange={setCalcOpen}
     />
   );
 
