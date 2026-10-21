@@ -88,7 +88,7 @@ describe("building options", () => {
   const others = [
     card("c", "What happens to total fixed costs as activity changes?", "They stay the same in total"),
     card("d", "How is overhead applied to work in process?", "Predetermined rate times actual activity"),
-    card("e", "What is the relevant range?", "The span of activity where cost behaviour holds"),
+    card("e", "What is the relevant range?", "The span of activity where cost behavior holds"),
   ];
 
   it("uses the written options instead of the deck's", () => {

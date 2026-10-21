@@ -176,8 +176,8 @@ describe("creating", () => {
   });
 
   it("refuses a blank title", () => {
-    expect(() => createCourse(db, { title: "   " })).toThrow(/needs a title/);
-    expect(() => createExam(db, { courseId, title: "" })).toThrow(/needs a title/);
+    expect(() => createCourse(db, { title: "   " })).toThrow(/needs a name/);
+    expect(() => createExam(db, { courseId, title: "" })).toThrow(/needs a name/);
   });
 
   it("refuses a deck under a course that no longer exists", () => {

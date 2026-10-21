@@ -36,7 +36,7 @@ function themeVars(theme: string): Record<string, string> {
 }
 
 describe("the AAA styles in globals.css", () => {
-  it.each(AAA_THEME_IDS)("%s holds every text colour to 7:1", (theme) => {
+  it.each(AAA_THEME_IDS)("%s holds every text color to 7:1", (theme) => {
     const v = themeVars(theme);
     const pairs: [string, string][] = [
       ["foreground", "background"],
@@ -67,7 +67,7 @@ describe("the AAA styles in globals.css", () => {
     }
   });
 
-  it("keeps High Contrast free of any colour", () => {
+  it("keeps High Contrast free of any color", () => {
     for (const value of Object.values(themeVars("contrast"))) {
       if (!value.startsWith("#")) continue;
       const [r, g, b] = [1, 3, 5].map((i) => value.slice(i, i + 2));
@@ -75,7 +75,7 @@ describe("the AAA styles in globals.css", () => {
     }
   });
 
-  it("keeps each style's four editable colours in step with appearance.ts", () => {
+  it("keeps each style's four editable colors in step with appearance.ts", () => {
     for (const theme of THEME_IDS.filter((id) => id !== "light" && id !== "dark")) {
       const v = themeVars(theme);
       const { palette } = THEMES[theme];

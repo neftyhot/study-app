@@ -1,7 +1,7 @@
 /**
  * Grading regression fixtures (PRD §7).
  *
- * Known answer/verdict pairs covering the behaviour the PRD actually
+ * Known answer/verdict pairs covering the behavior the PRD actually
  * specifies: generous about wording, unforgiving about direction and
  * mechanism. They run against the live grader via `npm run grade:check`
  * rather than in the unit suite, because they are a measurement of the model,

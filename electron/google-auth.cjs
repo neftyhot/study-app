@@ -36,7 +36,13 @@ async function retireGoogleSession() {
     const Database = require("better-sqlite3");
     database = new Database(file);
     try {
-      refreshToken = readRefreshToken(database, safeStorage);
+      // On macOS the token was sealed with the Keychain, and reading it back
+      // is what made the app ask for the login password at every launch. The
+      // stored session is still cleared below; Google expires an unused grant
+      // on its own.
+      if (process.platform !== "darwin") {
+        refreshToken = readRefreshToken(database, safeStorage);
+      }
     } catch {
       // Undecryptable or no table: nothing to revoke, still clear it.
     }

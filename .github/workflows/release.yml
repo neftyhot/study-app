@@ -95,6 +95,9 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
+          # whisper-cli (built here; cmake is on the runner) and ffmpeg, for
+          # the Lectures tab. electron-builder copies them into Resources.
+          node scripts/fetch-audio-tools.mjs
           npx next build
           node scripts/prepare-standalone.mjs
           npm run electron:compile
@@ -140,6 +143,9 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           NODE_OPTIONS: "--max-old-space-size=4096"
         run: |
+          # whisper-cli (built here; cmake is on the runner) and ffmpeg, for
+          # the Lectures tab. electron-builder copies them into Resources.
+          node scripts/fetch-audio-tools.mjs
           npx next build
           node scripts/prepare-standalone.mjs
           npm run electron:compile

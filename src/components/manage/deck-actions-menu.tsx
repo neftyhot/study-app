@@ -7,6 +7,7 @@ import {
   CalendarDays,
   FileDown,
   FolderOpen,
+  CopyMinus,
   ListChecks,
   MoreHorizontal,
   RotateCcw,
@@ -29,8 +30,10 @@ import { Hint } from "@/components/ui/tooltip";
 import {
   deleteExamAction,
   examImpact,
+  removeRepeatsAction,
   resetProgressAction,
 } from "@/lib/manage/actions";
+import { plural } from "@/lib/plural";
 
 /**
  * The ••• menu on a deck: everything a student reaches for occasionally —
@@ -51,7 +54,7 @@ export function DeckActionsMenu({
   hasDate: boolean;
 }) {
   const router = useRouter();
-  const [confirm, setConfirm] = useState<"delete" | "reset" | null>(null);
+  const [confirm, setConfirm] = useState<"delete" | "reset" | "repeats" | null>(null);
   const [exporting, setExporting] = useState(false);
   const [impact, setImpact] = useState<string[]>([]);
 
@@ -60,10 +63,10 @@ export function DeckActionsMenu({
     setImpact(
       summary
         ? [
-            `${summary.sourceFiles} source file(s) and everything extracted from them`,
-            `${summary.flashcards} flashcard(s), including any you edited`,
-            `${summary.objectives} study-guide topic(s) and the study-guide check`,
-            `${summary.sessions} study session(s) and all review history`,
+            `${plural(summary.sourceFiles, "source file")} and everything extracted from them`,
+            `${plural(summary.flashcards, "flashcard")}, including any you edited`,
+            `${plural(summary.objectives, "study-guide topic")} and the study-guide check`,
+            `${plural(summary.sessions, "study session")} and all review history`,
           ]
         : [],
     );
@@ -109,6 +112,13 @@ export function DeckActionsMenu({
             <FileDown />
             Export (Anki, Quizlet, CSV…)
           </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={cardCount < 2}
+            onSelect={() => setConfirm("repeats")}
+          >
+            <CopyMinus />
+            Remove repeated cards
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setConfirm("reset")}>
             <RotateCcw />
@@ -132,6 +142,31 @@ export function DeckActionsMenu({
       />
 
       <ConfirmDialog
+        open={confirm === "repeats"}
+        onOpenChange={(open) => setConfirm(open ? "repeats" : null)}
+        title="Remove repeated cards?"
+        description={`Finds cards in ${examTitle} that ask the same thing, and keeps the one that says the most.`}
+        impact={[
+          "Word-for-word copies and rewordings are removed",
+          "A card that another card already covers, with more detail, is removed",
+          "Stars and review history move to the card that is kept",
+          "Cards you edited are never removed",
+        ]}
+        confirmLabel="Remove repeats"
+        onConfirm={async () => {
+          const result = await removeRepeatsAction(examId);
+          if (result.removed === 0) {
+            toast.success("No repeated cards found");
+          } else {
+            toast.success(
+              `Removed ${result.removed} repeated card${result.removed === 1 ? "" : "s"}`,
+            );
+          }
+          router.refresh();
+        }}
+      />
+
+      <ConfirmDialog
         open={confirm === "reset"}
         onOpenChange={(open) => setConfirm(open ? "reset" : null)}
         title="Reset study progress?"
@@ -145,7 +180,7 @@ export function DeckActionsMenu({
         onConfirm={async () => {
           const result = await resetProgressAction(examId);
           toast.success(
-            `Cleared ${result.progressCleared} card record(s) and ${result.sessionsCleared} session(s)`,
+            `Cleared ${plural(result.progressCleared, "card record")} and ${plural(result.sessionsCleared, "session")}`,
           );
           router.refresh();
         }}

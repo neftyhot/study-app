@@ -4,6 +4,7 @@ import { and, count, desc, eq, isNotNull, isNull, lte, ne, sql } from "drizzle-o
 
 import { db } from "@/db";
 import { todayIso } from "@/lib/srs";
+import { repairSessionQueue } from "@/lib/study/session";
 import { mergeTopicVariants } from "@/lib/topics";
 import {
   coverageMappings,
@@ -297,7 +298,7 @@ export type StudyCard = Awaited<ReturnType<typeof listStudyCards>>[number];
 
 /** The session to offer resuming, if one was left open. */
 export async function getOpenStudySession(examId: string) {
-  return db.query.studySessions.findFirst({
+  const session = await db.query.studySessions.findFirst({
     where: and(
       eq(studySessions.examId, examId),
       eq(studySessions.mode, "flashcards"),
@@ -305,6 +306,7 @@ export async function getOpenStudySession(examId: string) {
     ),
     orderBy: [desc(studySessions.updatedAt)],
   });
+  return session ? repairSessionQueue(db, session) : undefined;
 }
 
 export async function listTopics(examId: string) {

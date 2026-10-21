@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/manage/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Hint } from "@/components/ui/tooltip";
 import { deleteExamAction, examImpact } from "@/lib/manage/actions";
+import { plural } from "@/lib/plural";
 
 /** Delete a deck straight from the dashboard, after saying what goes with it. */
 export function DeleteDeckButton({ examId, examTitle }: { examId: string; examTitle: string }) {
@@ -21,10 +22,10 @@ export function DeleteDeckButton({ examId, examTitle }: { examId: string; examTi
     setImpact(
       summary
         ? [
-            `${summary.sourceFiles} source file(s) and everything extracted from them`,
-            `${summary.flashcards} flashcard(s), including any you edited`,
-            `${summary.objectives} study-guide topic(s) and the study-guide check`,
-            `${summary.sessions} study session(s) and all review history`,
+            `${plural(summary.sourceFiles, "source file")} and everything extracted from them`,
+            `${plural(summary.flashcards, "flashcard")}, including any you edited`,
+            `${plural(summary.objectives, "study-guide topic")} and the study-guide check`,
+            `${plural(summary.sessions, "study session")} and all review history`,
           ]
         : [],
     );

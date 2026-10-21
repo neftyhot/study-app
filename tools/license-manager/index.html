@@ -75,7 +75,7 @@
       .checks input { width: auto; }
       .note { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
       .actions { display: flex; gap: 6px; justify-content: flex-end; }
-      nav.tabs { display: flex; gap: 4px; margin-top: 12px; -webkit-app-region: no-drag; }
+      nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 12px; -webkit-app-region: no-drag; }
       nav.tabs button { border-radius: 999px; }
       nav.tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
       [data-tab] { display: grid; gap: 20px; }
@@ -112,6 +112,22 @@
       .item summary { cursor: pointer; color: var(--muted); font-size: 12px; }
       .item ol, .item ul { margin: 6px 0; padding-left: 20px; }
       .item li { margin: 3px 0; overflow-wrap: anywhere; }
+      .feature-area { border-bottom: 1px solid var(--border); padding: 12px 16px; }
+      .feature-area:last-child { border-bottom: 0; }
+      .feature-area h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+      .feature-area h3 .count { color: var(--muted); font-weight: 400; margin-left: 6px; }
+      .feature { display: grid; grid-template-columns: minmax(150px, 220px) 1fr; gap: 2px 14px; padding: 5px 0; font-size: 12px; }
+      .feature .name { font-weight: 500; }
+      .feature .what { color: var(--fg); }
+      .feature .where { grid-column: 2; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+      .release { border-bottom: 1px solid var(--border); padding: 14px 16px; }
+      .release:last-child { border-bottom: 0; }
+      .release h3 { margin: 0; font-size: 13px; font-weight: 600; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      .release h3 .date { color: var(--muted); font-weight: 400; font-size: 12px; }
+      .release h4 { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+      .release ul { margin: 0; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+      .release ul.dev li { color: var(--muted); }
+      .release summary { cursor: pointer; color: var(--muted); font-size: 12px; margin-top: 8px; }
       .item h4 { margin: 10px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
       .tag.buy { border-color: var(--warn); color: var(--warn); }
       .tag.publish, .tag.send { border-color: var(--good); color: var(--good); }
@@ -126,21 +142,23 @@
   <body>
     <header>
       <h1>Study Suite — License Authority</h1>
-      <p>Signs offline licences for the student app. Runs only on this machine.</p>
+      <p>Signs offline licenses for the student app. Runs only on this machine.</p>
       <nav class="tabs" role="tablist">
-        <button type="button" role="tab" data-show="licences" aria-selected="true">Licences</button>
+        <button type="button" role="tab" data-show="licenses" aria-selected="true">Licenses</button>
         <button type="button" role="tab" data-show="stats" aria-selected="false">Usage</button>
         <button type="button" role="tab" data-show="suggestions" aria-selected="false">Suggestions</button>
         <button type="button" role="tab" data-show="status" aria-selected="false">App status</button>
         <button type="button" role="tab" data-show="scaling" aria-selected="false">Scaling</button>
         <button type="button" role="tab" data-show="codebase" aria-selected="false">Codebase</button>
+        <button type="button" role="tab" data-show="features" aria-selected="false">Features</button>
+        <button type="button" role="tab" data-show="changelog" aria-selected="false">Changelog</button>
       </nav>
     </header>
 
     <main>
       <div id="alert" class="alert" role="alert" hidden></div>
 
-      <div data-tab="licences">
+      <div data-tab="licenses">
 
       <section class="panel">
         <h2>Mint a key</h2>
@@ -377,6 +395,32 @@
           <div class="body" style="padding: 0 6px"><table id="cb-langs"></table></div>
         </section>
       </div>
+      <div data-tab="features" hidden>
+        <section class="panel">
+          <h2 class="row" style="display: flex">
+            <span>Everything Megan Study can do</span>
+            <span class="spacer"></span>
+            <input id="ft-filter" type="search" placeholder="Filter features" style="max-width: 220px; font-weight: 400" />
+          </h2>
+          <div class="body" style="padding-bottom: 0"><p id="ft-summary" class="note" style="margin: 0"></p></div>
+          <div id="ft-list"></div>
+        </section>
+      </div>
+
+      <div data-tab="changelog" hidden>
+        <section class="panel">
+          <h2 class="row" style="display: flex">
+            <span>Releases</span>
+            <span class="spacer"></span>
+            <span id="cl-status" class="paths" style="font-weight: 400"></span>
+            <button id="cl-refresh" type="button">Reload</button>
+          </h2>
+          <div class="body" style="padding-bottom: 0">
+            <p class="note" style="margin: 0">“For students” is what the app's What's new shows. “Developer notes” and commits are only shown here.</p>
+          </div>
+          <div id="cl-list"></div>
+        </section>
+      </div>
     </main>
 
     <script>
@@ -586,6 +630,8 @@
           if (name === "status") loadStatus();
           if (name === "scaling" && !loaded.scaling) loadScaling();
           if (name === "codebase" && !loaded.codebase) loadCodebase();
+          if (name === "features" && !loaded.features) loadFeatures();
+          if (name === "changelog" && !loaded.changelog) loadChangelog();
         }),
       );
 
@@ -1005,7 +1051,7 @@
           fun("🐘", "Biggest file (lines)", fmt(code.largest.lines), code.largest.file),
           fun("📏", "Longest line (chars)", fmt(code.longestLine.length), code.longestLine.file),
           fun("🔥", "Busiest day (commits)", fmt(git.busiestDay.commits), git.busiestDay.day),
-          fun("⏰", "Favourite hour", hour(git.busiestHour), `favourite day: ${git.busiestWeekday}`),
+          fun("⏰", "Favorite hour", hour(git.busiestHour), `favorite day: ${git.busiestWeekday}`),
           fun("🦉", "Night-owl commits", fmt(git.nightOwl), "between 10pm and 5am"),
           fun("🐛", "Bug-fix commits", fmt(git.fixes), `${Math.round((git.fixes / git.commits) * 100)}% of all commits`),
           fun("📝", "TODOs left", fmt(code.todos), code.todos ? "someday…" : "a clean conscience"),
@@ -1023,6 +1069,87 @@
       }
 
       $("cb-refresh").addEventListener("click", () => { clearAlert(); loadCodebase(); });
+
+      /* ------------------------------------------------ Features catalogue */
+
+      let featureAreas = [];
+
+      function renderFeatures() {
+        const q = $("ft-filter").value.trim().toLowerCase();
+        const match = (f, area) =>
+          !q || [f.name, f.what, f.where, area].some((text) => String(text ?? "").toLowerCase().includes(q));
+        let shown = 0;
+        let total = 0;
+        const html = featureAreas
+          .map((area) => {
+            total += area.features.length;
+            const list = area.features.filter((f) => match(f, area.area));
+            shown += list.length;
+            if (!list.length) return "";
+            return `<div class="feature-area"><h3>${escapeHtml(area.area)}<span class="count">${list.length}</span></h3>${list
+              .map(
+                (f) =>
+                  `<div class="feature"><div class="name">${escapeHtml(f.name)}${
+                    f.status ? ` <span class="tag expiring">${escapeHtml(f.status)}</span>` : ""
+                  }</div><div class="what">${escapeHtml(f.what)}</div>${
+                    f.where ? `<div class="where"><code>${escapeHtml(f.where)}</code></div>` : ""
+                  }</div>`,
+              )
+              .join("")}</div>`;
+          })
+          .join("");
+        $("ft-list").innerHTML = html || `<div class="empty">No feature matches “${escapeHtml(q)}”.</div>`;
+        $("ft-summary").textContent = q
+          ? `${shown} of ${total} features match.`
+          : `${total} features in ${featureAreas.length} areas.`;
+      }
+
+      async function loadFeatures() {
+        const result = await window.authority.features();
+        if (!result.ok) return fail(result.error);
+        loaded.features = true;
+        featureAreas = result.data;
+        renderFeatures();
+      }
+
+      $("ft-filter").addEventListener("input", renderFeatures);
+
+      /* ------------------------------------------------ Changelog */
+
+      async function loadChangelog() {
+        $("cl-status").textContent = "Loading…";
+        const result = await window.authority.changelog();
+        $("cl-status").textContent = "";
+        if (!result.ok) return fail(result.error);
+        loaded.changelog = true;
+        const { entries, commits, version } = result.data;
+        const list = (items, cls = "") =>
+          `<ul${cls ? ` class="${cls}"` : ""}>${items.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul>`;
+        const released = new Set(Object.keys(commits));
+        const unreleased = commits.next ?? [];
+        const head = unreleased.length
+          ? `<div class="release"><h3>Not yet released <span class="date">${unreleased.length} commit${
+              unreleased.length === 1 ? "" : "s"
+            } since the last tag</span></h3>${list(unreleased, "dev")}</div>`
+          : "";
+        $("cl-list").innerHTML =
+          head +
+          entries
+            .map((e) => {
+              const tags = [];
+              if (e.version === version) tags.push(`<span class="tag admin">current</span>`);
+              if (released.size && !released.has(e.version)) tags.push(`<span class="tag expiring">not tagged</span>`);
+              const own = commits[e.version] ?? [];
+              return `<div class="release"><h3>v${escapeHtml(e.version)} <span class="date">${escapeHtml(e.date)}</span>${tags.join("")}</h3>${
+                e.notes.length ? `<h4>For students</h4>${list(e.notes)}` : `<h4>For students</h4><p class="note">Nothing shown in the app.</p>`
+              }${e.dev.length ? `<h4>Developer notes</h4>${list(e.dev, "dev")}` : ""}${
+                own.length ? `<details><summary>${own.length} commit${own.length === 1 ? "" : "s"}</summary>${list(own, "dev")}</details>` : ""
+              }</div>`;
+            })
+            .join("");
+      }
+
+      $("cl-refresh").addEventListener("click", () => { clearAlert(); loadChangelog(); });
 
       window.authority.state().then((state) => {
         render(state);

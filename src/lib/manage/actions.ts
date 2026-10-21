@@ -1,16 +1,17 @@
 "use server";
 
-import { rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/db";
-import { eq } from "drizzle-orm";
+import { eq, like, or } from "drizzle-orm";
 
-import { sourceFiles } from "@/db/schema";
+import { diagramOcclusions, flashcards, sourceFiles, sourceSlides } from "@/db/schema";
+import { removeRepeats } from "@/lib/cards/repeats";
 import { ingestSourceFile } from "@/lib/ingest";
 import { relinkCards } from "@/lib/ingest/relink";
-import { absolutePathFor } from "@/lib/ingest/storage";
+import { absolutePathFor, storedPath } from "@/lib/ingest/storage";
 
 import {
   createCourse,
@@ -26,14 +27,66 @@ import {
   updateExam,
 } from "./index";
 
-/** Uploads live outside the database, so deletions have to reach the disk too. */
+/**
+ * Stored paths under `folder` that rows in other decks still point at. A card
+ * moved to another deck, or a copied deck that could not copy a file, keeps
+ * its image where it was.
+ */
+function pathsStillUsed(folder: string) {
+  const prefix = `${folder}/%`;
+  const used = new Set<string>();
+  for (const row of db
+    .select({ front: flashcards.frontImagePath, back: flashcards.backImagePath })
+    .from(flashcards)
+    .where(or(like(flashcards.frontImagePath, prefix), like(flashcards.backImagePath, prefix)))
+    .all()) {
+    if (row.front) used.add(row.front);
+    if (row.back) used.add(row.back);
+  }
+  for (const row of db
+    .select({ path: diagramOcclusions.imagePath })
+    .from(diagramOcclusions)
+    .where(like(diagramOcclusions.imagePath, prefix))
+    .all()) used.add(row.path);
+  for (const row of db
+    .select({ path: sourceSlides.imagePath })
+    .from(sourceSlides)
+    .where(like(sourceSlides.imagePath, prefix))
+    .all()) if (row.path) used.add(row.path);
+  for (const row of db
+    .select({ path: sourceFiles.rawPath })
+    .from(sourceFiles)
+    .where(like(sourceFiles.rawPath, prefix))
+    .all()) used.add(row.path);
+  return used;
+}
+
+/** Removes a folder of uploads, sparing any file another deck still uses. */
+async function removeFolder(folder: string) {
+  const used = pathsStillUsed(folder);
+  if (used.size === 0) {
+    await rm(absolutePathFor(folder), { recursive: true, force: true });
+    return;
+  }
+  const names = await readdir(absolutePathFor(folder)).catch(() => [] as string[]);
+  await Promise.all(
+    names
+      .map((name) => storedPath(folder, name))
+      .filter((path) => !used.has(path))
+      .map((path) => rm(absolutePathFor(path), { recursive: true, force: true })),
+  );
+}
+
+/**
+ * Uploads live outside the database, so deletions have to reach the disk too:
+ * the raw files, the rendered slide images and the images attached to cards.
+ */
 async function removeExamUploads(examId: string) {
-  // Throws for an id that would leave the uploads root, rather than
-  // deleting whatever it names.
-  await rm(absolutePathFor(examId), {
-    recursive: true,
-    force: true,
-  });
+  // absolutePathFor throws for an id that would leave the uploads root,
+  // rather than deleting whatever it names.
+  for (const folder of [examId, storedPath("rendered", examId), storedPath("cards", examId)]) {
+    await removeFolder(folder);
+  }
 }
 
 export async function createCourseAction(input: {
@@ -150,4 +203,19 @@ export async function resetProgressAction(examId: string) {
   revalidatePath(`/exams/${examId}/study`);
   revalidatePath(`/exams/${examId}/learn`);
   return result;
+}
+
+/**
+ * Removes a deck's repeated cards, keeping the fullest card for each fact.
+ *
+ * Stars and review history on a removed card move to the one kept, and cards
+ * the student edited are never removed.
+ */
+export async function removeRepeatsAction(examId: string) {
+  const result = removeRepeats(db, examId);
+
+  revalidatePath(`/exams/${examId}`);
+  revalidatePath(`/exams/${examId}/study`);
+  revalidatePath(`/exams/${examId}/learn`);
+  return { removed: result.removed };
 }

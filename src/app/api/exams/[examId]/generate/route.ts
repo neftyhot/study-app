@@ -25,7 +25,8 @@ import {
 import { readLicenseStatus } from "@/lib/license/status";
 import { getProvider, LlmError } from "@/lib/llm";
 import { readSkipLogistics } from "@/lib/logistics";
-import { duplicateExamSources } from "@/lib/manage";
+import { deleteExam, duplicateExamSources } from "@/lib/manage";
+import { copyDuplicatedFiles } from "@/lib/manage/files";
 
 export const maxDuration = 300;
 
@@ -81,7 +82,7 @@ export async function POST(
   const density: DensityMode = isDensityMode(body?.density)
     ? body.density
     : exam.extractionDensity;
-  // Only an admin licence may ask for more than `MAX_RATIO`; checked here,
+  // Only an admin license may ask for more than `MAX_RATIO`; checked here,
   // where the client cannot reach, and applied to a stored ratio as well.
   const maxRatio =
     readLicenseStatus()?.type === "admin" ? ADMIN_MAX_RATIO : MAX_RATIO;
@@ -107,6 +108,8 @@ export async function POST(
   }
 
   let targetId = examId;
+  let jobRanges = ranges;
+  let jobFileIds: string[] | undefined = sourceFileIds;
   let cleared: { deleted: number; kept: number } | undefined;
   let createdExam: { id: string; title: string } | undefined;
 
@@ -128,6 +131,20 @@ export async function POST(
       }
       targetId = copy.id;
       createdExam = { id: copy.id, title: copy.title };
+      // The run reads the copy, whose files have new ids; a scope picked
+      // against the original's ids would otherwise select nothing.
+      jobFileIds = sourceFileIds?.map((id: string) => copy.fileIds[id] ?? id);
+      jobRanges = ranges
+        ? Object.fromEntries(
+            Object.entries(ranges).map(([id, range]) => [copy.fileIds[id] ?? id, range]),
+          )
+        : undefined;
+      try {
+        await copyDuplicatedFiles(db, copy);
+      } catch (error) {
+        deleteExam(db, copy.id);
+        throw error;
+      }
     }
 
     // Started, not awaited: generation writes each batch as it finishes and
@@ -138,8 +155,8 @@ export async function POST(
       targetExamId: targetId,
       density,
       densityRatio,
-      ranges,
-      sourceFileIds: sourceFileIds?.length ? sourceFileIds : undefined,
+      ranges: jobRanges,
+      sourceFileIds: jobFileIds?.length ? jobFileIds : undefined,
       skipLogistics: readSkipLogistics(body?.skipLogistics),
     });
 

@@ -45,7 +45,7 @@ export function ThemeToggle() {
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link href="/settings#appearance">Colours, corners and text…</Link>
+          <Link href="/settings#appearance">Colors, corners and text…</Link>
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

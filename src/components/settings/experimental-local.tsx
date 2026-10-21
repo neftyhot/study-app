@@ -11,7 +11,7 @@ export const EXPERIMENTAL_LOCAL_TITLE =
  * and a hot machine. So they sit behind a disclosure with the cost spelled
  * out, rather than as an equal first choice.
  *
- * A native <details>: keyboard and screen-reader behaviour for free, and it
+ * A native <details>: keyboard and screen-reader behavior for free, and it
  * stays open or closed across re-renders without any state here.
  */
 export function ExperimentalLocalSection({

@@ -121,8 +121,8 @@
 }
 
 /*
- * The extra styles. Their four main colours match `THEMES` in
- * src/lib/appearance.ts, which is what the colour pickers and the readability
+ * The extra styles. Their four main colors match `THEMES` in
+ * src/lib/appearance.ts, which is what the color pickers and the readability
  * check start from; the rest are derived the same way appearance.ts derives
  * them for a customised palette.
  */
@@ -350,7 +350,7 @@
 }
 
 /*
- * The four AAA reading themes. Every text colour here — body, card, muted,
+ * The four AAA reading themes. Every text color here — body, card, muted,
  * button labels — clears 7:1 against what it sits on, and every accent 3:1
  * against the page; appearance.test.ts reads these blocks and checks.
  */
@@ -439,7 +439,7 @@
   --chart-5: #6c71c4;
 }
 
-/* Pure black and white: no colour at all, and edges drawn rather than shaded. */
+/* Pure black and white: no color at all, and edges drawn rather than shaded. */
 .contrast {
   --radius: 0.25rem;
   --background: #000000;

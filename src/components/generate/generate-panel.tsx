@@ -46,6 +46,7 @@ import {
   selectedUnits,
   type SourceOption,
 } from "@/lib/generate/selection";
+import { plural } from "@/lib/plural";
 
 type GenerateMode = "append" | "replace" | "separate";
 
@@ -137,7 +138,7 @@ export function GeneratePanel({
   bulkModel?: string | null;
   /** This install's finished runs on that model, per density. */
   measured?: Partial<Record<DensityMode, MeasuredYield>>;
-  /** An admin licence gets exact number inputs and a higher ceiling. */
+  /** An admin license gets exact number inputs and a higher ceiling. */
   isAdmin?: boolean;
   /** A run already in flight, so the panel comes back mid-generation. */
   initialJob: GenerationJobView | null;
@@ -181,7 +182,7 @@ export function GeneratePanel({
         if (next && next.status !== "running") {
           if (next.status === "done") {
             setSummary(next.summary);
-            toast.success(`Finished — ${next.cardsCreated} card(s) created`);
+            toast.success(`Finished — ${plural(next.cardsCreated, "card")} created`);
           } else {
             toast.error(next.error ?? "Generation failed");
           }
@@ -418,7 +419,7 @@ export function GeneratePanel({
 
         {summary?.cleared ? (
           <p className="text-muted-foreground text-xs">
-            Replaced {summary.cleared.deleted} generated card(s)
+            Replaced {plural(summary.cleared.deleted, "generated card")}
             {summary.cleared.kept > 0
               ? `; kept ${summary.cleared.kept} you had edited`
               : ""}

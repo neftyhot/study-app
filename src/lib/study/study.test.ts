@@ -22,6 +22,7 @@ import {
   openSession,
   setPosition,
   startSession,
+  collapseRequeues,
 } from "./session";
 
 type TestDb = ReturnType<typeof drizzle<typeof schema>>;
@@ -225,8 +226,10 @@ describe("sessions", () => {
       .from(studySessions)
       .where(eq(studySessions.id, session.id))
       .get();
-    expect(updated?.easyCount).toBe(1);
+    // The same card graded twice counts once, under its latest grade.
+    expect(updated?.easyCount).toBe(0);
     expect(updated?.missedCount).toBe(1);
+    expect(updated?.cardGrades).toEqual({ [cardIds[0]]: "missed" });
   });
 
   it("grades a card with no session attached", () => {
@@ -252,5 +255,27 @@ describe("sessions", () => {
     const cards = loadQueueCards(db, examId);
     expect(cards).toHaveLength(4);
     expect(cards.find((c) => c.id === cardIds[0])?.lastGrade).toBe("missed");
+  });
+});
+
+describe("collapseRequeues", () => {
+  it("collapses a card queued several times in a row and moves the position back", () => {
+    const order = ["a", "r", "b", "c", "d", "e", "f", "r", "r", "r", "g"];
+    expect(collapseRequeues(order, 10)).toEqual({
+      order: ["a", "r", "b", "c", "d", "e", "f", "r", "g"],
+      position: 8,
+    });
+  });
+
+  it("keeps the copy the student is about to meet again", () => {
+    expect(collapseRequeues(["a", "r", "r", "b"], 2)).toEqual({
+      order: ["a", "r", "r", "b"],
+      position: 2,
+    });
+  });
+
+  it("leaves a healthy queue alone", () => {
+    const order = ["a", "r", "b", "c", "d", "e", "f", "r", "g"];
+    expect(collapseRequeues(order, 3)).toEqual({ order, position: 3 });
   });
 });

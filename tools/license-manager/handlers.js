@@ -7,7 +7,9 @@
  */
 const path = require("node:path");
 
+const { registerChangelog } = require("./changelog.js");
 const { registerDevstats } = require("./devstats.js");
+const { registerFeatures } = require("./features.js");
 const { registerInsights, admin } = require("./insights.js");
 const { registerScaling } = require("./scaling.js");
 
@@ -107,6 +109,8 @@ async function registerHandlers(ipcMain, context) {
   const extras = { ...context, getRoot: () => root, readLicenses: () => api.readLicenses() };
   registerScaling(ipcMain, extras);
   registerDevstats(ipcMain, extras);
+  registerChangelog(ipcMain, extras);
+  registerFeatures(ipcMain);
 
   ipcMain.handle("state", () => snapshot(isDev));
 

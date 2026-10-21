@@ -2,7 +2,7 @@
  * Study session persistence (PRD §4: exact session resumption).
  *
  * Plain functions over a `Db`, like ingestion and generation, so the server
- * actions stay thin and the behaviour is testable without Next's action
+ * actions stay thin and the behavior is testable without Next's action
  * machinery.
  */
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -192,7 +192,7 @@ export function skipKnownCard(
     db.insert(studyProgress).values({ flashcardId: cardId, ...row }).run();
   }
 
-  if (sessionId) bumpSessionCount(db, sessionId, "easy");
+  if (sessionId) recordSessionGrade(db, sessionId, cardId, "easy");
 }
 
 /** How far ahead a skipped card is re-queued within the same session. */
@@ -210,6 +210,7 @@ export function skipUnknownCard(
   db: Db,
   cardId: string,
   sessionId?: string | null,
+  position?: number,
 ) {
   const current = db
     .select()
@@ -218,6 +219,17 @@ export function skipUnknownCard(
     .get();
 
   const update = applyFlashcardGrade(current, "missed");
+
+  // Missing the same card twice in one session is one lapse, not two: the
+  // second "No clue" is the requeue doing its job.
+  if (sessionId && current) {
+    const before = db
+      .select({ cardGrades: studySessions.cardGrades })
+      .from(studySessions)
+      .where(eq(studySessions.id, sessionId))
+      .get();
+    if (before?.cardGrades?.[cardId] === "missed") update.lapses = current.lapses;
+  }
 
   if (current) {
     db.update(studyProgress)
@@ -230,7 +242,7 @@ export function skipUnknownCard(
 
   if (!sessionId) return undefined;
 
-  bumpSessionCount(db, sessionId, "missed");
+  recordSessionGrade(db, sessionId, cardId, "missed");
 
   const session = db
     .select()
@@ -240,8 +252,18 @@ export function skipUnknownCard(
   if (!session) return undefined;
 
   const order = [...session.cardOrder];
-  const at = order.indexOf(cardId);
+  // The card can already be in the queue twice, once where it was first met
+  // and once where it came back, so place the new copy after the one being
+  // looked at rather than after the first.
+  const at =
+    position !== undefined && order[position] === cardId
+      ? position
+      : order.indexOf(cardId);
   if (at === -1) return undefined;
+
+  // Pressing "No clue" again on the same card, after going back to it, must
+  // not queue it a second time: it is already coming back.
+  if (order.indexOf(cardId, at + 1) !== -1) return order;
 
   order.splice(Math.min(at + 1 + REQUEUE_GAP, order.length), 0, cardId);
 
@@ -253,7 +275,64 @@ export function skipUnknownCard(
   return order;
 }
 
-function bumpSessionCount(db: Db, sessionId: string, grade: Grade) {
+/**
+ * Undoes the pile-up an older "No clue" left in saved queues.
+ *
+ * It re-inserted a card every time the button was pressed, always at the
+ * same spot, so a card pressed four times sat there four times in a row. A
+ * card is never meant to follow itself, so runs of one card collapse to one,
+ * and the saved position moves back by however many copies before it went.
+ */
+export function collapseRequeues(
+  order: string[],
+  position: number,
+): { order: string[]; position: number } {
+  const kept: string[] = [];
+  let shift = 0;
+  order.forEach((id, index) => {
+    // The copy at `position` is the requeue the student is about to meet
+    // again after seeing the card just before it; that one stays.
+    if (kept.length > 0 && kept[kept.length - 1] === id && index !== position) {
+      if (index < position) shift += 1;
+      return;
+    }
+    kept.push(id);
+  });
+  return { order: kept, position: Math.max(position - shift, 0) };
+}
+
+/** Repairs a saved session's queue if it holds a pile-up; see above. */
+export function repairSessionQueue(db: Db, session: StudySession): StudySession {
+  const repaired = collapseRequeues(session.cardOrder, session.position);
+  if (repaired.order.length === session.cardOrder.length) return session;
+  db.update(studySessions)
+    .set({ cardOrder: repaired.order, position: repaired.position })
+    .where(eq(studySessions.id, session.id))
+    .run();
+  return { ...session, cardOrder: repaired.order, position: repaired.position };
+}
+
+const COUNTER: Record<Grade, "missedCount" | "difficultCount" | "easyCount"> = {
+  missed: "missedCount",
+  difficult: "difficultCount",
+  easy: "easyCount",
+};
+
+/**
+ * Notes a card's grade on the session.
+ *
+ * A session counts cards, not button presses: a card graded again, after the
+ * student goes back to it or meets it a second time, moves from its old
+ * counter to the new one instead of being counted twice. Counters are adjusted
+ * rather than recomputed so a session started before grades were tracked per
+ * card keeps the totals it already had.
+ */
+export function recordSessionGrade(
+  db: Db,
+  sessionId: string,
+  cardId: string,
+  grade: Grade,
+) {
   const session = db
     .select()
     .from(studySessions)
@@ -261,14 +340,22 @@ function bumpSessionCount(db: Db, sessionId: string, grade: Grade) {
     .get();
   if (!session) return;
 
+  const grades = { ...(session.cardGrades ?? {}) };
+  const previous = grades[cardId];
+  grades[cardId] = grade;
+
   const counters = {
-    missed: { missedCount: session.missedCount + 1 },
-    difficult: { difficultCount: session.difficultCount + 1 },
-    easy: { easyCount: session.easyCount + 1 },
-  }[grade];
+    missedCount: session.missedCount,
+    difficultCount: session.difficultCount,
+    easyCount: session.easyCount,
+  };
+  if (previous) {
+    counters[COUNTER[previous]] = Math.max(0, counters[COUNTER[previous]] - 1);
+  }
+  counters[COUNTER[grade]] += 1;
 
   db.update(studySessions)
-    .set({ ...counters, updatedAt: new Date().toISOString() })
+    .set({ ...counters, cardGrades: grades, updatedAt: new Date().toISOString() })
     .where(eq(studySessions.id, sessionId))
     .run();
 }
@@ -313,5 +400,5 @@ export function gradeCard(
       .run();
   }
 
-  if (sessionId) bumpSessionCount(db, sessionId, grade);
+  if (sessionId) recordSessionGrade(db, sessionId, cardId, grade);
 }

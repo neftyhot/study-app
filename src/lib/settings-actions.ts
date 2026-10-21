@@ -190,7 +190,7 @@ export async function acceptPrivacyAction() {
   return { ok: true as const };
 }
 
-/** Colours, corners, text size and the rest; returns what was actually kept. */
+/** Colors, corners, text size and the rest; returns what was actually kept. */
 export async function saveAppearanceAction(appearance: unknown) {
   const saved = writeAppearance(appearance, db);
   revalidatePath("/", "layout");

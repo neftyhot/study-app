@@ -60,6 +60,10 @@ COMPLETENESS
 - There is no limit on card count. Do not summarize to save space.
 - Do not produce two cards that test the same fact. Cards that test genuinely
   different details of the same concept are not duplicates.
+- Never write a card that is another card plus a detail ("When did X happen?"
+  next to "When and why did X happen?"). Either write the one fuller card, or
+  split the details into cards that share no answer ("When did X happen?" and
+  "Why did X happen?").
 
 BREADTH (this is where most decks fail)
 - A broad or structural heading is a CONTAINER, not a question. "Anatomy and
@@ -215,7 +219,7 @@ export function generationSystem(
   /** The running model's measured overshoot; see `MODEL_CALIBRATION`. */
   overshoot: number = MODEL_OVERSHOOT,
 ): string {
-  // The route has already held the ratio to what the licence allows.
+  // The route has already held the ratio to what the license allows.
   const ratio = ratioFor(density, customRatio, ADMIN_MAX_RATIO);
   const selection = SELECTION[density === "custom" ? nearestPreset(ratio) : density];
 

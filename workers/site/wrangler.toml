@@ -1,0 +1,7 @@
+# The download page (site/index.html), served as static files.
+# Deploy with `npx wrangler deploy` from this directory.
+name = "megan-study"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "../../site"

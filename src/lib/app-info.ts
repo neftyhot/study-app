@@ -12,7 +12,7 @@ export const APP_VERSION: string = pkg.version;
 export const RELEASES_REPO = "neftyhot/study-app";
 
 /**
- * The Worker that delivers licences and takes suggestions. Packaged builds get
+ * The Worker that delivers licenses and takes suggestions. Packaged builds get
  * it from the Electron main process (see electron/main.cjs); `next dev` reads
  * it from .env.local.
  */

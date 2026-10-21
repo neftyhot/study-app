@@ -256,6 +256,11 @@ function ApiKeySection({
               <Badge variant="outline">from the environment</Badge>
             ) : null}
           </p>
+        ) : status?.needsReentry ? (
+          <p className="text-sm text-amber-700 dark:text-amber-400">
+            This update stores keys differently, so the key you saved before
+            can&apos;t be read any more. Paste it once more below.
+          </p>
         ) : null}
 
         <div className="space-y-1.5">
@@ -272,8 +277,8 @@ function ApiKeySection({
           />
           <p className="text-muted-foreground text-xs">
             Stored in this app&apos;s local database on this machine, and sent
-            only to {PROVIDER_LABELS[provider]}. The desktop app encrypts it
-            with your computer&apos;s keychain.
+            only to {PROVIDER_LABELS[provider]}. The desktop app keeps it
+            encrypted.
           </p>
         </div>
 

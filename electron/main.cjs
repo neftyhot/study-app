@@ -24,7 +24,16 @@ if (!require("electron").app.isPackaged) {
  *  3. **Offline.** Nothing here reaches the network. Only card generation and
  *     typed grading call out, and only when the student asks for them.
  */
-const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  powerMonitor,
+  powerSaveBlocker,
+  shell,
+  systemPreferences,
+} = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -35,6 +44,7 @@ const updater = require("./updater.cjs");
 const { installSystemFetch } = require("./network.cjs");
 const { backupDatabase, backupDir } = require("./backup.cjs");
 const { crashLogPath, installCrashLog, logCrash } = require("./crash-log.cjs");
+const { registerLectures } = require("./lectures.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
@@ -44,6 +54,12 @@ const APP_NAME = "Megan Study";
 const FORMER_NAMES = ["Study App"];
 
 app.setName(APP_NAME);
+
+// Chromium otherwise opens the login Keychain at launch for its own cookie and
+// password store, which, for an app signed without an Apple Developer ID,
+// asks for the Mac password after every update. Nothing the app keeps relies
+// on it: API keys are sealed by electron/local-cipher.cjs instead.
+if (process.platform === "darwin") app.commandLine.appendSwitch("use-mock-keychain");
 
 /**
  * Brings data across from a folder the app used under an earlier name.
@@ -220,10 +236,21 @@ async function startServer() {
   process.env["STUDY_APP_SERVER_URL"] = process.env.LICENSE_SERVER_URL ?? "";
   process.env.NODE_ENV = "production";
 
-  // API keys are sealed with the OS keychain (src/lib/secret-box.ts); the
-  // server runs in this process, so it can borrow safeStorage directly.
-  const { safeStorage } = require("electron");
-  if (safeStorage.isEncryptionAvailable()) globalThis.__studyAppCipher = safeStorage;
+  // API keys are sealed at rest (src/lib/secret-box.ts); the server runs in
+  // this process, so it is handed the ciphers directly. macOS uses the app's
+  // own key, because the Keychain asks for a password after every update of
+  // an app without an Apple Developer ID. Windows and Linux keep safeStorage,
+  // which never prompts there.
+  if (process.platform === "darwin") {
+    globalThis.__studyAppCiphers = {
+      v2: require("./local-cipher.cjs").createLocalCipher(app.getPath("userData")),
+    };
+  } else {
+    const { safeStorage } = require("electron");
+    globalThis.__studyAppCiphers = safeStorage.isEncryptionAvailable()
+      ? { v1: safeStorage }
+      : {};
+  }
   // PowerPoint slides are drawn in a hidden window (src/lib/ingest/slide-render.ts).
   globalThis.__studyAppDrawSlides = require("./slide-drawer.cjs").drawSlides;
 
@@ -393,8 +420,9 @@ function openOutside(target) {
 }
 
 /**
- * Nothing in the app needs a camera, microphone, location or devices; a page
- * that asks is not one of ours. Clipboard writes (copy buttons) still work.
+ * Nothing in the app needs a camera, location or devices; a page that asks is
+ * not one of ours. Clipboard writes (copy buttons) still work. The microphone
+ * is the one exception, for recording a lecture: see `allowMicrophone`.
  */
 const REFUSED_PERMISSIONS = new Set([
   "media",
@@ -408,13 +436,39 @@ const REFUSED_PERMISSIONS = new Set([
   "display-capture",
 ]);
 
+/**
+ * The microphone, and only the microphone, for the app's own pages. macOS
+ * then asks the student itself, the first time.
+ */
+function allowMicrophone(webContents, details, callback) {
+  const kinds = Array.isArray(details?.mediaTypes) ? details.mediaTypes : [];
+  const audioOnly = kinds.length > 0 && kinds.every((kind) => kind === "audio");
+  const ours = Boolean(appUrl) && sameOrigin(webContents?.getURL() ?? "", appUrl);
+  if (!audioOnly || !ours) {
+    callback(false);
+    return;
+  }
+  if (process.platform !== "darwin") {
+    callback(true);
+    return;
+  }
+  systemPreferences
+    .askForMediaAccess("microphone")
+    .then((granted) => callback(granted))
+    .catch(() => callback(false));
+}
+
 function refuseUnneededPermissions() {
   const { session } = require("electron");
   session.defaultSession.setPermissionRequestHandler(
-    (_webContents, permission, callback, details) => {
+    (webContents, permission, callback, details) => {
       // A link to another program (zoommtg:, file:) is refused; mail is fine.
       if (permission === "openExternal") {
         callback(String(details?.externalURL ?? "").startsWith("mailto:"));
+        return;
+      }
+      if (permission === "media") {
+        allowMicrophone(webContents, details, callback);
         return;
       }
       callback(!REFUSED_PERMISSIONS.has(permission));
@@ -648,6 +702,23 @@ app.whenReady().then(async () => {
     } catch {
       return null;
     }
+  });
+
+  // Lecture recordings to transcripts, on this machine; see lectures.cjs.
+  registerLectures({
+    app,
+    ipcMain,
+    dialog,
+    powerSaveBlocker,
+    powerMonitor,
+    systemPreferences,
+    shell,
+    fromApp,
+    getWindows: () =>
+      BrowserWindow.getAllWindows().filter(
+        (window) =>
+          !window.isDestroyed() && appUrl && sameOrigin(window.webContents.getURL(), appUrl),
+      ),
   });
 
   try {

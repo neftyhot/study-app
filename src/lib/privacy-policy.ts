@@ -54,7 +54,7 @@ export const PRIVACY_POLICY: PolicySection[] = [
       },
       {
         label: "Who it's linked to",
-        text: "a random install id created on this computer. It does not include your name, email, licence key or machine id.",
+        text: "a random install id created on this computer. It does not include your name, email, license key or machine id.",
       },
       {
         label: "What is never sent",
@@ -119,11 +119,11 @@ export const PRIVACY_POLICY: PolicySection[] = [
     ],
   },
   {
-    heading: "Licence, updates and feedback",
+    heading: "License, updates and feedback",
     items: [
       {
-        label: "Licence",
-        text: "checking or buying a licence sends your licence key and this computer's machine id to the licensing server.",
+        label: "License",
+        text: "checking or buying a license sends your license key and this computer's machine id to the licensing server.",
       },
       {
         label: "Updates",

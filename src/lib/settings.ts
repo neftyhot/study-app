@@ -6,8 +6,7 @@
  * does.
  *
  * API keys are stored in the local database in the user's own application-data
- * directory, encrypted with the OS keychain in the desktop app (see
- * `secret-box.ts`). They never cross to the browser: callers get only whether a
+ * directory, encrypted in the desktop app (see `secret-box.ts`). They never cross to the browser: callers get only whether a
  * key is present and its last four characters.
  */
 import { eq } from "drizzle-orm";
@@ -29,7 +28,7 @@ import {
 } from "@/lib/grade/strictness";
 import { isModelLevel, type ModelLevel } from "@/lib/llm/tiers";
 import { PRIVACY_POLICY_VERSION } from "@/lib/privacy-policy";
-import { canSeal, isSealed, seal, unseal } from "@/lib/secret-box";
+import { isSealed, needsReseal, seal, unseal } from "@/lib/secret-box";
 import {
   PROVIDERS,
   type ApiProviderId,
@@ -245,8 +244,9 @@ export function readApiKey(
   const stored = readSetting(KEY_SETTING[provider], db);
   if (!stored) return undefined;
   const key = unseal(stored);
-  // A key saved before encryption existed is sealed the first time it's read.
-  if (key && !isSealed(stored) && canSeal()) {
+  // A key saved before encryption existed, or in an older format, is sealed
+  // in the current one the first time it's read.
+  if (key && needsReseal(stored)) {
     try {
       writeSetting(KEY_SETTING[provider], seal(key), db);
     } catch {
@@ -271,11 +271,15 @@ export function apiKeyStatus(
   const fromEnvironment = Boolean(environmentKey(provider));
   const key = readApiKey(provider, db);
 
+  // Sealed by an older version with a key this one cannot reach (the macOS
+  // Keychain, up to 1.8.0): the student has to paste it once more.
+  const stored = key ? null : readSetting(KEY_SETTING[provider], db);
   return {
     provider,
     present: Boolean(key),
     hint: key ? key.slice(-4) : null,
     fromEnvironment,
+    needsReentry: Boolean(stored && isSealed(stored)),
   };
 }
 

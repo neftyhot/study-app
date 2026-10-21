@@ -35,4 +35,6 @@ contextBridge.exposeInMainWorld("authority", {
     mark: (id, done) => ipcRenderer.invoke("scaling:mark", id, done),
   },
   devstats: () => ipcRenderer.invoke("devstats:get"),
+  changelog: () => ipcRenderer.invoke("changelog:get"),
+  features: () => ipcRenderer.invoke("features:get"),
 });

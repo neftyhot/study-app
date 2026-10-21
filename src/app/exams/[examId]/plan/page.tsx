@@ -23,6 +23,7 @@ import {
   type StudyPlan,
 } from "@/lib/plan";
 import { getExam, loadPlanCards } from "@/lib/queries";
+import { plural } from "@/lib/plural";
 
 export default async function PlanPage(
   props: PageProps<"/exams/[examId]/plan">,
@@ -278,10 +279,6 @@ function describeDay(day: StudyPlan["days"][number]): string {
   if (day.reviews > 0) parts.push(plural(day.reviews, "review"));
   if (day.fresh > 0) parts.push(`${day.fresh} new`);
   return parts.length > 0 ? parts.join(" · ") : "Nothing due";
-}
-
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 /** A YYYY-MM-DD date as "Thu, Oct 1", read as a calendar day (never UTC-shifted). */

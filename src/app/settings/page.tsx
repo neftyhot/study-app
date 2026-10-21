@@ -60,7 +60,7 @@ export default async function SettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-              Licence
+              License
               <Badge variant="secondary">{TIER_LABELS[license.type]}</Badge>
               <Badge variant="outline">{expiryLabel(license)}</Badge>
             </CardTitle>
@@ -75,7 +75,7 @@ export default async function SettingsPage() {
                 ? null
                 : license.expiresAt
                   ? `Valid until ${new Date(license.expiresAt).toLocaleDateString()}.`
-                  : "This licence has no end date."}
+                  : "This license has no end date."}
             </CardDescription>
             {license.type === "trial" ? <PurchaseLicense /> : null}
           </CardHeader>
@@ -149,7 +149,7 @@ export default async function SettingsPage() {
             <dl className="mt-4 space-y-4 text-sm">
               {license ? (
                 <div className="space-y-1">
-                  <dt className="font-medium">Licence</dt>
+                  <dt className="font-medium">License</dt>
                   <dd className="text-muted-foreground">
                     {TIER_LABELS[license.type]} · {expiryLabel(license)}
                     {license.name ? ` · Issued to ${license.name}` : ""}

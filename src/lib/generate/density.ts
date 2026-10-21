@@ -11,6 +11,8 @@
  * generation pipeline imports it on the server.
  */
 
+import { plural } from "@/lib/plural";
+
 export const DENSITY_MODES = [
   "high_yield",
   "standard",
@@ -133,14 +135,14 @@ export const MIN_RATIO = 0.1;
 export const MAX_RATIO = 4;
 
 /**
- * The ceiling on an admin licence. Above `MAX_RATIO` a run changes character
+ * The ceiling on an admin license. Above `MAX_RATIO` a run changes character
  * (see `isHighDensity`): it asks for an exact count, cuts batches small enough
  * for the model to write that many, and lists what is already covered so the
  * extra cards come from new angles instead of rephrasing.
  */
 export const ADMIN_MAX_RATIO = 40;
 
-/** A custom ratio only an admin licence can ask for. */
+/** A custom ratio only an admin license can ask for. */
 export function isHighDensity(mode: DensityMode, ratio?: number | null): boolean {
   return mode === "custom" && typeof ratio === "number" && ratio > MAX_RATIO;
 }
@@ -167,7 +169,7 @@ export function isDensityMode(value: unknown): value is DensityMode {
 export function ratioFor(
   mode: DensityMode,
   custom?: number | null,
-  /** `ADMIN_MAX_RATIO` for an admin licence; the server decides which. */
+  /** `ADMIN_MAX_RATIO` for an admin license; the server decides which. */
   max: number = MAX_RATIO,
 ): number {
   if (mode === "custom") {
@@ -260,5 +262,5 @@ export function estimateCards(
 export function formatEstimate(units: number, ratio: number): string {
   if (units === 0) return "nothing selected";
   const { low, high } = estimateCards(units, ratio);
-  return low === high ? `~${low} cards` : `~${low}–${high} cards`;
+  return low === high ? `~${plural(low, "card")}` : `~${low}–${high} cards`;
 }

@@ -676,8 +676,9 @@ tables), and serves every route. Three things were found only by doing that:
   needs a Developer ID certificate.
 - The app is ~770 MB unpacked (Electron framework plus the traced server); the `.dmg` compresses
   it substantially. Trimming further means pruning the standalone trace.
-- The API key is stored unencrypted in the local database. Doing it properly needs an OS
-  keychain; the settings screen says so plainly rather than implying otherwise.
+- API keys are encrypted at rest: Windows DPAPI via `safeStorage`; on macOS a local AES-GCM key
+  file beside the database (`electron/local-cipher.cjs`), so the app never prompts for the
+  Keychain password. That protects the database file copied on its own, not the whole data folder.
 - Only macOS was built and run here. The Windows and Linux targets are configured but untested.
 
 ---

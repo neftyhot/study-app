@@ -16,6 +16,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { plural } from "@/lib/plural";
 
 type Phase = "mapping" | "review" | "conflicts";
 
@@ -201,19 +202,19 @@ export function CoveragePanel({
             </p>
             {summary.sourceGaps > 0 ? (
               <p className="text-muted-foreground">
-                {summary.sourceGaps} gap(s) your uploaded files do not answer at
+                {plural(summary.sourceGaps, "gap")} your uploaded files do not answer at
                 all — more cards will not fix those.
               </p>
             ) : null}
             {summary.conflicts > 0 ? (
               <p className="text-muted-foreground">
-                {summary.conflicts} contradiction(s) found across{" "}
-                {summary.conflictPairsChecked} compared slide pair(s).
+                {plural(summary.conflicts, "contradiction")} found across{" "}
+                {plural(summary.conflictPairsChecked, "compared slide pair")}.
               </p>
             ) : null}
             {summary.unverifiedCitations > 0 ? (
               <p className="text-muted-foreground text-xs">
-                {summary.unverifiedCitations} supporting quote(s) were not
+                {summary.unverifiedCitations === 1 ? "1 supporting quote was" : `${summary.unverifiedCitations} supporting quotes were`} not
                 actually in the slide cited and were discarded.
               </p>
             ) : null}

@@ -81,6 +81,124 @@ export type TutorApi = {
   captureScreen(): Promise<string | null>;
 };
 
+/** A Whisper model the Lectures tab can download; see electron/lectures.cjs. */
+export type WhisperModelState = {
+  id: string;
+  name: string;
+  file: string;
+  /** Size of the whole download. */
+  bytes: number;
+  description: string;
+  recommended: boolean;
+  status: "missing" | "downloading" | "verifying" | "ready" | "error";
+  receivedBytes: number;
+  error: string | null;
+};
+
+/** One recording on its way to being a transcript. */
+export type LectureJob = {
+  id: string;
+  /** The saved transcript's id, once `status` is "done". */
+  lectureId: string | null;
+  title: string;
+  fileName: string;
+  modelId: string;
+  status: "queued" | "converting" | "transcribing" | "saving" | "done" | "error" | "cancelled";
+  /** 0 to 100, of the current step. */
+  progress: number;
+  /** The sentence Whisper heard most recently. */
+  preview: string;
+  error: string | null;
+};
+
+export type LecturesSnapshot = {
+  /** False when this copy of the app has no transcription tools. */
+  available: boolean;
+  unavailableReason: string | null;
+  /** File extensions accepted, without the dot. */
+  extensions: string[];
+  models: WhisperModelState[];
+  jobs: LectureJob[];
+  recording: LectureRecording | null;
+  /** About a recording that ended without being asked to, until dismissed. */
+  notice: { id: string; text: string; lectureId: string | null } | null;
+};
+
+/** The lecture being recorded in the app right now. */
+export type LectureRecording = {
+  id: string;
+  title: string;
+  /** Milliseconds since the epoch. */
+  startedAt: number;
+  paused: boolean;
+  /** The microphone is off; what to do with the recording is not yet chosen. */
+  stopped: boolean;
+  /** Being written out as a lecture. */
+  saving: boolean;
+  /** Set when the computer is going to sleep: hand over the audio and end. */
+  interrupted: string | null;
+  live: {
+    /** False when it was not asked for, or no model is downloaded. */
+    enabled: boolean;
+    /** What has been heard so far; `at` is seconds into the recording. */
+    lines: { at: number; text: string }[];
+  };
+};
+
+/** How a recording ended early; decides what the student is told. */
+export type RecordingEndReason = "sleep" | "closed" | "mic";
+
+type LecturesResult = { ok: true } | { ok: false; error: string };
+
+/** What the preload puts on `window.studyApp.lectures`. */
+export type LecturesApi = {
+  state(): Promise<LecturesSnapshot>;
+  downloadModel(modelId: string): Promise<LecturesResult>;
+  cancelDownload(modelId: string): Promise<LecturesResult>;
+  deleteModel(modelId: string): Promise<LecturesResult>;
+  /** Opens the system file picker; the chosen paths, or none. */
+  pickFiles(): Promise<string[]>;
+  /** The path of a file dropped on the window, or "" if it has none. */
+  pathForFile(file: File): string;
+  transcribe(request: {
+    paths: string[];
+    modelId: string;
+  }): Promise<{ ok: boolean; error?: string; queued?: number; rejected?: string[] }>;
+  /** Transcribes a lecture that was recorded and saved for later. */
+  transcribeLecture(request: { lectureId: string; modelId: string }): Promise<LecturesResult>;
+  cancelJob(jobId: string): Promise<LecturesResult>;
+  dismissJob(jobId: string): Promise<LecturesResult>;
+  startRecording(request: {
+    title: string;
+    live: boolean;
+    modelId: string;
+  }): Promise<{ ok: true; id: string } | { ok: false; error: string }>;
+  /** The next few seconds of sound, in the order they were recorded. */
+  appendRecording(request: { id: string; chunk: ArrayBuffer }): Promise<LecturesResult>;
+  updateRecording(request: {
+    id: string;
+    title?: string;
+    paused?: boolean;
+    live?: boolean;
+    stopped?: boolean;
+  }): Promise<LecturesResult>;
+  /** Saves the recording as a lecture (or throws it away) and ends it. */
+  finishRecording(request: {
+    id: string;
+    action: "transcribe" | "later" | "discard";
+    title?: string;
+    modelId?: string;
+    reason?: RecordingEndReason;
+  }): Promise<
+    { ok: true; lectureId: string | null; transcribing: boolean } | { ok: false; error: string }
+  >;
+  dismissNotice(): Promise<LecturesResult>;
+  micAccess(): Promise<"granted" | "denied" | "restricted" | "not-determined" | "unknown">;
+  openMicSettings(): Promise<LecturesResult>;
+  /** Calls `listener` whenever a download or a job moves; returns how to stop. */
+  onChange(listener: (snapshot: LecturesSnapshot) => void): () => void;
+};
+
 declare global {
   interface Window {
     /** Present only inside the desktop app. */
@@ -89,6 +207,7 @@ declare global {
       license: LicenseApi;
       update?: UpdateApi;
       tutor?: TutorApi;
+      lectures?: LecturesApi;
     };
   }
 }

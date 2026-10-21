@@ -1,10 +1,37 @@
 /**
  * Update notes, newest first. Add an entry with every version bump: the top
  * one is what the "What's new" banner shows after an update.
+ *
+ * `notes` is what a student reads, in the app: what they can now do, or what
+ * no longer goes wrong for them. Anything only the developer cares about
+ * (hardening, refactors, how a fix works) goes in `dev`, which the app never
+ * shows; the License Manager's Changelog tab lists both.
  */
-export type ChangelogEntry = { version: string; date: string; notes: string[] };
+export type ChangelogEntry = {
+  version: string;
+  date: string;
+  notes: string[];
+  dev?: string[];
+};
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.8.1",
+    date: "2026-10-21",
+    notes: [
+      "Flashcards count correctly: the card number, the total at the top and the Missed/Hard/Easy counts all agree, and going back to change a card's answer moves it to the new count instead of counting it twice.",
+      "Pressing No clue again on the same card no longer makes it come back several times in a row. Sessions that already had a card piled up are tidied when you open them.",
+      "Fewer repeated cards: new decks drop a card when another card already asks the same thing and says at least as much. To clean up a deck you already have, open its ••• menu and choose Remove repeated cards. Cards you edited yourself are never removed, and stars and progress move to the card that stays.",
+      "On a Mac, the app no longer asks for your keychain password when it opens. Because of this, an API key saved before this update has to be entered again once in Settings.",
+    ],
+    dev: [
+      "Sessions store each card's grade (study_sessions.card_grades, migration 0030); recordSessionGrade moves a regraded card between counters. The deck's \"Card X of Y\" counts unique cards, not queue slots.",
+      "skipUnknownCard requeues a card REQUEUE_GAP (5) ahead at most once; collapseRequeues/repairSessionQueue collapse old back-to-back duplicates on load (getOpenStudySession).",
+      "New src/lib/cards/repeats.ts: coverage-based repeat detection (answer containment ≥ 0.8, question containment ≥ 0.6, contrast-word guard for opposite cases). Generation runs removeRepeats on the cards it just wrote only; the ••• menu runs it on the whole deck. Prompt gained a completeness rule against restating a card.",
+      "macOS: no Keychain access. Chromium uses the mock keychain, the cookie-encryption fuse is off, and API keys use a local AES-GCM cipher (enc:v2:, electron/local-cipher.cjs) with its key file beside the database. Windows keeps DPAPI via safeStorage. Old Keychain-encrypted values report needsReentry and Settings shows a notice.",
+      "Retired Google sign-in no longer reads its refresh token from the Keychain on macOS at startup.",
+    ],
+  },
   {
     version: "1.8.0",
     date: "2026-10-04",
@@ -24,7 +51,12 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Practice exams: answer with the 1-4 or A-D keys, move with the arrow keys, jump to the next unanswered question, and get a check before handing in blank answers.",
       "Practice exams have the calculator, better wrong options with no reworded duplicates, and a Rewrite options button.",
       "Switch flashcard style right on the study and card list pages.",
-      "Security improvements to the desktop app.",
+    ],
+    dev: [
+      "Security: navigation kept in-app, safe links and images, pinned updates, permission and IPC checks, zip and upload limits.",
+      "next and eslint-config-next upgraded to 16.3.8 (GHSA-vcvr-r3jv-pc5j).",
+      "Uploads: proxy body limit raised, one file per request.",
+      "Release workflow can build chosen platforms.",
     ],
   },
   {
@@ -35,7 +67,11 @@ export const CHANGELOG: ChangelogEntry[] = [
       "Learn has the Numbers button too, listing the numbers a question gives (never the answer).",
       "Drag the calculator anywhere by its title bar. It remembers where you put it.",
       "The Numbers list keeps each number right next to what it is, instead of across the screen.",
-      "Security improvements to the desktop app.",
+    ],
+    dev: [
+      "Packaged app hardened: Electron fuses, asar, per-launch server secret.",
+      "Worker: per-network rate limits on license lookup, telemetry, feedback, catalog reports and edits.",
+      "Trials can't start in the future; license confirmations dated in the future aren't trusted.",
     ],
   },
   {
@@ -47,8 +83,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A new Numbers button lists every number in a question with what it is, on flashcards and in the study guide, so you can work the problem forward. Press a number to put it in the calculator.",
       "New cards and study guides keep every number and every step of the working, so you no longer need to remember the example from class to solve them.",
       "Sharing a deck to the catalog now runs the content check on your own Gemini, Claude or OpenAI key. It uses one short request, and the key is never stored. The privacy policy is updated to explain this, so you'll be asked to agree to it again.",
-      "Security improvements to the desktop app.",
     ],
+    dev: ["Security improvements to the desktop app."],
   },
   {
     version: "1.6.0",
@@ -108,7 +144,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-28",
     notes: [
       "Gemini now runs on your own free Google AI Studio key. “Sign in with Google” has been removed, and any saved sign-in is deleted and revoked when the app starts. If you used it, the dashboard asks you to add a key: Settings walks you through getting one in about a minute and checks it with Google before saving.",
-      "Your key is sent only to Google and stays encrypted with your computer's keychain.",
+      "Your key is sent only to Google and is stored encrypted on your computer.",
       "The upgrade guide now gives Gemini Pro prices per token, which is how Google bills.",
     ],
   },
@@ -131,11 +167,11 @@ export const CHANGELOG: ChangelogEntry[] = [
       "“Show original slide” opens the whole slideshow or PDF at the slide a card came from, and you can scroll through the rest. Lecture transcripts open at the right spot too, with the passage highlighted.",
       "New themes: Blossom and Rosewood in pink, Lavender and Plum in purple. A few look-alike themes were folded together; if you used one, you get the closest match.",
       "The Quizlet export's copy-and-paste box no longer runs off the screen.",
-      "Your API keys are now encrypted with your computer's keychain.",
+      "Your API keys are now stored encrypted on your computer.",
       "The app keeps a daily copy of your database for the last week, and backs up before any update changes it.",
       "If the app crashes, the details go to a log file on your computer (Settings › Advanced) that you can send with a bug report. Nothing is sent automatically.",
       "Settings › Advanced can delete your usage statistics from the developer's server.",
-      "A bought licence now needs to go online once every 45 days to stay confirmed. Offline for longer, just connect and press “Check again”; nothing is lost.",
+      "A bought license now needs to go online once every 45 days to stay confirmed. Offline for longer, just connect and press “Check again”; nothing is lost.",
       "Downloads for Intel Macs and Windows on ARM.",
     ],
   },
@@ -143,10 +179,10 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "1.2.0",
     date: "2026-09-26",
     notes: [
-      "Buy a licence right from the welcome screen, or choose the free 7-day trial. The screen now says plainly which is which.",
+      "Buy a license right from the welcome screen, or choose the free 7-day trial. The screen now says plainly which is which.",
       "Cleaner topics: the same topic spelled two ways is now merged into one, and tiny or repeated topics are folded into real sections. On an older deck, press “Combine topics” on the Practice Exam screen.",
       "Learn by Topic: choose how many concepts each round covers, from 1 to 50, instead of at most 8.",
-      "Settings › Advanced shows your licence key's short id, the same one the developer's records use.",
+      "Settings › Advanced shows your license key's short id, the same one the developer's records use.",
     ],
   },
   {
@@ -168,7 +204,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       "A simpler home screen: drag in your lecture slides (and study guide, if you have one) and press “Generate Study Set”.",
       "Every deck now follows one path: read the Study Guide, practise with Flashcards, then take a Practice Exam.",
       "Flashcards follow the order your course taught them, slide by slide.",
-      "Export, reset and other deck tools moved into the ••• menu, and licence details into Settings › Advanced.",
+      "Export, reset and other deck tools moved into the ••• menu, and license details into Settings › Advanced.",
       "Clearer wording throughout, like “Explain Answer” and “Show Counter-Example”, with hints on hover.",
     ],
   },
@@ -176,7 +212,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "0.2.4",
     date: "2026-09-24",
     notes: [
-      "Revoked licence keys now stop working: the app checks at launch and every few hours, and shows the activation screen if a key has been revoked. Your decks and cards are kept.",
+      "Revoked license keys now stop working: the app checks at launch and every few hours, and shows the activation screen if a key has been revoked. Your decks and cards are kept.",
       "Checking for revocation never locks you out when you're offline.",
     ],
   },
@@ -185,7 +221,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     date: "2026-09-24",
     notes: [
       "Study plans pace themselves: pick your exam date and the days you'll study, and the plan works out how long each study day needs. Days off are respected, and if the deck won't fit it suggests what to skip.",
-      "Buying a licence opens checkout right from the app.",
+      "Buying a license opens checkout right from the app.",
       "An updated privacy policy: sharing usage statistics is now required, and you'll be asked to agree once before continuing. Your study material still never leaves this computer.",
     ],
   },
@@ -210,7 +246,7 @@ export const CHANGELOG: ChangelogEntry[] = [
     version: "0.2.0",
     date: "2026-09-23",
     notes: [
-      "New styles: Bubble, Midnight and Sepia, plus your own colours, rounded corners, text size, font and page width (Settings → Appearance). Text always stays readable.",
+      "New styles: Bubble, Midnight and Sepia, plus your own colors, rounded corners, text size, font and page width (Settings → Appearance). Text always stays readable.",
       "Practice exams are picked by source file and page range, with a few broad topics under each file instead of dozens of one-card ones.",
       "Multiple-choice answers are now spread evenly across A–D.",
       "Type in a whole deck, Quizlet-style — or add a batch of cards to one. Simple mode is just front and back.",

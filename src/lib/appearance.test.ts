@@ -53,7 +53,7 @@ describe("keeping text readable", () => {
     expect(contrast(palette.foreground, palette.card)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
   });
 
-  it("moves a card colour no text could read on alongside the page", () => {
+  it("moves a card color no text could read on alongside the page", () => {
     const palette = resolvePalette("dark", { background: "#000000", card: "#999999", foreground: "#ffffff" });
     expect(contrast(palette.foreground, palette.background)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
     expect(contrast(palette.foreground, palette.card)).toBeGreaterThanOrEqual(MIN_TEXT_CONTRAST);
@@ -65,7 +65,7 @@ describe("keeping text readable", () => {
     expect(contrast(palette.primary, palette.background)).toBeGreaterThanOrEqual(MIN_ACCENT_CONTRAST);
   });
 
-  it("fuzzes: no chosen colours ever produce unreadable text", () => {
+  it("fuzzes: no chosen colors ever produce unreadable text", () => {
     const random = (seed: number) => `#${((seed * 2654435761) >>> 8).toString(16).padStart(6, "0").slice(0, 6)}`;
     for (let i = 1; i < 400; i += 1) {
       const theme = THEME_IDS[i % THEME_IDS.length];

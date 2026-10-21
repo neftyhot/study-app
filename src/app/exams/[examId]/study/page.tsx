@@ -5,6 +5,7 @@ import { StudyDeck, type StudyCardView } from "@/components/study/study-deck";
 import { db } from "@/db";
 import { MINUTES } from "@/lib/plan/estimate";
 import { readFlashcardFormat } from "@/lib/settings";
+import { isDue } from "@/lib/srs";
 import {
   countDueCards,
   getExam,
@@ -49,6 +50,7 @@ export default async function StudyPage(
     essentialPoints: card.rubric?.essentialPoints ?? [],
     commonMisconceptions: card.rubric?.commonMisconceptions ?? [],
     lastGrade: card.progress?.lastGrade ?? null,
+    due: isDue({ nextReviewDue: card.progress?.nextReviewDue ?? null }),
     givens: card.givens ?? [],
     calculations: card.calculations ?? [],
     source: card.sourceSlide
@@ -98,6 +100,7 @@ export default async function StudyPage(
                 missedCount: session.missedCount,
                 difficultCount: session.difficultCount,
                 easyCount: session.easyCount,
+                cardGrades: session.cardGrades ?? {},
               }
             : null
         }

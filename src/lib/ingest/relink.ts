@@ -7,6 +7,10 @@
  * excerpt is a verbatim quote, so it can be found again: the card moves to
  * whichever section of the same file contains it. A card whose quote cannot
  * be found stays where it was.
+ *
+ * `retiring` names sections about to be deleted because the file no longer
+ * has them: their cards always look for a new home, and none is chosen as
+ * one. Without this a file that shrank left those cards with no source.
  */
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
@@ -23,7 +27,7 @@ function anchor(excerpt: string): string {
     .sort((a, b) => b.length - a.length)[0] ?? "";
 }
 
-export function relinkCards(db: Db, fileId: string): number {
+export function relinkCards(db: Db, fileId: string, retiring: ReadonlySet<string> = new Set()): number {
   const slides = db
     .select({ id: sourceSlides.id, rawText: sourceSlides.rawText, notes: sourceSlides.speakerNotes })
     .from(sourceSlides)
@@ -50,9 +54,9 @@ export function relinkCards(db: Db, fileId: string): number {
       if (quote.length < 8) continue;
 
       const current = slides.find((slide) => slide.id === card.slideId);
-      if (current?.text.includes(quote)) continue;
+      if (current && !retiring.has(current.id) && current.text.includes(quote)) continue;
 
-      const home = slides.find((slide) => slide.text.includes(quote));
+      const home = slides.find((slide) => !retiring.has(slide.id) && slide.text.includes(quote));
       if (!home) continue;
 
       tx.update(flashcards).set({ sourceSlideId: home.id }).where(eq(flashcards.id, card.id)).run();

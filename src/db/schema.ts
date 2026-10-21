@@ -21,6 +21,7 @@ import type {
 import {
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -566,6 +567,15 @@ export const studySessions = sqliteTable(
     missedCount: integer("missed_count").notNull().default(0),
     difficultCount: integer("difficult_count").notNull().default(0),
     easyCount: integer("easy_count").notNull().default(0),
+    /**
+     * The latest grade each card got in this session. Going back and grading
+     * a card again replaces its entry, so the counters above count cards,
+     * not button presses.
+     */
+    cardGrades: text("card_grades", { mode: "json" })
+      .$type<Record<string, "missed" | "difficult" | "easy">>()
+      .notNull()
+      .default({}),
     startedAt: createdAt(),
     updatedAt: text("updated_at")
       .notNull()
@@ -1134,6 +1144,76 @@ export const tutorChats = sqliteTable(
   (t) => [index("tutor_chats_exam_idx").on(t.examId, t.updatedAt)],
 );
 
+/* ---------------------------------------------------------------- Lectures */
+
+/** One timed line of a transcript, as whisper.cpp reports it (seconds). */
+export type TranscriptSegment = {
+  id: number;
+  start: number;
+  end: number;
+  text: string;
+};
+
+/**
+ * A lecture recording transcribed on this machine. It belongs to no deck: the
+ * Lectures tab owns it, and `lectureDeckLinks` says which decks it was sent to.
+ */
+export const lectureTranscripts = sqliteTable(
+  "lecture_transcripts",
+  {
+    id: id(),
+    title: text("title").notNull(),
+    /**
+     * The app's own compressed copy of the recording, relative to the lectures
+     * folder beside the database. Null once the audio has been discarded.
+     */
+    audioPath: text("audio_path"),
+    durationSeconds: real("duration_seconds"),
+    fullText: text("full_text").notNull().default(""),
+    segments: text("segments_json", { mode: "json" })
+      .$type<TranscriptSegment[]>()
+      .notNull()
+      .default([]),
+    /**
+     * `pending` for a lecture recorded in the app and saved to transcribe
+     * later: the audio is there, the text is not yet.
+     */
+    transcriptStatus: text("transcript_status", { enum: ["pending", "done"] })
+      .notNull()
+      .default("done"),
+    createdAt: createdAt(),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [index("lecture_transcripts_created_idx").on(t.createdAt)],
+);
+
+/** Which decks a transcript has been added to as source material. */
+export const lectureDeckLinks = sqliteTable(
+  "lecture_deck_links",
+  {
+    lectureId: text("lecture_id")
+      .notNull()
+      .references(() => lectureTranscripts.id, { onDelete: "cascade" }),
+    /** A deck is an `exams` row. */
+    deckId: text("deck_id")
+      .notNull()
+      .references(() => exams.id, { onDelete: "cascade" }),
+    /** The source file the transcript became in that deck, replaced on re-sync. */
+    sourceFileId: text("source_file_id").references(() => sourceFiles.id, {
+      onDelete: "set null",
+    }),
+    syncedAt: text("synced_at")
+      .notNull()
+      .default(sql`(current_timestamp)`),
+  },
+  (t) => [
+    primaryKey({ columns: [t.lectureId, t.deckId] }),
+    index("lecture_deck_links_deck_idx").on(t.deckId),
+  ],
+);
+
 /* --------------------------------------------------------------- Relations */
 
 export const coursesRelations = relations(courses, ({ many }) => ({
@@ -1346,6 +1426,8 @@ export type StudySession = typeof studySessions.$inferSelect;
 export type AnswerAttempt = typeof answerAttempts.$inferSelect;
 export type AssistEvent = typeof assistEvents.$inferSelect;
 export type ErrorDiagnosis = typeof errorDiagnoses.$inferSelect;
+export type LectureTranscript = typeof lectureTranscripts.$inferSelect;
+export type LectureDeckLink = typeof lectureDeckLinks.$inferSelect;
 
 export type NewCourse = typeof courses.$inferInsert;
 export type NewExam = typeof exams.$inferInsert;

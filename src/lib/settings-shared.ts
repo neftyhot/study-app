@@ -32,6 +32,8 @@ export type KeyStatus = {
   /** Last four characters, so a student can tell which key is saved. */
   hint: string | null;
   fromEnvironment: boolean;
+  /** A key is saved but can't be opened any more; it must be pasted again. */
+  needsReentry?: boolean;
 };
 
 /**

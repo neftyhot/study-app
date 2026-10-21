@@ -225,6 +225,7 @@ export function LearnMode({
     setStatus(result.status);
     setHelps([]);
     setTyped("");
+    setGuessing(false);
     toast.success(`Marked known — the answer was: ${result.directAnswer}`);
   }
 
@@ -239,6 +240,7 @@ export function LearnMode({
     setAnswered(prompt);
     setReveal(result.reveal);
     setStatus(result.status);
+    setGuessing(false);
   }
 
   async function help(kind: AssistKind) {

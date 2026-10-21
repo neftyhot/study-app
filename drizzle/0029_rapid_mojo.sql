@@ -1,0 +1,1 @@
+ALTER TABLE `lecture_transcripts` ADD `transcript_status` text DEFAULT 'done' NOT NULL;

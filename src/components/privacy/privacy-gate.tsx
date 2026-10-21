@@ -17,7 +17,7 @@ import { acceptPrivacyAction } from "@/lib/settings-actions";
  * first launch, and again whenever the policy's version changes.
  *
  * On a trial (no key bought yet) it is also where the student chooses, up
- * front, between buying the licence now and starting the free trial.
+ * front, between buying the license now and starting the free trial.
  */
 export function PrivacyGate({
   trial,
@@ -51,7 +51,7 @@ export function PrivacyGate({
           Megan Study keeps your study material on this computer. It does send the
           developer usage statistics — numbers only, never your cards or files —
           and that is required to use the app. Please read the policy below
-          {trial ? ", then choose whether to buy a licence now or start the free trial" : ""}.
+          {trial ? ", then choose whether to buy a license now or start the free trial" : ""}.
         </p>
       </header>
 
@@ -81,7 +81,7 @@ export function PrivacyGate({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="bg-card flex flex-col gap-3 rounded-lg border p-4">
               <div className="space-y-1">
-                <p className="font-medium">Buy a licence now — $24.95</p>
+                <p className="font-medium">Buy a license now — $24.95</p>
                 <p className="text-muted-foreground text-sm">
                   One-time payment, no subscription. Unlocks Megan Study on this
                   computer for good. Checkout opens securely in your browser
@@ -108,7 +108,7 @@ export function PrivacyGate({
                   disabled={!checked || pending}
                   onClick={() => void purchase()}
                 >
-                  Agree and buy licence
+                  Agree and buy license
                 </Button>
               )}
             </div>
@@ -122,7 +122,7 @@ export function PrivacyGate({
                     ? ` (${trial.daysRemaining === 1 ? "1 day" : `${trial.daysRemaining} days`} left)`
                     : ""}
                   . You can buy any time from Settings. When the trial ends the
-                  app asks for a licence; nothing you made is lost.
+                  app asks for a license; nothing you made is lost.
                 </p>
               </div>
               <Button

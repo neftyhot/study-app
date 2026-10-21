@@ -22,6 +22,38 @@ generation and typed-answer grading call out, and only when asked. Without an
 API key the app still runs: generation is refused with a clear message, and
 typed answers fall back to the provisional keyword grader.
 
+## Lectures & Transcripts
+
+Recordings are transcribed on the machine by two programs shipped beside the
+app, not inside it: `whisper-cli` (whisper.cpp) and a static `ffmpeg`.
+`npm run audio-tools` puts them in `vendor/audio-tools/<os>-<arch>/`, and
+`extraResources` copies that folder to `resources/audio-tools/`. The build
+scripts run it for you; run it once by hand before `npm run electron:dev`.
+
+- Windows gets whisper.cpp's release binaries. There is no macOS release
+  binary, so on a Mac the script builds `whisper-cli` from the pinned source
+  tag, which needs `cmake` and the Xcode command line tools.
+- ffmpeg is a GPL build. Its license text is fetched with it and ships in the
+  same folder; keep it there.
+- Models are not shipped. The tab downloads `ggml-base.en.bin` (148 MB) or
+  `ggml-small.en.bin` (488 MB) into `userData/whisper-models/` and checks
+  their size and hash before using them.
+- Transcripts live in the database (`lecture_transcripts`); a compressed copy
+  of each recording for playback is in `lectures/` beside the database.
+- Recording in the app: the window captures the microphone and sends the
+  sound to the main process every few seconds, which appends it to
+  `userData/lecture-recordings/`. Stopping turns that file into the playback
+  copy and a `lecture_transcripts` row, either transcribed straight away or
+  left `pending` to transcribe later. The display is kept awake while it
+  records. Closing the lid cannot be prevented without admin rights, so on
+  `suspend` the recording is ended and saved as pending; a file left behind by
+  a crash or a quit is recovered the same way at the next launch.
+- The live transcript is a preview: every few seconds the new sound is cut out
+  of the growing file and run through Whisper. Nothing is saved from it.
+
+Everything that spawns a process is in `electron/lectures.cjs`; reading what
+the tools print is in `electron/lecture-parse.cjs`, which has tests.
+
 ## API keys
 
 Every cloud call is billed to the student's own key, pasted in Settings and

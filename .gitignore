@@ -76,3 +76,5 @@ workers/licensing/.wrangler/
 workers/licensing/node_modules/
 .env
 
+# whisper-cli and ffmpeg, fetched by scripts/fetch-audio-tools.mjs
+/vendor/audio-tools/

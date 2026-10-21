@@ -66,7 +66,7 @@ function run(command, args, options = {}) {
   });
 }
 
-/** The study-app checkout: the licence folder, the working directory, or this file's. */
+/** The study-app checkout: the license folder, the working directory, or this file's. */
 function findRepo(candidates) {
   for (const start of candidates.filter(Boolean)) {
     let dir = path.resolve(start);
@@ -102,7 +102,7 @@ function makeContext(context, state) {
   const needRepo = () => {
     if (!repo) {
       throw new Error(
-        "The study-app repository was not found. Use “Change folder…” on the Licences tab to pick the repository folder, then check again.",
+        "The study-app repository was not found. Use “Change folder…” on the Licenses tab to pick the repository folder, then check again.",
       );
     }
     return repo;
@@ -314,7 +314,7 @@ const ITEMS = [
     ],
     verify: [
       "The app unlocks by itself within a minute of paying.",
-      "Licences tab → Pull purchases lists it; after the refund it shows as revoked.",
+      "Licenses tab → Pull purchases lists it; after the refund it shows as revoked.",
     ],
     async check(ctx) {
       const purchases = await ctx.purchases();
@@ -455,7 +455,7 @@ const ITEMS = [
     why: "A buyer whose key didn't arrive has to be able to find you from the app itself.",
     cost: "Free",
     steps: [
-      "Ask Claude: “add support@yourdomain to Settings → Help and to the licence screen”.",
+      "Ask Claude: “add support@yourdomain to Settings → Help and to the license screen”.",
       "Release a new version.",
     ],
     verify: ["Settings in the released app shows the address as a mailto link."],
@@ -505,7 +505,7 @@ const ITEMS = [
     id: "key-backup",
     milestone: "launch",
     kind: "set up",
-    title: "Back up the licence signing key somewhere offline",
+    title: "Back up the license signing key somewhere offline",
     why: "Lose .license-private-key.pem and you can never mint a key the existing apps accept.",
     cost: "Free",
     steps: [
@@ -620,16 +620,16 @@ const ITEMS = [
     why: "Keys minted by Stripe live only in Cloudflare KV until pulled here; the ledger is your copy.",
     cost: "Free",
     steps: [
-      "Licences tab → Pull purchases (it also runs when this app opens).",
+      "Licenses tab → Pull purchases (it also runs when this app opens).",
       "Keep licenses.json in your regular backups (Time Machine covers it).",
     ],
-    verify: ["The Licences tab lists every sale shown in Stripe → Payments."],
+    verify: ["The Licenses tab lists every sale shown in Stripe → Payments."],
     async check(ctx) {
       const purchases = await ctx.purchases();
       const have = new Set(ctx.ledger().map((r) => r.id));
       const gone = purchases.filter((p) => p.licenseId && !have.has(p.licenseId));
       return gone.length
-        ? { status: "fail", detail: `${plural(gone.length, "sale")} not in the ledger yet — press Pull purchases on the Licences tab.` }
+        ? { status: "fail", detail: `${plural(gone.length, "sale")} not in the ledger yet — press Pull purchases on the Licenses tab.` }
         : { status: "pass", detail: `All ${plural(purchases.length, "sale")} are in the ledger.` };
     },
   },
@@ -702,7 +702,7 @@ const ITEMS = [
     steps: [
       "resend.com → sign up → Domains → add your domain → add the DNS records it shows in Cloudflare.",
       "API Keys → create one → cd workers/licensing && npx wrangler secret put RESEND_API_KEY",
-      "Ask Claude: “email the licence key from the Worker after a purchase using Resend”.",
+      "Ask Claude: “email the license key from the Worker after a purchase using Resend”.",
       "npx wrangler deploy",
     ],
     verify: ["Make a purchase (then refund it): the email with the key arrives, not in spam."],

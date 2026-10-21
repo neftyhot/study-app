@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, Nunito } from "next/font/google";
 import { BootScript } from "@/components/boot-script";
 import { StatusBanner, StatusScreen, StatusWatcher } from "@/components/layout/app-status";
 import { SiteHeader } from "@/components/layout/site-header";
+import { RecorderProvider } from "@/components/lectures/recorder";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
 import { readLicenseStatus, TRIAL_DAYS } from "@/lib/license/status";
 import { TimeTracker } from "@/components/layout/time-tracker";
@@ -82,7 +83,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${nunito.variable} h-full antialiased`}
     >
       <head>
-        {/* The student's colours, corners and sizes, in place before first
+        {/* The student's colors, corners and sizes, in place before first
             paint. Built only from checked values (see appearance.ts). */}
         <style
           id="appearance-css"
@@ -116,7 +117,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <StatusWatcher signature={statusSignature(status)} />
             </>
           ) : hasAcceptedPrivacy(db) ? (
-            <>
+            <RecorderProvider>
               <SiteHeader />
               {banner ? <StatusBanner text={banner.text} tone={banner.tone} /> : null}
               <StatusWatcher signature={statusSignature(status)} />
@@ -129,7 +130,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
                 {children}
               </main>
-            </>
+            </RecorderProvider>
           ) : (
             <PrivacyGate
               trial={

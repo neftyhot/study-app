@@ -2,7 +2,7 @@
  * Learn-mode tests.
  *
  * The ladder is a pure state machine, so the rules that decide what counts as
- * mastery are tested directly rather than inferred from UI behaviour.
+ * mastery are tested directly rather than inferred from UI behavior.
  */
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";

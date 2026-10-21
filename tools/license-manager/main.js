@@ -6,7 +6,7 @@
  * exists only on the developer's machine.
  *
  * Native window rather than a local web server on purpose: a server that can
- * mint licences is reachable by anything on the machine, including a web page
+ * mint licenses is reachable by anything on the machine, including a web page
  * in a browser. A window is reachable by the person sitting in front of it.
  */
 const { app, BrowserWindow, clipboard, dialog, ipcMain, shell } = require("electron");

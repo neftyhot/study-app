@@ -46,7 +46,7 @@ export function FlipCard({
   className?: string;
   faceClassName?: string;
 }) {
-  // About the shape of an index card: centred, landscape, never stretched
+  // About the shape of an index card: centered, landscape, never stretched
   // across the page. The faces share one grid cell, so both take the taller
   // one's height; a long answer scrolls instead of making the front cavernous.
   const face =
@@ -67,7 +67,7 @@ export function FlipCard({
         <div
           inert={revealed}
           aria-hidden={revealed}
-          className={cn(face, "items-center justify-center gap-4 text-center", faceClassName)}
+          className={cn(face, "items-center justify-center-safe gap-4 overflow-y-auto text-center", faceClassName)}
         >
           {front}
         </div>
@@ -147,6 +147,8 @@ export function SwipeCard({
             : undefined
         }
         onPointerDown={(event) => {
+          // A drag that ended off the card left no click to clear this.
+          dragged.current = false;
           if (!revealed || isInteractive(event.target) || event.button !== 0) return;
           drag.current = { x: event.clientX, pointer: event.pointerId, active: false };
         }}

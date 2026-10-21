@@ -1,0 +1,1 @@
+ALTER TABLE `study_sessions` ADD `card_grades` text DEFAULT '{}' NOT NULL;

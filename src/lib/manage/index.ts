@@ -12,7 +12,7 @@
  * A card the student rewrote is their work, and it is kept — flagged as having
  * lost its source, never silently deleted.
  */
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
@@ -36,7 +36,7 @@ export function createCourse(
   input: { title: string; term?: string | null },
 ): Course {
   const title = input.title.trim();
-  if (!title) throw new Error("A course needs a title.");
+  if (!title) throw new Error("A subject needs a name.");
 
   return db
     .insert(courses)
@@ -55,14 +55,14 @@ export function createExam(
   },
 ): Exam {
   const title = input.title.trim();
-  if (!title) throw new Error("A deck needs a title.");
+  if (!title) throw new Error("A deck needs a name.");
 
   const course = db
     .select({ id: courses.id })
     .from(courses)
     .where(eq(courses.id, input.courseId))
     .get();
-  if (!course) throw new Error("That course no longer exists.");
+  if (!course) throw new Error("That subject no longer exists.");
 
   return db
     .insert(exams)
@@ -78,7 +78,7 @@ export function createExam(
 
 export function renameCourse(db: Db, courseId: string, title: string) {
   const trimmed = title.trim();
-  if (!trimmed) throw new Error("A course needs a title.");
+  if (!trimmed) throw new Error("A subject needs a name.");
 
   db.update(courses)
     .set({ title: trimmed })
@@ -88,7 +88,7 @@ export function renameCourse(db: Db, courseId: string, title: string) {
 
 export function renameExam(db: Db, examId: string, title: string) {
   const trimmed = title.trim();
-  if (!trimmed) throw new Error("A deck needs a title.");
+  if (!trimmed) throw new Error("A deck needs a name.");
 
   db.update(exams).set({ title: trimmed }).where(eq(exams.id, examId)).run();
 }
@@ -164,15 +164,24 @@ export function renameSourceFile(db: Db, fileId: string, filename: string) {
  * Cards, progress, sessions and coverage are NOT copied. The new deck is the
  * same material with nothing studied yet.
  */
+export type DuplicatedExam = Exam & {
+  /** Old source-file id → its copy's id. */
+  fileIds: Record<string, string>;
+  /** Old source-unit id → its copy's id. */
+  slideIds: Record<string, string>;
+};
+
 export function duplicateExamSources(
   db: Db,
   examId: string,
   title: string,
-): Exam | undefined {
+): DuplicatedExam | undefined {
   const source = db.select().from(exams).where(eq(exams.id, examId)).get();
   if (!source) return undefined;
 
   let created: Exam | undefined;
+  const fileIds: Record<string, string> = {};
+  const slideIds: Record<string, string> = {};
 
   db.transaction((tx) => {
     created = tx
@@ -200,7 +209,8 @@ export function duplicateExamSources(
           filename: file.filename,
           fileType: file.fileType,
           role: file.role,
-          // The upload on disk is shared; nothing writes to it after ingestion.
+          // Still the original's upload; `copyDuplicatedFiles` gives the copy
+          // its own, so deleting either deck leaves the other whole.
           rawPath: file.rawPath,
           checksum: file.checksum,
           status: file.status,
@@ -209,6 +219,7 @@ export function duplicateExamSources(
         })
         .returning()
         .get();
+      fileIds[file.id] = copy.id;
 
       const units = tx
         .select()
@@ -217,7 +228,7 @@ export function duplicateExamSources(
         .all();
 
       for (const unit of units) {
-        tx.insert(sourceSlides)
+        const unitCopy = tx.insert(sourceSlides)
           .values({
             sourceFileId: copy.id,
             index: unit.index,
@@ -229,7 +240,9 @@ export function duplicateExamSources(
             hasDiagram: unit.hasDiagram,
             legibilityFlag: unit.legibilityFlag,
           })
-          .run();
+          .returning({ id: sourceSlides.id })
+          .get();
+        slideIds[unit.id] = unitCopy.id;
       }
 
       for (const objective of tx
@@ -252,7 +265,7 @@ export function duplicateExamSources(
     }
   });
 
-  return created;
+  return created ? { ...created, fileIds, slideIds } : undefined;
 }
 
 /* ---------------------------------------------------------------- Previews */
@@ -295,7 +308,9 @@ export function previewSourceFileDeletion(
       : db
           .select({ isUserEdited: flashcards.isUserEdited })
           .from(flashcards)
-          .where(inArray(flashcards.sourceSlideId, slideIds))
+          // Cards moved or copied to another deck stay there; they only
+          // lose the link to this file.
+          .where(and(eq(flashcards.examId, file.examId), inArray(flashcards.sourceSlideId, slideIds)))
           .all();
 
   const objectives = db
@@ -382,7 +397,7 @@ export function deleteSourceFile(
       const orphans = tx
         .select({ id: flashcards.id, isUserEdited: flashcards.isUserEdited })
         .from(flashcards)
-        .where(inArray(flashcards.sourceSlideId, slideIds))
+        .where(and(eq(flashcards.examId, file.examId), inArray(flashcards.sourceSlideId, slideIds)))
         .all();
 
       const generated = orphans

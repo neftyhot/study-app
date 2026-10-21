@@ -15,7 +15,7 @@ import { useSkipLogistics } from "@/lib/skip-logistics-pref";
 const STAGE_LABEL: Record<PrimerRun["stage"], string> = {
   explaining: "Reading the slides",
   filling_gaps: "Covering slides it skipped",
-  organising: "Organising into topics",
+  organising: "Organizing into topics",
   saving: "Saving",
 };
 

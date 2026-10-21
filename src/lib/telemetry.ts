@@ -6,7 +6,7 @@
  * counts, token totals and time — never a file, card, question or answer. Totals since install, so a lost or repeated
  * report changes nothing (see workers/licensing/src/insights.ts). The
  * install is identified by a random id made here, not the machine id the
- * licence uses.
+ * license uses.
  */
 import { count, sql } from "drizzle-orm";
 

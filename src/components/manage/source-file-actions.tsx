@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/manage/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { deleteSourceFileAction, sourceFileImpact } from "@/lib/manage/actions";
+import { plural } from "@/lib/plural";
 
 export function SourceFileActions({
   examId,
@@ -27,18 +28,18 @@ export function SourceFileActions({
     setImpact(
       summary
         ? [
-            `${summary.units} extracted section(s) from this file`,
-            `${summary.cardsDeleted} generated card(s) that cite it`,
+            `${plural(summary.units, "extracted section")} from this file`,
+            `${plural(summary.cardsDeleted, "generated card")} that cite it`,
             ...(summary.cardsKept > 0
               ? [
-                  `${summary.cardsKept} card(s) you edited will be KEPT, marked as having lost their source`,
+                  `${plural(summary.cardsKept, "card")} you edited will be KEPT, marked as having lost their source`,
                 ]
               : []),
             ...(summary.objectivesDeleted > 0
-              ? [`${summary.objectivesDeleted} study-guide objective(s)`]
+              ? [`${plural(summary.objectivesDeleted, "study-guide topic")}`]
               : []),
             ...(summary.objectivesKept > 0
-              ? [`${summary.objectivesKept} flagged objective(s) will be KEPT`]
+              ? [`${plural(summary.objectivesKept, "flagged topic")} will be KEPT`]
               : []),
           ]
         : [],
@@ -69,7 +70,7 @@ export function SourceFileActions({
           const result = await deleteSourceFileAction(examId, fileId);
           toast.success(
             result
-              ? `Deleted ${filename} and ${result.cardsDeleted} card(s)`
+              ? `Deleted ${filename} and ${plural(result.cardsDeleted, "card")}`
               : `Deleted ${filename}`,
           );
           router.refresh();

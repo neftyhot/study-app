@@ -47,9 +47,9 @@ export function readLicenseStatus(): LicenseStatus | null {
 }
 
 export const TIER_LABELS: Record<LicenseStatus["type"], string> = {
-  admin: "Full licence",
-  student: "Student licence",
-  lifetime: "Lifetime licence",
+  admin: "Full license",
+  student: "Student license",
+  lifetime: "Lifetime license",
   trial: "Free trial",
 };
 

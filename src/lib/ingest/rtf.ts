@@ -3,7 +3,7 @@
  *
  * RTF is a control-word format, not a markup one, so there is no tree to walk:
  * the text is whatever survives once the control words and the groups that
- * exist only to describe fonts, colours and styles are removed. Once it is
+ * exist only to describe fonts, colors and styles are removed. Once it is
  * plain text it chunks exactly like a .txt file.
  */
 import { extractPlainText } from "./text";

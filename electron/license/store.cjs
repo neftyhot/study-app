@@ -5,7 +5,7 @@
  * in the application bundle, which is read-only and replaced by updates.
  *
  * The launch timestamp is the clock-rollback anchor. It is deliberately stored
- * alongside the license rather than in the app's SQLite database: the licence
+ * alongside the license rather than in the app's SQLite database: the license
  * gate runs before the server starts, and a check that depends on the thing it
  * is gating is not a check.
  */

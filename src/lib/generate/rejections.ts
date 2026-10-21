@@ -63,7 +63,7 @@ function explain(
     case "unknown_citation":
       return `It cited "${citation ?? "nothing"}", which is not one of the pages it was given, so there was nothing to check the answer against.`;
     case "duplicate":
-      return "Your deck already has a card asking exactly this question, so the copy was skipped.";
+      return "Your deck already has a card asking this question, so the repeat was skipped.";
     case "empty_content":
       return "The question or the answer came back blank.";
   }
@@ -73,7 +73,7 @@ function explain(
 export const REJECTION_HEADINGS: Record<RejectionReason, string> = {
   excerpt_not_in_source: "Quote not found in your material",
   unknown_citation: "Cited a page it was not given",
-  duplicate: "Already in your deck",
+  duplicate: "Repeats a card you already have",
   empty_content: "Blank card",
 };
 

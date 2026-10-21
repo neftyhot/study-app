@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, TriangleAlert } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +79,10 @@ export function ConfirmDialog({
               try {
                 await onConfirm();
                 onOpenChange(false);
+              } catch (error) {
+                toast.error(
+                  error instanceof Error ? error.message : "That did not work. Try again.",
+                );
               } finally {
                 setBusy(false);
               }

@@ -9,7 +9,7 @@
 import { and, eq, gt, gte, inArray, isNull, sql } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
-import { cardRubrics, flashcards, type cardTypes } from "@/db/schema";
+import { cardRubrics, diagramOcclusions, flashcards, type cardTypes } from "@/db/schema";
 
 type CardType = (typeof cardTypes)[number];
 
@@ -271,6 +271,17 @@ export function frontOf(card: {
 
 export type BulkResult = { affected: number };
 
+/** The ids among `cardIds` that belong to `examId`. */
+export function cardsInExam(db: Db, examId: string, cardIds: string[]): string[] {
+  if (cardIds.length === 0) return [];
+  return db
+    .select({ id: flashcards.id })
+    .from(flashcards)
+    .where(and(eq(flashcards.examId, examId), inArray(flashcards.id, cardIds)))
+    .all()
+    .map((row) => row.id);
+}
+
 /**
  * Moves cards to another deck.
  *
@@ -339,6 +350,15 @@ export function duplicateCards(
     .all();
   const rubricByCard = new Map(rubrics.map((row) => [row.flashcardId, row]));
 
+  const occlusionsByCard = new Map<string, (typeof diagramOcclusions.$inferSelect)[]>();
+  for (const row of db
+    .select()
+    .from(diagramOcclusions)
+    .where(inArray(diagramOcclusions.flashcardId, cardIds))
+    .all()) {
+    occlusionsByCard.set(row.flashcardId, [...(occlusionsByCard.get(row.flashcardId) ?? []), row]);
+  }
+
   db.transaction((tx) => {
     for (const card of cards) {
       const copy = tx
@@ -358,11 +378,27 @@ export function duplicateCards(
           isUserEdited: card.isUserEdited,
           professorEmphasis: card.professorEmphasis,
           starred: card.starred,
+          excluded: card.excluded,
           frontImagePath: card.frontImagePath,
           backImagePath: card.backImagePath,
+          givens: card.givens,
+          calculations: card.calculations,
         })
         .returning()
         .get();
+
+      // A diagram drill is the card; without its masks the copy is a blank
+      // picture with nothing to recall.
+      for (const occlusion of occlusionsByCard.get(card.id) ?? []) {
+        tx.insert(diagramOcclusions)
+          .values({
+            flashcardId: copy.id,
+            sourceSlideId: occlusion.sourceSlideId,
+            imagePath: occlusion.imagePath,
+            maskCoordinates: occlusion.maskCoordinates,
+          })
+          .run();
+      }
 
       const rubric = rubricByCard.get(card.id);
       tx.insert(cardRubrics)

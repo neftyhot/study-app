@@ -6,7 +6,7 @@
  * did as you go, which is how it teaches; an exam must not, because the value
  * of sitting one is finding out what you know without that support.
  */
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
@@ -256,6 +256,38 @@ export async function submitPaper(
 
   if (!paper || paper.status !== "sitting") return undefined;
 
+  // Claimed before any marking: the timer and the Submit button can both fire,
+  // and only the first may mark the paper and record its misses.
+  const claimed = db
+    .update(practiceExams)
+    .set({ submittedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(practiceExams.id, paperId),
+        eq(practiceExams.status, "sitting"),
+        isNull(practiceExams.submittedAt),
+      ),
+    )
+    .run();
+  if (claimed.changes === 0) return undefined;
+
+  try {
+    return await markPaper(db, paperId, grader);
+  } catch (error) {
+    // Marking failed part way: free the paper so Submit can be pressed again.
+    db.update(practiceExams)
+      .set({ submittedAt: null })
+      .where(eq(practiceExams.id, paperId))
+      .run();
+    throw error;
+  }
+}
+
+async function markPaper(
+  db: Db,
+  paperId: string,
+  grader: TypedAnswerGrader,
+): Promise<Marked> {
   const questions = paperQuestions(db, paperId);
   let score = 0;
 
@@ -269,7 +301,8 @@ export async function submitPaper(
       db.update(practiceQuestions)
         .set({
           verdict: correct ? "correct" : "incorrect",
-          errorType: correct ? "none" : answer === "" ? "unrelated" : "mechanism",
+          // A wrong option says nothing about why; the feedback names the choice.
+          errorType: correct || answer !== "" ? "none" : "unrelated",
           missedPoints: correct ? [] : question.essentialPoints,
           feedback: correct
             ? "Correct."
@@ -280,6 +313,19 @@ export async function submitPaper(
         .where(eq(practiceQuestions.id, question.id))
         .run();
 
+      continue;
+    }
+
+    if (answer === "") {
+      db.update(practiceQuestions)
+        .set({
+          verdict: "incorrect",
+          errorType: "unrelated",
+          missedPoints: question.essentialPoints,
+          feedback: "Left blank.",
+        })
+        .where(eq(practiceQuestions.id, question.id))
+        .run();
       continue;
     }
 

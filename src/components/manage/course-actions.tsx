@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/manage/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { deleteCourseAction } from "@/lib/manage/actions";
+import { plural } from "@/lib/plural";
 
 export function CourseActions({
   courseId,
@@ -39,13 +40,13 @@ export function CourseActions({
         title={`Delete ${title}?`}
         description="The subject and every deck inside it go together."
         impact={[
-          `${examCount} deck(s), with their sources, cards and review history`,
+          `${plural(examCount, "deck")}, with their sources, cards and review history`,
           "Every uploaded file for those decks",
         ]}
         confirmLabel="Delete subject"
         onConfirm={async () => {
           const removed = await deleteCourseAction(courseId);
-          toast.success(`Deleted ${title} and ${removed} deck(s)`);
+          toast.success(`Deleted ${title} and ${plural(removed, "deck")}`);
           router.refresh();
         }}
       />

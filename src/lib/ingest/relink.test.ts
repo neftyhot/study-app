@@ -60,4 +60,18 @@ describe("relinkCards", () => {
     // Not found anywhere: left where it was rather than guessed.
     expect(slideOf(lost)).toBe(first.id);
   });
+
+  it("moves cards off a section that is going away, even when it still quotes them", () => {
+    const { db, file, first, second, card } = setup();
+    // The old section still holds the text until it is deleted; a later
+    // section now holds it too.
+    db.update(sourceSlides)
+      .set({ rawText: "Smell begins in the olfactory epithelium." })
+      .where(eq(sourceSlides.id, second.id))
+      .run();
+    const moving = card("Smell begins in the olfactory epithelium.");
+
+    expect(relinkCards(db, file.id, new Set([first.id]))).toBe(1);
+    expect(db.select().from(flashcards).where(eq(flashcards.id, moving)).get()!.sourceSlideId).toBe(second.id);
+  });
 });

@@ -1,9 +1,10 @@
 import Link from "next/link";
-import { GraduationCap, Library, Search, Settings } from "lucide-react";
+import { GraduationCap, Library, Mic, Search, Settings } from "lucide-react";
 
 import { CardBuilder } from "@/components/cards/card-builder";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { UpdateNotice } from "@/components/layout/update-notice";
+import { RecordingIndicator } from "@/components/lectures/recorder";
 import { Button } from "@/components/ui/button";
 import { DeckSwitcher } from "@/components/manage/deck-switcher";
 import { DownloadChip } from "@/components/settings/download-chip";
@@ -38,6 +39,13 @@ export async function SiteHeader() {
               )}
             />
           ) : null}
+          <RecordingIndicator />
+          <Button asChild variant="ghost" size="sm" aria-label="Lectures & Transcripts">
+            <Link href="/lectures">
+              <Mic className="size-4" />
+              <span className="hidden lg:inline">Lectures &amp; Transcripts</span>
+            </Link>
+          </Button>
           <Button asChild variant="ghost" size="icon" aria-label="Search everything">
             <Link href="/search">
               <Search className="size-4" />

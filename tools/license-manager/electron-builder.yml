@@ -1,7 +1,7 @@
 # Packaging for the License Authority.
 #
 # Deliberately a separate config from the student client's: this app contains
-# the tooling that signs licences and must never be built into, or alongside,
+# the tooling that signs licenses and must never be built into, or alongside,
 # the app that checks them. Different appId, different output directory,
 # different file set.
 #
@@ -23,6 +23,8 @@ files:
   - tools/license-manager/insights.js
   - tools/license-manager/scaling.js
   - tools/license-manager/devstats.js
+  - tools/license-manager/changelog.js
+  - tools/license-manager/features.js
   - package.json
   - "!**/node_modules/**"
 

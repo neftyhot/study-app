@@ -4,11 +4,11 @@
  * Settings → Appearance.
  *
  * Everything previews as it changes, by rewriting the same stylesheet the
- * server renders into the page, and saves itself shortly after. Colours are
+ * server renders into the page, and saves itself shortly after. Colors are
  * per style, so a student can have a pink Bubble and an untouched Dark; the
  * rest applies to every style.
  *
- * A colour that would leave text hard to read is not accepted as picked: it
+ * A color that would leave text hard to read is not accepted as picked: it
  * comes back moved just far enough to read, with a note saying so.
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -68,9 +68,9 @@ const COLOR_FIELDS: { key: keyof Palette; label: string }[] = [
 
 const FIELD_NAMES: Record<keyof Palette, string> = {
   background: "background",
-  foreground: "text colour",
-  card: "card colour",
-  primary: "accent colour",
+  foreground: "text color",
+  card: "card color",
+  primary: "accent color",
 };
 
 const noSubscription = () => () => {};
@@ -88,7 +88,7 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
   const [saved, setSaved] = useState(true);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // The style whose colours are being edited: the one showing.
+  // The style whose colors are being edited: the one showing.
   const active: ThemeId = isThemeId(resolvedTheme) ? resolvedTheme : "light";
   const palette = useMemo(
     () => resolvePalette(active, appearance.colors[active]),
@@ -122,7 +122,7 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
     else overrides[key] = value.toLowerCase();
 
     // Whatever the readability rule had to move is stored as moved, so the
-    // picker shows the colour actually in use, not the one asked for.
+    // picker shows the color actually in use, not the one asked for.
     const resolved = resolvePalette(active, overrides);
     const moved = (Object.keys(resolved.adjusted) as (keyof Palette)[]).filter(
       (field) => overrides[field] !== undefined,
@@ -166,7 +166,7 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
           </span>
         </CardTitle>
         <CardDescription>
-          Pick a style, then make it yours. Colours are kept per style; the
+          Pick a style, then make it yours. Colors are kept per style; the
           sliders below apply to all of them.
         </CardDescription>
       </CardHeader>
@@ -197,7 +197,7 @@ export function AppearanceSettings({ initial }: { initial: Appearance }) {
 
         <section className="space-y-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <Label className="text-sm">Colours for {THEMES[active].label}</Label>
+            <Label className="text-sm">Colors for {THEMES[active].label}</Label>
             <span
               className="text-muted-foreground text-xs tabular-nums"
               title="WCAG contrast between text and the page or cards; 4.5 or more reads comfortably."
@@ -410,7 +410,7 @@ function ColorField({
   onReset: () => void;
 }) {
   const [draft, setDraft] = useState(value);
-  // Follow the colour when it changes from outside — a reset, or the
+  // Follow the color when it changes from outside — a reset, or the
   // readability rule moving it — without fighting the student's typing.
   const [shown, setShown] = useState(value);
   if (shown !== value) {
@@ -426,7 +426,7 @@ function ColorField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="size-9 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
-        aria-label={`${label} colour`}
+        aria-label={`${label} color`}
       />
       <div className="min-w-0 flex-1">
         <Label htmlFor={`${id}-hex`} className="text-xs">

@@ -210,7 +210,7 @@ function registerDevstats(ipcMain, context) {
       const repo = findRepo([context.getRoot?.(), process.cwd(), path.join(__dirname, "..", "..")]);
       if (!repo) {
         throw new Error(
-          "The study-app repository was not found. Use “Change folder…” on the Licences tab to pick the repository folder.",
+          "The study-app repository was not found. Use “Change folder…” on the Licenses tab to pick the repository folder.",
         );
       }
       const [code, git, releases] = await Promise.all([codeStats(repo), gitStats(repo), releaseStats()]);

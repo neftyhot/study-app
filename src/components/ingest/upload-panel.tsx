@@ -24,6 +24,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { plural } from "@/lib/plural";
 
 type UploadResult = {
   filename: string;
@@ -59,7 +60,7 @@ export function UploadPanel({ examId }: { examId: string }) {
       setResults((previous) => [...previous, result]);
     }
 
-    if (ready > 0) toast.success(`Extracted ${ready} file(s)`);
+    if (ready > 0) toast.success(`Extracted ${plural(ready, "file")}`);
 
     // Refresh the server components so counts and the source list update.
     router.refresh();
@@ -124,7 +125,7 @@ export function UploadPanel({ examId }: { examId: string }) {
       setResults((previous) => [...previous, payload]);
       setPasteText("");
       setPasteTitle("");
-      toast.success(`Added ${payload.unitCount} section(s)`);
+      toast.success(`Added ${plural(payload.unitCount, "section")}`);
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not add");
@@ -267,7 +268,7 @@ export function UploadPanel({ examId }: { examId: string }) {
                   </p>
                   {result.warnings && result.warnings.length > 0 ? (
                     <p className="text-muted-foreground mt-1 text-xs">
-                      {result.warnings.length} legibility warning(s) — see the
+                      {plural(result.warnings.length, "legibility warning")} — see the
                       source list.
                     </p>
                   ) : null}

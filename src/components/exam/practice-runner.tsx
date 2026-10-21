@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, Calculator, Clock, FileText, Layers, Loader2, RefreshCw, Send } from "lucide-react";
 import { toast } from "@/lib/notify";
 
@@ -77,7 +77,7 @@ export type PaperView = {
  * Sitting a practice exam.
  *
  * Nothing here tells the student how they are doing. There is no tick, no
- * colour, no count of right answers — an exam that leaks feedback is a study
+ * color, no count of right answers — an exam that leaks feedback is a study
  * session, and the point of sitting one is to find out what you know without
  * that support.
  */
@@ -108,6 +108,7 @@ export function PracticeRunner({
     Object.fromEntries(initialQuestions.map((q) => [q.id, q.answer ?? ""])),
   );
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [remaining, setRemaining] = useState(paper?.remainingMs ?? null);
   const [calcOpen, setCalcOpen] = useState(false);
   const [rewriting, setRewriting] = useState(false);
@@ -147,16 +148,23 @@ export function PracticeRunner({
 
     const timer = setInterval(() => {
       setRemaining((value) => {
-        if (value === null) return null;
-        const next = Math.max(0, value - 1000);
-        if (next === 0) void handleSubmit(true);
-        return next;
+        if (value === null || value <= 1000) {
+          clearInterval(timer);
+          return value === null ? null : 0;
+        }
+        return value - 1000;
       });
     }, 1000);
 
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paper?.id, remaining !== null]);
+
+  // Submitted once, from here, rather than from inside the timer's state update.
+  useEffect(() => {
+    if (remaining === 0) void handleSubmit(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remaining === 0]);
 
   function choose(questionId: string, option: string) {
     setAnswers((prev) => ({ ...prev, [questionId]: option }));
@@ -207,7 +215,9 @@ export function PracticeRunner({
     }
 
     if (result.set < result.askedFor) {
-      toast.info(`Set ${result.set} questions — that is all the deck has.`);
+      toast.info(
+        `Only ${result.set} ${result.set === 1 ? "question" : "questions"} available — that is all the deck has.`,
+      );
     }
     if (rephrase && !result.rephrased) {
       toast.info("Questions kept the deck's wording — no model was available.");
@@ -242,16 +252,30 @@ export function PracticeRunner({
   }
 
   async function handleSubmit(automatic = false) {
-    if (!paper) return;
+    if (!paper || submitting.current) return;
     if (!automatic && !confirmBlank && answered < questions.length) {
       setConfirmBlank(true);
       return;
     }
+    submitting.current = true;
     setConfirmBlank(false);
     setBusy(true);
 
-    const marked = await submit(examId, paper.id);
-    setBusy(false);
+    // A typed answer saves on blur; time can run out mid-sentence, before one.
+    await Promise.all(
+      questions
+        .filter((question) => question.format === "typed")
+        .map((question) => answerQuestion(question.id, answers[question.id] ?? "")),
+    );
+    let marked: Awaited<ReturnType<typeof submit>> = null;
+    try {
+      marked = await submit(examId, paper.id);
+    } catch {
+      toast.error("The paper could not be marked. Try Submit again.");
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
 
     if (!marked) return;
     toast.success(

@@ -36,6 +36,7 @@ import {
 } from "./prompts";
 import { describeRejection, type RejectionView } from "./rejections";
 import { withRetry } from "./retry";
+import { removeRepeats } from "@/lib/cards/repeats";
 import { routeObjectives } from "./routing";
 import {
   generatedCardSchema,
@@ -252,6 +253,7 @@ export async function generateCardsForExam(
   const rejections: Rejection[] = [];
   const failedBatches: { batch: number; error: string }[] = [];
   let cardsCreated = 0;
+  const createdIds: string[] = [];
   let completed = 0;
   let inputTokens = 0;
   let outputTokens = 0;
@@ -331,7 +333,9 @@ export async function generateCardsForExam(
             }
           });
 
-          cardsCreated += persistCards(db, examId, result.accepted);
+          const ids = persistCards(db, examId, result.accepted);
+          createdIds.push(...ids);
+          cardsCreated += ids.length;
 
           const batchUsage = {
             inputTokens: usage?.inputTokens ?? 0,
@@ -384,6 +388,32 @@ export async function generateCardsForExam(
       `Generation failed: ${failedBatches[0]?.error ?? "every batch failed"}`,
     );
   }
+
+  // Batches run side by side, so two of them can each write the same fact —
+  // one plainly, one with an extra detail. Once every batch is in, keep the
+  // fullest card of each repeat and say which were dropped. Only this run's
+  // cards are removed; an older card covered by a new one stays, because it
+  // may already carry the student's history.
+  const created = new Set(createdIds);
+  const repeats = removeRepeats(db, examId, { onlyRemove: created });
+  for (const group of repeats.groups) {
+    for (const { question, directAnswer } of group.removed) {
+      rejections.push({
+        reason: "duplicate",
+        card: { question, directAnswer } as Rejection["card"],
+        detail: `covered by "${group.kept}"`,
+      });
+      rejectionViews.push({
+        reason: "duplicate",
+        question,
+        answer: directAnswer,
+        excerpt: "",
+        where: null,
+        explanation: `Another card already covers this and says more: "${group.kept}"`,
+      });
+    }
+  }
+  cardsCreated -= repeats.removed;
 
   const durationMs = Date.now() - startedAt;
   const estimatedCostUsd = estimateCost(llm.model, { inputTokens, outputTokens });
@@ -441,14 +471,15 @@ function nonEmpty<T>(items: T[]): T[] | null {
   return items.length ? items : null;
 }
 
-/** Writes cards and their rubrics. Never updates or deletes existing rows. */
+/** Writes cards and their rubrics, returning the new ids. Never updates or deletes existing rows. */
 function persistCards(
   db: Db,
   examId: string,
   accepted: ReturnType<typeof validateCards>["accepted"],
-): number {
-  if (accepted.length === 0) return 0;
+): string[] {
+  if (accepted.length === 0) return [];
 
+  const ids: string[] = [];
   db.transaction((tx) => {
     for (const { card, slide } of accepted) {
       const [inserted] = tx
@@ -471,6 +502,7 @@ function persistCards(
         })
         .returning({ id: flashcards.id })
         .all();
+      ids.push(inserted.id);
 
       tx.insert(cardRubrics)
         .values({
@@ -483,7 +515,7 @@ function persistCards(
     }
   });
 
-  return accepted.length;
+  return ids;
 }
 
 function loadSlides(

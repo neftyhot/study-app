@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { bulkCardAction } from "@/lib/cards/actions";
+import { plural } from "@/lib/plural";
 
 export type DeckTarget = { id: string; title: string; courseTitle: string };
 
@@ -117,7 +118,7 @@ export function BulkBar({
           size="sm"
           disabled={busy}
           onClick={() =>
-            void run({ kind: "star", starred: true }, (n) => `Starred ${n} card(s)`)
+            void run({ kind: "star", starred: true }, (n) => `Starred ${plural(n, "card")}`)
           }
         >
           <Star className="size-4" />
@@ -180,7 +181,7 @@ export function BulkBar({
                   ? { kind: "move", targetExamId: target }
                   : { kind: "duplicate", targetExamId: target },
                 (n) =>
-                  moving === "move" ? `Moved ${n} card(s)` : `Copied ${n} card(s)`,
+                  moving === "move" ? `Moved ${plural(n, "card")}` : `Copied ${plural(n, "card")}`,
               )
             }
           >
@@ -214,7 +215,7 @@ export function BulkBar({
           <Button
             disabled={busy || !topic.trim()}
             onClick={() =>
-              void run({ kind: "retag", topic }, (n) => `Re-tagged ${n} card(s)`)
+              void run({ kind: "retag", topic }, (n) => `Re-tagged ${plural(n, "card")}`)
             }
           >
             Re-tag them
@@ -234,7 +235,7 @@ export function BulkBar({
         ]}
         confirmLabel="Delete them"
         onConfirm={async () => {
-          await run({ kind: "delete" }, (n) => `Deleted ${n} card(s)`);
+          await run({ kind: "delete" }, (n) => `Deleted ${plural(n, "card")}`);
         }}
       />
     </>

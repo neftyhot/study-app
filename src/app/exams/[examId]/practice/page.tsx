@@ -307,7 +307,7 @@ export default async function PracticePage(
                         style={{ width: `${percent(paper)}%` }}
                       />
                     </span>
-                    <span className="w-24 shrink-0 text-right tabular-nums">
+                    <span className="min-w-24 shrink-0 text-right whitespace-nowrap tabular-nums">
                       {paper.score} of {paper.questionCount} · {percent(paper)}%
                     </span>
                   </Link>

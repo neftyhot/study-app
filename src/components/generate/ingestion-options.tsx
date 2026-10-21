@@ -95,7 +95,7 @@ export function IngestionOptions({
   /** What finished runs on this install produced, per setting. */
   measured?: Partial<Record<DensityMode, MeasuredYield>>;
   /**
-   * An admin licence may type an exact count, up to `ADMIN_MAX_RATIO`. The
+   * An admin license may type an exact count, up to `ADMIN_MAX_RATIO`. The
    * server enforces the ceiling; this only decides which control is shown.
    */
   isAdmin?: boolean;

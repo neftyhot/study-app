@@ -7,6 +7,7 @@ import { createExam } from "@/lib/manage";
 
 import {
   CardInputError,
+  cardsInExam,
   createManualCard,
   createManualCards,
   placeCards,
@@ -81,6 +82,10 @@ export async function bulkCardAction(
   cardIds: string[],
   action: BulkAction,
 ) {
+  // Only this deck's cards: a stale selection, or ids from elsewhere, must
+  // not reach cards the student is not looking at.
+  cardIds = cardsInExam(db, examId, cardIds);
+
   const result = (() => {
     switch (action.kind) {
       case "move":

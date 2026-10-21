@@ -5,8 +5,8 @@
  * CSS before anything paints, and the settings screen, which previews them
  * live. No imports that could not run in both.
  *
- * The one rule this file exists to hold: whatever colours are chosen, text
- * stays readable. A text colour too close to its background is not saved as
+ * The one rule this file exists to hold: whatever colors are chosen, text
+ * stays readable. A text color too close to its background is not saved as
  * chosen — it is moved, the least distance it takes, until it reads.
  */
 
@@ -50,7 +50,7 @@ export type ThemeDefinition = {
 };
 
 /**
- * The palettes the colour pickers start from.
+ * The palettes the color pickers start from.
  *
  * Kept in step with the matching blocks in `globals.css`, which carry the
  * rest of each style's variables; these four are the ones a student can
@@ -193,7 +193,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
   contrast: {
     id: "contrast",
     label: "High Contrast",
-    blurb: "Pure black and white: crisp borders, no colour.",
+    blurb: "Pure black and white: crisp borders, no color.",
     dark: true,
     radius: 0.25,
     font: "sans",
@@ -202,7 +202,7 @@ export const THEMES: Record<ThemeId, ThemeDefinition> = {
   },
 };
 
-/** Themes held to WCAG AAA: 7:1 for every text colour, not just 4.5:1. */
+/** Themes held to WCAG AAA: 7:1 for every text color, not just 4.5:1. */
 export const AAA_THEME_IDS = ["paper", "slate", "solarized", "contrast"] as const satisfies readonly ThemeId[];
 export const AAA_TEXT_CONTRAST = 7;
 
@@ -286,7 +286,7 @@ export type Width = keyof typeof WIDTHS;
 export type ColorOverrides = Partial<Palette>;
 
 export type Appearance = {
-  /** Colour changes, per style — each style keeps its own. */
+  /** Color changes, per style — each style keeps its own. */
   colors: Partial<Record<ThemeId, ColorOverrides>>;
   /** Corner radius in rem; null follows the style. */
   radius: number | null;
@@ -311,10 +311,10 @@ export const TEXT_SCALE_RANGE = { min: 0.85, max: 1.3, step: 0.05 } as const;
 
 /** WCAG AA for body text. */
 export const MIN_TEXT_CONTRAST = 4.5;
-/** WCAG AA for large text and UI parts — what the accent colour is held to. */
+/** WCAG AA for large text and UI parts — what the accent color is held to. */
 export const MIN_ACCENT_CONTRAST = 3;
 
-/* ------------------------------------------------------------ Colour maths */
+/* ------------------------------------------------------------ Color maths */
 
 type Rgb = [number, number, number];
 
@@ -341,7 +341,7 @@ function luminance(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** The WCAG contrast ratio between two colours, from 1 to 21. */
+/** The WCAG contrast ratio between two colors, from 1 to 21. */
 export function contrast(a: string, b: string): number {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi + 0.05) / (lo + 0.05);
@@ -354,7 +354,7 @@ export function mix(a: string, b: string, amount: number): string {
 }
 
 /**
- * `color`, or the nearest colour to it that reaches `ratio` against every one
+ * `color`, or the nearest color to it that reaches `ratio` against every one
  * of `against`.
  *
  * It slides towards black or white — whichever direction gets there — by the
@@ -397,12 +397,12 @@ export function ensureContrast(
 /* ---------------------------------------------------------- Resolving it */
 
 export type ResolvedPalette = Palette & {
-  /** Where the readability rule had to move a colour, and from what. */
+  /** Where the readability rule had to move a color, and from what. */
   adjusted: Partial<Record<keyof Palette, string>>;
 };
 
 /**
- * A style's colours with the student's changes applied, made readable.
+ * A style's colors with the student's changes applied, made readable.
  *
  * Background is taken as given — it is the one thing everything else is
  * measured against. The card follows the background unless it was chosen
@@ -485,7 +485,7 @@ export function sanitizeAppearance(raw: unknown): Appearance {
 /* -------------------------------------------------------------------- CSS */
 
 /**
- * Every variable a style defines, derived from its four colours.
+ * Every variable a style defines, derived from its four colors.
  *
  * Only emitted for a style the student has changed; an untouched style is
  * exactly what `globals.css` says.

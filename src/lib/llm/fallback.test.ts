@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { classifyFailure, providerChain } from "./fallback";
 import { LlmError, type LlmProvider } from "./types";
 
-function fake(model: string, behaviour: () => unknown): LlmProvider & { calls: number } {
+function fake(model: string, behavior: () => unknown): LlmProvider & { calls: number } {
   const provider = {
     name: "gemini",
     model,
@@ -11,7 +11,7 @@ function fake(model: string, behaviour: () => unknown): LlmProvider & { calls: n
     calls: 0,
     async generateStructured<T>() {
       provider.calls += 1;
-      const outcome = behaviour();
+      const outcome = behavior();
       if (outcome instanceof Error) throw outcome;
       return { data: outcome as T };
     },

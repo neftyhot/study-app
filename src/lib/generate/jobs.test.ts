@@ -1,7 +1,7 @@
 /**
  * Generation jobs.
  *
- * The behaviour that matters: progress is real, it survives the client going
+ * The behavior that matters: progress is real, it survives the client going
  * away, and two runs cannot overlap.
  */
 import Database from "better-sqlite3";

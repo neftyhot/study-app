@@ -55,8 +55,12 @@ export async function skipKnown(cardId: string, sessionId?: string | null) {
 }
 
 /** "No clue": mark it missed and re-queue it later in this session. */
-export async function skipUnknown(cardId: string, sessionId?: string | null) {
-  const order = skipUnknownCard(db, cardId, sessionId);
+export async function skipUnknown(
+  cardId: string,
+  sessionId?: string | null,
+  position?: number,
+) {
+  const order = skipUnknownCard(db, cardId, sessionId, position);
   return { cardOrder: order ?? null };
 }
 

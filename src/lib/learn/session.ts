@@ -391,6 +391,8 @@ export function skipKnown(
   // `schedule` carries the authoritative state; spread it last.
   const row = {
     lastReviewedAt: new Date().toISOString(),
+    // Known now, so it leaves the "missed cards" review.
+    ...(current?.lastGrade === "missed" ? { lastGrade: null } : {}),
     ...forMode(schedule, session.roundState.mode),
   };
 
@@ -616,21 +618,28 @@ export function overrideAttempt(
   const update = applyLearnResult(current, {
     stage: (attempt.stage as Step["stage"]) ?? "typed_immediate",
     correct: true,
+    // A guess stays a guess when overturned: right, but never credit.
+    guessed: attempt.guessed,
     countsTowardMastery: attempt.countsTowardMastery,
     // Everything the rubric asked for is credited: the student is asserting
     // their answer said it.
     metPoints: [...attempt.metPoints, ...attempt.missedPoints],
   });
 
-  // The lapse the overturned grade recorded goes with it.
-  const lapses = Math.max((current?.lapses ?? 0) - 1, 0);
+  // The lapse the overturned grade recorded goes with it. A guessed miss
+  // recorded none, so there is none to take back.
+  const lapses = attempt.guessed
+    ? (current?.lapses ?? 0)
+    : Math.max((current?.lapses ?? 0) - 1, 0);
 
   // Reschedule as the pass it is now agreed to have been. The failed grade
   // already halved the interval, so this re-grows it from there.
-  const schedule = scheduleFor(current, update.state, {
-    quality: "pass",
-    retentionEligible: attempt.countsTowardMastery,
-  });
+  const schedule = attempt.guessed
+    ? {}
+    : scheduleFor(current, update.state, {
+        quality: "pass",
+        retentionEligible: attempt.countsTowardMastery,
+      });
 
   const row = { ...update, ...schedule, lapses };
 

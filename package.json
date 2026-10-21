@@ -20,11 +20,12 @@
     "grade:check": "tsx --env-file=.env.local scripts/grade-check.ts",
     "smoke": "tsx scripts/smoke.ts",
     "electron:dev": "npm run db:migrate && concurrently -k -n next,electron -c cyan,magenta \"next dev\" \"wait-on tcp:3000 && electron .\"",
-    "electron:build": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder",
-    "electron:pack": "next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder --dir",
-    "build:win": "next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=x64 && node scripts/compile-main.mjs --platform=win32 --arch=x64 && electron-builder --win --x64",
-    "build:win-arm64": "next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=arm64 && node scripts/compile-main.mjs --platform=win32 --arch=arm64 && electron-builder --win --arm64",
+    "electron:build": "node scripts/fetch-audio-tools.mjs && next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder",
+    "electron:pack": "node scripts/fetch-audio-tools.mjs && next build && node scripts/prepare-standalone.mjs && npm run electron:compile && electron-builder --dir",
+    "build:win": "node scripts/fetch-audio-tools.mjs --platform=win32 --arch=x64 && next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=x64 && node scripts/compile-main.mjs --platform=win32 --arch=x64 && electron-builder --win --x64",
+    "build:win-arm64": "node scripts/fetch-audio-tools.mjs --platform=win32 --arch=arm64 && next build && node scripts/prepare-standalone.mjs --platform=win32 --arch=arm64 && node scripts/compile-main.mjs --platform=win32 --arch=arm64 && electron-builder --win --arm64",
     "electron:compile": "node scripts/compile-main.mjs",
+    "audio-tools": "node scripts/fetch-audio-tools.mjs",
     "license-manager:dev": "electron tools/license-manager/main.js",
     "license-manager:build": "electron-builder --config tools/license-manager/electron-builder.yml --mac --arm64",
     "license-manager:selftest": "electron tools/license-manager/selftest.js",
@@ -111,6 +112,16 @@
       "!**/*.db-*",
       "package.json"
     ],
+    "extraResources": [
+      {
+        "from": "vendor/audio-tools/${os}-${arch}",
+        "to": "audio-tools",
+        "filter": [
+          "**/*",
+          "!.stamp"
+        ]
+      }
+    ],
     "extraMetadata": {
       "main": "electron/build/main.cjs"
     },
@@ -122,7 +133,10 @@
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.education"
+      "category": "public.app-category.education",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Megan Study uses the microphone to record a lecture when you press Record. Recordings stay on this computer."
+      }
     },
     "dmg": {
       "artifactName": "Megan-Study-${version}-${arch}.${ext}"
@@ -170,7 +184,7 @@
     ],
     "electronFuses": {
       "runAsNode": false,
-      "enableCookieEncryption": true,
+      "enableCookieEncryption": false,
       "enableNodeOptionsEnvironmentVariable": false,
       "enableNodeCliInspectArguments": false,
       "enableEmbeddedAsarIntegrityValidation": true,

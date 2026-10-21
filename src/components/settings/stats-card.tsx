@@ -22,6 +22,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { AppStats } from "@/lib/stats";
+import { plural } from "@/lib/plural";
 
 function duration(seconds: number): string {
   if (seconds < 60) return seconds > 0 ? "< 1 min" : "0 min";
@@ -83,7 +84,7 @@ export function StatsCard({ stats }: { stats: AppStats }) {
     },
     {
       icon: <Sun />,
-      label: "Favourite study time",
+      label: "Favorite study time",
       value: stats.peakHour === null ? "—" : hourLabel(stats.peakHour),
     },
     {
@@ -96,7 +97,7 @@ export function StatsCard({ stats }: { stats: AppStats }) {
       icon: <CalendarCheck />,
       label: "Most studied deck",
       value: stats.topDeck?.title ?? "—",
-      hint: stats.topDeck ? `${stats.topDeck.reviews} cards flipped` : undefined,
+      hint: stats.topDeck ? plural(stats.topDeck.reviews, "review") : undefined,
     },
     {
       icon: <PenLine />,

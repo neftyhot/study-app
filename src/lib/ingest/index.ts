@@ -7,7 +7,7 @@
  */
 import { readFile } from "node:fs/promises";
 
-import { and, eq, inArray, notInArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 import type { Db } from "@/db/client";
 import {
@@ -18,6 +18,7 @@ import {
 } from "@/db/schema";
 
 import { extractCsv } from "./csv";
+import { relinkCards } from "./relink";
 import { extractDocx } from "./docx";
 import { extractPdf } from "./pdf";
 import { extractPptx } from "./pptx";
@@ -117,23 +118,18 @@ export async function ingestSourceFile(
           tx.insert(sourceSlides).values(values).run();
         }
       }
-
-      // A re-ingested file that lost slides leaves orphan rows behind. Remove
-      // only the trailing units that no longer exist; cards that referenced
-      // them keep their ID and fall back to a null source (ON DELETE SET NULL)
-      // rather than being deleted with it.
-      const keptIndexes = units.map((u) => u.index);
-      if (keptIndexes.length > 0) {
-        tx.delete(sourceSlides)
-          .where(
-            and(
-              eq(sourceSlides.sourceFileId, file.id),
-              notInArray(sourceSlides.index, keptIndexes),
-            ),
-          )
-          .run();
-      }
     });
+
+    // A re-ingested file that lost slides leaves orphan rows behind. Cards on
+    // them first move to whichever remaining section holds their excerpt;
+    // the rest keep their ID and fall back to a null source (ON DELETE SET
+    // NULL) rather than being deleted with it.
+    const keptIndexes = new Set(units.map((u) => u.index));
+    const retiring = existing.filter((row) => !keptIndexes.has(row.index)).map((row) => row.id);
+    if (units.length > 0 && retiring.length > 0) {
+      relinkCards(db, file.id, new Set(retiring));
+      db.delete(sourceSlides).where(inArray(sourceSlides.id, retiring)).run();
+    }
 
     // A study guide additionally yields objectives.
     let objectiveCount = 0;
