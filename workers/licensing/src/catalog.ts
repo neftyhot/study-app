@@ -93,6 +93,11 @@ export const LIMITS = {
   reportsPerDay: 20,
   /** From one network, whatever install ids it uses. */
   reportsPerDayPerIp: 40,
+  /**
+   * Distinct reports that hide a listing until an admin looks at it. The only
+   * place this number lives; review hidden listings at GET /admin/catalog?status=hidden
+   * and bring one back with POST /admin/catalog/:id/restore (ADMIN_TOKEN).
+   */
   reportsToHide: 3,
 } as const;
 

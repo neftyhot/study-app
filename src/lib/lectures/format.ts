@@ -96,3 +96,6 @@ export function toDeckNotes(
 
   return `# ${title}\n\n${body}\n`;
 }
+
+/** Settings key set once the student has read the Beta notice on Lectures. */
+export const LECTURES_BETA_KEY = "lectures_beta_acknowledged";

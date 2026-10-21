@@ -46,6 +46,7 @@ export async function SiteHeader() {
             <Link href="/lectures">
               <Mic className="size-4" />
               <span className="hidden lg:inline">Lectures &amp; Transcripts</span>
+              <span className="text-muted-foreground hidden text-[10px] font-medium uppercase lg:inline">Beta</span>
             </Link>
           </Button>
           <Button asChild variant="ghost" size="icon" aria-label="Search everything">

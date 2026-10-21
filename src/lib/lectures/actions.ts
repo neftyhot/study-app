@@ -9,14 +9,20 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import { exams, lectureDeckLinks, lectureTranscripts, sourceFiles } from "@/db/schema";
 import { ingestSourceFile } from "@/lib/ingest";
+import { writeSetting } from "@/lib/settings";
 import { absolutePathFor, storeUpload } from "@/lib/ingest/storage";
 
-import { toDeckNotes } from "./format";
+import { LECTURES_BETA_KEY, toDeckNotes } from "./format";
 import { lectureAudioPath } from "./storage";
 
 type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+export async function acknowledgeLecturesBetaAction(): Promise<Result> {
+  writeSetting(LECTURES_BETA_KEY, new Date().toISOString());
+  return { ok: true };
+}
 
 export async function renameLectureAction(lectureId: string, title: string): Promise<Result> {
   const next = String(title ?? "").replace(/\s+/g, " ").trim().slice(0, 200);

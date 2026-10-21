@@ -32,7 +32,7 @@ export async function publishDeckAction(input: PublishInput) {
   return result;
 }
 
-export async function updateListingAction(id: string, fields: Omit<PublishInput, "examId" | "uploader" | "includeGuide">) {
+export async function updateListingAction(id: string, fields: Omit<PublishInput, "examId" | "uploader" | "includeGuide" | "attested">) {
   const result = await attempt(() => updateListing(id, fields));
   revalidatePath("/catalog");
   return result;

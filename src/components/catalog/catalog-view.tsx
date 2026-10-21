@@ -55,6 +55,7 @@ import {
 import {
   CATALOG_KINDS,
   kindLabel,
+  PUBLISH_ATTESTATION,
   type CatalogDeck,
   type CatalogDeckDetail,
   type CatalogKind,
@@ -911,7 +912,9 @@ function PublishDialog({
   const blank = { ...EMPTY, college: defaultCollege };
   const [examId, setExamId] = useState("");
   const [fields, setFields] = useState<ListingFields>(blank);
-  const [includeGuide, setIncludeGuide] = useState(true);
+  // Guides are often built from lecture slides, so they stay out unless asked.
+  const [includeGuide, setIncludeGuide] = useState(false);
+  const [attested, setAttested] = useState(false);
   const [pending, start] = useTransition();
 
   const pick = (id: string) => {
@@ -927,7 +930,13 @@ function PublishDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) setAttested(false);
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Share a deck</DialogTitle>
@@ -966,11 +975,22 @@ function PublishDialog({
               onCheckedChange={(v) => setIncludeGuide(v === true)}
             />
             Include the study guide
+            <span className="text-muted-foreground">
+              (only if you wrote it, not your professor&apos;s slides)
+            </span>
+          </label>
+          <label className="bg-muted/50 flex items-start gap-2 rounded-lg border p-3 text-sm">
+            <Checkbox
+              className="mt-0.5"
+              checked={attested}
+              onCheckedChange={(v) => setAttested(v === true)}
+            />
+            <span>{PUBLISH_ATTESTATION}</span>
           </label>
         </div>
         <DialogFooter>
           <Button
-            disabled={pending || !examId}
+            disabled={pending || !examId || !attested}
             onClick={() =>
               start(async () => {
                 const r = await publishDeckAction({
@@ -981,6 +1001,7 @@ function PublishDialog({
                   description: fields.description || null,
                   uploader: null,
                   includeGuide,
+                  attested,
                 });
                 if (!r.ok) {
                   toast.error(r.error);
@@ -989,6 +1010,8 @@ function PublishDialog({
                 toast.success("Shared to the catalog.");
                 setExamId("");
                 setFields(blank);
+                setIncludeGuide(false);
+                setAttested(false);
                 onOpenChange(false);
               })
             }

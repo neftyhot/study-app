@@ -44,7 +44,13 @@ export type PublishInput = {
   description: string | null;
   uploader: string | null;
   includeGuide: boolean;
+  /** The sharer ticked PUBLISH_ATTESTATION. Checked again on the server side. */
+  attested: boolean;
 };
+
+/** What a sharer must agree to before a deck goes into the catalog. */
+export const PUBLISH_ATTESTATION =
+  "I made these cards myself, and this deck doesn't include exam questions, answer keys, or copied course materials.";
 
 export type OwnDeck = { examId: string; examTitle: string; courseTitle: string; term: string | null };
 

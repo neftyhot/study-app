@@ -125,6 +125,9 @@ function moderationKey(): { provider: ModerationProvider; key: string } {
 }
 
 export async function publishDeck(input: PublishInput): Promise<CatalogDeck> {
+  if (input.attested !== true) {
+    throw new CatalogError("Confirm that you made these cards yourself before sharing.");
+  }
   checkDetails(input);
   const cards = snapshotCards(db, input.examId);
   if (cards.length === 0) throw new CatalogError("That deck has no cards to share.");

@@ -113,9 +113,12 @@ rebuild step is needed (`npmRebuild: false`). This was verified rather than
 assumed: Electron 44 opens a database and round-trips a query using the
 binary inside `.next/standalone`.
 
-The app ships unpacked (`asar: false`) because the Next standalone server
-must `chdir` into its own directory to resolve its assets, and a process
-cannot change directory into an asar archive.
+The app ships as an asar (`asar: true`, so the asar-integrity and
+only-load-from-asar fuses apply), but `.next/standalone/**` and
+`node_modules/**` are listed in `asarUnpack`: the Next standalone server must
+`chdir` into its own directory to resolve its assets, a process cannot change
+directory into an asar archive, and native modules must be real files on disk.
+The integrity fuse covers the archive only, not those unpacked files.
 
 If a future version of better-sqlite3 drops N-API, this needs an
 `@electron/rebuild` step in a `beforePack` hook that also replaces the copy

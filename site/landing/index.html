@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Megan Study</title>
+<meta name="description" content="Turn your class notes and slides into flashcards and a study guide. Free trial for Mac and Windows.">
+<meta property="og:title" content="Megan Study">
+<meta property="og:description" content="Turn your class notes into flashcards and a study guide.">
+<meta name="theme-color" content="#5552d9">
+<style>
+/* Same tokens as the main page (site/index.html), system fonts only to stay small. */
+:root{
+  --bg:#f6f6f8; --surface:#ffffff; --surface-2:#eeeef3; --ink:#15151c; --ink-2:#4a4a58; --ink-3:#6f6f7e;
+  --line:#dddde5; --accent:#5552d9; --accent-ink:#ffffff; --accent-soft:#e8e7fb; --accent-text:#4441c4;
+  --good:#1f7a4d; --bad:#b23a3a; --radius:14px;
+  --f:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#101015; --surface:#17171f; --surface-2:#1f1f29; --ink:#ececf2; --ink-2:#b4b4c3; --ink-3:#8a8a9b;
+    --line:#2b2b38; --accent:#8b88ff; --accent-ink:#0d0d18; --accent-soft:#25244a; --accent-text:#a9a7ff;
+    --good:#5fcf95; --bad:#f08a8a; color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--f)}
+main{max-width:560px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) 16px 40px}
+h1{font-size:clamp(28px,8vw,40px);line-height:1.1;letter-spacing:-.02em;margin:8px 0 12px}
+h2{font-size:18px;margin:0 0 8px}
+p{margin:0 0 12px;color:var(--ink-2)}
+.brand{font-weight:700;color:var(--accent-text);letter-spacing:.01em}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin:16px 0}
+.btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font:600 16px var(--f);text-decoration:none;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn+.btn,.row+.btn{margin-top:10px}
+.row{display:flex;gap:8px}
+.row .btn{flex:1;margin-top:0}
+.alt{display:block;margin-top:10px;font-size:14px;color:var(--ink-3);text-align:center}
+.alt a,footer a{color:var(--accent-text)}
+input[type=email]{width:100%;min-height:48px;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:16px var(--f)}
+label{display:block;font-size:14px;font-weight:600;margin:0 0 6px}
+form .btn{margin-top:10px}
+.note{font-size:14px;color:var(--ink-3)}
+.status{min-height:1.5em;font-size:14px;margin-top:8px}
+.status.ok{color:var(--good)} .status.err{color:var(--bad)}
+ul{margin:0;padding-left:20px;color:var(--ink-2)}
+li{margin:4px 0}
+footer{font-size:14px;color:var(--ink-3);text-align:center;margin-top:24px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:no-preference){.btn{transition:transform .12s ease}.btn:active{transform:scale(.98)}}
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Megan Study</div>
+  <h1>Your notes, turned into flashcards.</h1>
+  <p>Drop in class notes or slides and get flashcards, a study guide, and practice that schedules itself before the exam. Free trial, no account.</p>
+
+  <section class="card" id="get" aria-labelledby="getTitle">
+    <h2 id="getTitle">Get it</h2>
+    <p id="osLine">Megan Study runs on Mac and Windows.</p>
+    <div id="downloads">
+      <a class="btn primary" id="dlPrimary" href="https://github.com/neftyhot/study-app/releases/latest">Download</a>
+      <span class="alt" id="dlAlt"></span>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="shareTitle">
+    <h2 id="shareTitle"><span id="shareLead">Send it to your computer</span></h2>
+    <p id="shareText">Open this page on your laptop to download, or pass it to a classmate.</p>
+    <div class="row">
+      <button class="btn" type="button" id="shareBtn" hidden>Share</button>
+      <button class="btn" type="button" id="copyBtn">Copy link</button>
+    </div>
+    <form id="mailForm" novalidate>
+      <label for="mailTo" style="margin-top:14px">Email me the link</label>
+      <input type="email" id="mailTo" autocomplete="email" inputmode="email" placeholder="you@school.edu">
+      <button class="btn" type="submit">Email me the link</button>
+    </form>
+    <div class="status" id="shareStatus" role="status" aria-live="polite"></div>
+  </section>
+
+  <section class="card" id="ios" aria-labelledby="iosTitle" hidden>
+    <h2 id="iosTitle">iPhone app coming soon</h2>
+    <p>Want to know when you can study on your phone? Leave your email and we'll send one message when it's out.</p>
+    <form id="iosForm" novalidate>
+      <label for="iosEmail">Email</label>
+      <input type="email" id="iosEmail" autocomplete="email" inputmode="email" placeholder="you@school.edu" required>
+      <button class="btn primary" type="submit">Tell me when it's ready</button>
+    </form>
+    <div class="status" id="iosStatus" role="status" aria-live="polite"></div>
+    <p class="note">Used only for that one message. Never sold or shared.</p>
+  </section>
+
+  <section class="card" id="privacy" aria-labelledby="privacyTitle">
+    <h2 id="privacyTitle">Privacy</h2>
+    <ul>
+      <li>Your notes, cards and answers stay on your computer.</li>
+      <li>The app sends basic usage numbers (like how many cards were made) tied to a random install ID, never your name or study material.</li>
+      <li>The full privacy policy is shown in the app before you start, and you can delete your usage data from Settings.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <a id="fullSite" href="/">More about Megan Study</a> · <a href="#privacy">Privacy</a>
+  </footer>
+</main>
+<script>
+(() => {
+  // Where the iPhone waitlist form posts { email, src } as JSON. Empty until
+  // there's a real endpoint; the form then falls back to the email link.
+  const WAITLIST_ENDPOINT = '';
+
+  const REL = 'https://github.com/neftyhot/study-app/releases/download/';
+  const VERSION = '1.8.0';
+  const FILES = {
+    macArm: 'Megan-Study-' + VERSION + '-arm64.dmg',
+    macIntel: 'Megan-Study-' + VERSION + '-x64.dmg',
+    win: 'MeganStudy-Setup-' + VERSION + '-x64.exe',
+    winArm: 'MeganStudy-Setup-' + VERSION + '-arm64.exe',
+  };
+  const $ = id => document.getElementById(id);
+
+  // ?src= (which poster, flyer or table) rides along on every link out of here.
+  const params = new URLSearchParams(location.search);
+  const src = (params.get('src') || '').replace(/[^\w.-]/g, '').slice(0, 40);
+  const withSrc = url => {
+    if (!src) return url;
+    const u = new URL(url, location.href);
+    u.searchParams.set('src', src);
+    return u.toString();
+  };
+  const page = location.protocol.startsWith('http')
+    ? withSrc(location.origin + location.pathname)
+    : withSrc('https://megan-study.study-app-licensing.workers.dev/landing/');
+  $('fullSite').href = withSrc('/');
+
+  // Pick the download for this device. Browsers don't reliably say Apple
+  // silicon vs Intel, so Apple silicon leads (every Mac sold since 2020).
+  const ua = navigator.userAgent;
+  const uaPlatform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (uaPlatform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const isMac = !isIOS && /Mac/i.test(uaPlatform + ua);
+  const isWin = /Win/i.test(uaPlatform + ua);
+  const link = (file, text) => '<a href="' + REL + 'v' + VERSION + '/' + file + '">' + text + '</a>';
+  const primary = $('dlPrimary');
+  const setPrimary = (file, text) => { primary.href = REL + 'v' + VERSION + '/' + file; primary.textContent = text; };
+
+  if (isMac) {
+    $('osLine').textContent = 'For your Mac. Free trial, then a one-time purchase.';
+    setPrimary(FILES.macArm, 'Download for Mac');
+    $('dlAlt').innerHTML = 'Older Intel Mac? ' + link(FILES.macIntel, 'Get the Intel version') + ' · ' + link(FILES.win, 'Windows');
+  } else if (isWin) {
+    $('osLine').textContent = 'For your PC. Free trial, then a one-time purchase.';
+    setPrimary(FILES.win, 'Download for Windows');
+    $('dlAlt').innerHTML = 'ARM laptop? ' + link(FILES.winArm, 'Get the ARM version') + ' · ' + link(FILES.macArm, 'Mac');
+  } else if (isIOS || isAndroid) {
+    $('osLine').textContent = 'Megan Study runs on Mac and Windows. Send this page to your computer to download it.';
+    $('downloads').hidden = true;
+    $('shareLead').textContent = 'Send it to your laptop';
+    $('shareText').textContent = 'Share this page or email it to yourself, then open it on your computer.';
+    if (isIOS) $('ios').hidden = false;
+  } else {
+    $('dlAlt').innerHTML = link(FILES.macArm, 'Mac') + ' · ' + link(FILES.win, 'Windows');
+  }
+
+  // Share and copy.
+  const status = (el, text, ok) => { el.textContent = text; el.className = 'status ' + (ok ? 'ok' : 'err'); };
+  if (navigator.share) {
+    $('shareBtn').hidden = false;
+    $('shareBtn').addEventListener('click', () => {
+      navigator.share({ title: 'Megan Study', text: 'Turn your notes into flashcards', url: page }).catch(() => {});
+    });
+  }
+  $('copyBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(page);
+      status($('shareStatus'), 'Link copied.', true);
+    } catch (e) {
+      status($('shareStatus'), page, true);
+    }
+  });
+
+  const mailLink = to => 'mailto:' + encodeURIComponent(to || '') +
+    '?subject=' + encodeURIComponent('Megan Study download link') +
+    '&body=' + encodeURIComponent('Open this on your computer to download Megan Study: ' + page);
+  const looksLikeEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+  $('mailForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const to = $('mailTo').value.trim();
+    if (to && !looksLikeEmail(to)) return status($('shareStatus'), 'That email address doesn’t look right.', false);
+    location.href = mailLink(to);
+  });
+
+  $('iosForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    const email = $('iosEmail').value.trim();
+    if (!looksLikeEmail(email)) return status($('iosStatus'), 'Enter your email address.', false);
+    if (!WAITLIST_ENDPOINT) {
+      status($('iosStatus'), 'The list isn’t open yet. We’ll open your email app so you can save the download link instead.', true);
+      setTimeout(() => { location.href = mailLink(email); }, 1200);
+      return;
+    }
+    try {
+      const r = await fetch(WAITLIST_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, src: src || null }),
+      });
+      if (!r.ok) throw new Error();
+      status($('iosStatus'), 'You’re on the list. One email when it’s out.', true);
+      $('iosForm').reset();
+    } catch (err) {
+      status($('iosStatus'), 'Couldn’t save that right now. Try again in a minute.', false);
+    }
+  });
+
+  const newer = (a, b) => {
+    const x = a.split('.').map(Number), y = b.split('.').map(Number);
+    for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i];
+    return false;
+  };
+  // Same as the main page: move every download to the newest release that has the file.
+  fetch('https://api.github.com/repos/neftyhot/study-app/releases/latest')
+    .then(r => r.ok ? r.json() : null)
+    .then(rel => {
+      if (!rel || !rel.tag_name) return;
+      const version = rel.tag_name.replace(/^v/, '');
+      const names = new Set((rel.assets || []).map(a => a.name));
+      document.querySelectorAll('a[href^="' + REL + '"]').forEach(a => {
+        const file = a.href.split('/').pop();
+        const name = file.replace(/\d+\.\d+\.\d+/, version);
+        if (names.has(name) && newer(version, VERSION)) a.href = REL + rel.tag_name + '/' + name;
+      });
+    })
+    .catch(() => {});
+})();
+</script>
+</body>
+</html>
