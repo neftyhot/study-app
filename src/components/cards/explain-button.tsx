@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "@/lib/notify";
 
+import { useKeyGate } from "@/components/settings/key-gate";
 import { Button } from "@/components/ui/button";
 import type { ExplainedCard } from "@/lib/generate/enrich";
 
@@ -27,6 +28,7 @@ export function ExplainButton({
   label?: string;
 }) {
   const [busy, setBusy] = useState(false);
+  const { withKey } = useKeyGate();
 
   async function explain() {
     setBusy(true);
@@ -58,7 +60,7 @@ export function ExplainButton({
       size={size}
       className={size === "sm" ? "h-7 px-2 text-xs" : undefined}
       disabled={busy}
-      onClick={explain}
+      onClick={() => withKey(() => void explain())}
     >
       {busy ? (
         <Loader2 className="size-3.5 animate-spin" />

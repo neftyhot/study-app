@@ -154,6 +154,7 @@ export function StatusBanner({ text, tone }: { text: string; tone: "off" | "note
   return (
     <div
       role="status"
+      data-reveal
       className={
         tone === "off"
           ? "border-b border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-100"

@@ -56,4 +56,51 @@ async function backupDatabase(sqlite, dbPath, now = new Date()) {
   }
 }
 
-module.exports = { backupDatabase, backupDir, expired, nameFor };
+const BEFORE_UPDATE = "before-update-";
+const KEEP_BEFORE_UPDATE = 3;
+
+/**
+ * A copy taken just before an update replaces the app, named for the version
+ * being left, e.g. before-update-1.4.2.db. Separate from the daily copies so
+ * their pruning never removes it; the last three updates are kept.
+ *
+ * Opens its own read-only handle: the app's server holds the database open
+ * in WAL mode, which a second reader is safe beside. Never throws — a failed
+ * copy is logged and the update goes ahead, as at launch.
+ */
+async function backupBeforeUpdate(dbPath, fromVersion, openDatabase = defaultOpen) {
+  if (!dbPath || !fs.existsSync(dbPath)) return null;
+  let sqlite = null;
+  try {
+    const dir = backupDir(dbPath);
+    fs.mkdirSync(dir, { recursive: true });
+    const safe = String(fromVersion).replace(/[^0-9A-Za-z.-]/g, "_");
+    const target = path.join(dir, `${BEFORE_UPDATE}${safe}.db`);
+    const partial = `${target}.partial`;
+    sqlite = openDatabase(dbPath);
+    await sqlite.backup(partial);
+    fs.renameSync(partial, target);
+
+    const kept = fs
+      .readdirSync(dir)
+      .filter((name) => name.startsWith(BEFORE_UPDATE) && name.endsWith(".db"))
+      .map((name) => ({ name, at: fs.statSync(path.join(dir, name)).mtimeMs }))
+      .sort((a, b) => b.at - a.at);
+    for (const { name } of kept.slice(KEEP_BEFORE_UPDATE)) {
+      fs.rmSync(path.join(dir, name), { force: true });
+    }
+    return target;
+  } catch (error) {
+    console.warn("[backup] pre-update copy skipped:", error);
+    return null;
+  } finally {
+    sqlite?.close();
+  }
+}
+
+function defaultOpen(dbPath) {
+  const Database = require("better-sqlite3");
+  return new Database(dbPath, { readonly: true, fileMustExist: true });
+}
+
+module.exports = { backupBeforeUpdate, backupDatabase, backupDir, expired, nameFor };

@@ -28,6 +28,7 @@ import {
   type Course,
   type Exam,
 } from "@/db/schema";
+import { recordFunnel } from "@/lib/funnel";
 
 /* ------------------------------------------------------------------ Create */
 
@@ -64,7 +65,7 @@ export function createExam(
     .get();
   if (!course) throw new Error("That subject no longer exists.");
 
-  return db
+  const exam = db
     .insert(exams)
     .values({
       courseId: input.courseId,
@@ -74,6 +75,8 @@ export function createExam(
     })
     .returning()
     .get();
+  recordFunnel(db, "first_deck_created");
+  return exam;
 }
 
 export function renameCourse(db: Db, courseId: string, title: string) {

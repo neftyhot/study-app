@@ -5,6 +5,7 @@ import { createKeywordGrader, type TypedAnswerGrader } from "@/lib/learn/typed";
 import { getProvider } from "@/lib/llm";
 import { GRADER_MIN_RAM_GB } from "@/lib/llm/catalog";
 import {
+  isAnswerable,
   readGraderDownload,
   readGradingMode,
   readGradingStrictness,
@@ -88,16 +89,20 @@ export function getTypedGrader(strictness?: Strictness | null): TypedAnswerGrade
     ? createLocalGrader({ modelPath: localPath, strictness: level })
     : null;
 
+  // With no key there is nothing to ask: the keyword grader answers at once,
+  // and its provisional grade asks the student whether they were right.
   let api: TypedAnswerGrader | null = null;
-  try {
-    api = createSemanticGrader(getProvider(undefined, "grade"), {
-      strictness: level,
-      // 12/12 grading fixtures with thinking off as with it on, at a quarter
-      // of the cost and a fraction of the wait (`npm run grade:check`).
-      thinking: "minimal",
-    });
-  } catch {
-    api = null;
+  if (isAnswerable()) {
+    try {
+      api = createSemanticGrader(getProvider(undefined, "grade"), {
+        strictness: level,
+        // 12/12 grading fixtures with thinking off as with it on, at a quarter
+        // of the cost and a fraction of the wait (`npm run grade:check`).
+        thinking: "minimal",
+      });
+    } catch {
+      api = null;
+    }
   }
 
   const keyword = createKeywordGrader();

@@ -21,8 +21,11 @@ export function WhatsNew({ version, notes }: { version: string; notes: string[] 
   useEffect(() => {
     try {
       // Read after mount so the server render never includes it.
+      const seen = window.localStorage.getItem(SEEN_KEY);
+      // A fresh install has nothing to compare against: start from this version.
+      if (seen === null) window.localStorage.setItem(SEEN_KEY, version);
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      if (window.localStorage.getItem(SEEN_KEY) !== version) setShow(true);
+      else if (seen !== version) setShow(true);
     } catch {
       // No storage: skip it rather than show it every time.
     }

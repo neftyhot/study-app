@@ -304,7 +304,7 @@ export async function answerTyped(
 
   // A pattern of wrong answers is worth explaining; one is not.
   let diagnosis = null;
-  if (!correct) {
+  if (!correct && !grade.provisional) {
     try {
       diagnosis = (await diagnoseCard(db, getProvider(), cardId)) ?? null;
     } catch {

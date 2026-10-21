@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { practiceExams } from "@/db/schema";
 import { getTypedGrader, isStrictness } from "@/lib/grade";
 import { getProvider } from "@/lib/llm";
+import { isAnswerable } from "@/lib/settings";
 import { regroupTopics } from "@/lib/topics";
 
 import {
@@ -83,7 +84,10 @@ export async function startPaper(examId: string, request: StartRequest) {
 
   // No model, or it failed: the paper is still worth sitting, in the deck's
   // own wording and with the deck's own options.
+  // With no key there is no model to ask, so nothing waits on a failed call.
+  const ai = isAnswerable(db);
   const soft = async <T,>(work: () => Promise<T>) => {
+    if (!ai) return undefined;
     try {
       return await work();
     } catch {

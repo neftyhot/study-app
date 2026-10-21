@@ -3,12 +3,14 @@ import { Geist, Geist_Mono, Nunito } from "next/font/google";
 
 import { BootScript } from "@/components/boot-script";
 import { StatusBanner, StatusScreen, StatusWatcher } from "@/components/layout/app-status";
+import { LaunchSplash } from "@/components/layout/launch-splash";
 import { SiteHeader } from "@/components/layout/site-header";
 import { RecorderProvider } from "@/components/lectures/recorder";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
 import { readLicenseStatus, TRIAL_DAYS } from "@/lib/license/status";
 import { TimeTracker } from "@/components/layout/time-tracker";
 import { WhatsNew } from "@/components/layout/whats-new";
+import { KeyGateProvider } from "@/components/settings/key-gate";
 import { UpgradeGuideHost } from "@/components/settings/upgrade-guide";
 import { ThemePersistence } from "@/components/theme-persistence";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -28,7 +30,9 @@ import {
 } from "@/lib/app-status";
 import { appearanceCss, THEME_IDS, themeBootScript } from "@/lib/appearance";
 import { CHANGELOG } from "@/lib/changelog";
-import { hasAcceptedPrivacy, readAppearance, readTheme } from "@/lib/settings";
+import { recordFunnel } from "@/lib/funnel";
+import { SPLASH_BOOT_SCRIPT } from "@/lib/launch/choreography";
+import { hasAcceptedPrivacy, isAnswerable, readAppearance, readProvider, readTheme } from "@/lib/settings";
 
 import "./globals.css";
 
@@ -69,6 +73,9 @@ export const dynamic = "force-dynamic";
 export default function RootLayout({ children }: LayoutProps<"/">) {
   const savedTheme = readTheme(db);
   const license = readLicenseStatus();
+  // Kept on this machine until the student agrees to usage statistics.
+  recordFunnel(db, "first_launch");
+  if (license?.type === "student" || license?.type === "lifetime") recordFunnel(db, "purchased");
   const bootScript = themeBootScript(savedTheme);
   const status = readAppStatus(db);
   // Ask the server in the background; StatusWatcher refreshes if it changed.
@@ -93,6 +100,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {bootScript ? (
           <BootScript id="theme-boot" code={bootScript} />
         ) : null}
+        {/* Cold launch only: lets the splash cover first paint. */}
+        <BootScript id="splash-boot" code={SPLASH_BOOT_SCRIPT} />
       </head>
       <body className="flex min-h-full flex-col">
         <ThemeProvider
@@ -104,6 +113,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           <ThemePersistence saved={savedTheme} />
           <TooltipProvider>
+          <LaunchSplash />
           {/* Nothing else — header, pages, time tracking — until the privacy
               policy is agreed to; see privacy-policy.ts. */}
           {hasAcceptedPrivacy(db) && screen ? (
@@ -117,6 +127,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <StatusWatcher signature={statusSignature(status)} />
             </>
           ) : hasAcceptedPrivacy(db) ? (
+            <KeyGateProvider ready={readProvider(db) === "local" || isAnswerable(db)}>
             <RecorderProvider>
               <SiteHeader />
               {banner ? <StatusBanner text={banner.text} tone={banner.tone} /> : null}
@@ -127,10 +138,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               />
               <TimeTracker />
               <UpgradeGuideHost />
-              <main className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
+              <main data-reveal className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
                 {children}
               </main>
             </RecorderProvider>
+            </KeyGateProvider>
           ) : (
             <PrivacyGate
               trial={

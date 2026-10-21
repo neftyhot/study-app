@@ -56,6 +56,7 @@ import {
 import { QUICK_PROMPTS } from "@/lib/tutor/prompts";
 import type { ExtractedCard } from "@/lib/tutor/schemas";
 import { cn } from "@/lib/utils";
+import { useKeyGate } from "@/components/settings/key-gate";
 
 /** Big enough for a phone screenshot, small enough not to stall a request. */
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -102,6 +103,7 @@ export function TutorPanel({
   className?: string;
 }) {
   const router = useRouter();
+  const { withKey } = useKeyGate();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -482,7 +484,7 @@ export function TutorPanel({
                         variant="outline"
                         size="sm"
                         disabled={busy}
-                        onClick={() => void send(quick.prompt)}
+                        onClick={() => withKey(() => void send(quick.prompt))}
                       >
                         {quick.label}
                       </Button>
@@ -536,7 +538,7 @@ export function TutorPanel({
                       className="mt-2 -ml-2"
                       disabled={extracting}
                       onClick={() =>
-                        void makeCards("Turn the facts in the last answer into flashcards.")
+                        withKey(() => void makeCards("Turn the facts in the last answer into flashcards."))
                       }
                     >
                       {extracting ? (
@@ -565,7 +567,7 @@ export function TutorPanel({
                       variant="outline"
                       size="sm"
                       className="h-auto max-w-full justify-start py-1.5 text-left text-xs whitespace-normal"
-                      onClick={() => void send(suggestion)}
+                      onClick={() => withKey(() => void send(suggestion))}
                     >
                       {suggestion}
                     </Button>
@@ -618,7 +620,7 @@ export function TutorPanel({
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
                   if (showHistory) setShowHistory(false);
-                  void send(draft);
+                  withKey(() => void send(draft));
                 }
               }}
               placeholder={
@@ -659,7 +661,7 @@ export function TutorPanel({
                   variant="outline"
                   size="sm"
                   disabled={extracting}
-                  onClick={() => void makeCards()}
+                  onClick={() => withKey(() => void makeCards())}
                 >
                   <Sparkles className="size-4" />
                   Make flashcards
@@ -672,7 +674,7 @@ export function TutorPanel({
                 disabled={busy || !draft.trim()}
                 onClick={() => {
                   if (showHistory) setShowHistory(false);
-                  void send(draft);
+                  withKey(() => void send(draft));
                 }}
               >
                 {busy ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}

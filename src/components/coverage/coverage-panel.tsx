@@ -17,6 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { plural } from "@/lib/plural";
+import { useKeyGate } from "@/components/settings/key-gate";
 
 type Phase = "mapping" | "review" | "conflicts";
 
@@ -66,6 +67,7 @@ export function CoveragePanel({
   initialJob?: CoverageJobView | null;
 }) {
   const router = useRouter();
+  const { withKey } = useKeyGate();
   const [starting, setStarting] = useState(false);
   // Only meaningful with two or more files to compare.
   const [checkConflicts, setCheckConflicts] = useState(fileCount > 1);
@@ -143,7 +145,7 @@ export function CoveragePanel({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Button onClick={() => void analyze()} disabled={busy || blocked}>
+          <Button onClick={() => withKey(() => void analyze())} disabled={busy || blocked}>
             {busy ? (
               <Loader2 className="size-4 animate-spin" />
             ) : (

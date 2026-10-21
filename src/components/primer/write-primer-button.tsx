@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import type { PrimerRun } from "@/lib/primer/runs";
 import { useSkipLogistics } from "@/lib/skip-logistics-pref";
+import { NeedsKeyHint, useKeyGate } from "@/components/settings/key-gate";
 
 const STAGE_LABEL: Record<PrimerRun["stage"], string> = {
   explaining: "Reading the slides",
@@ -39,6 +40,7 @@ export function WritePrimerButton({
   onWithExamplesChange?: (next: boolean) => void;
 }) {
   const router = useRouter();
+  const { withKey } = useKeyGate();
   const [run, setRun] = useState<PrimerRun | null>(null);
   const [starting, setStarting] = useState(false);
   const [watching, setWatching] = useState(false);
@@ -127,10 +129,15 @@ export function WritePrimerButton({
 
   return (
     <div className="flex flex-col items-start gap-2">
-      <Button variant={rewrite ? "outline" : "default"} disabled={starting} onClick={() => void start()}>
+      <Button
+        variant={rewrite ? "outline" : "default"}
+        disabled={starting}
+        onClick={() => withKey(() => void start())}
+      >
         {starting ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
         {rewrite ? "Rewrite" : "Write study guide"}
       </Button>
+      <NeedsKeyHint />
       <div className="flex items-center gap-2">
         <Checkbox
           id={toggleId}

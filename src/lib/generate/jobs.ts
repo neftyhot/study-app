@@ -16,6 +16,7 @@ import type { Db } from "@/db/client";
 import { generationJobs, type GenerationJob } from "@/db/schema";
 import type { LlmProvider } from "@/lib/llm";
 
+import { hasFunnel, recordFunnel } from "@/lib/funnel";
 import { regroupTopics } from "@/lib/topics";
 
 import {
@@ -165,6 +166,8 @@ export function startGenerationJob(
     })
     .returning()
     .get();
+  const began = Date.now();
+  recordFunnel(db, "first_generation_started");
 
   void generateCardsForExam(db, llm, targetExamId, {
     ...options,
@@ -208,6 +211,7 @@ export function startGenerationJob(
           rejections: summary.rejectionViews,
         },
       });
+      recordFunnel(db, "first_generation_completed", { durationMs: Date.now() - began });
 
       // Batches name topics independently, so a run leaves each file with
       // more, narrower topics than anyone would choose from. Folded after the
@@ -217,11 +221,16 @@ export function startGenerationJob(
       }
     })
     .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error);
       touch(db, job.id, {
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
         finishedAt: new Date().toISOString(),
       });
+      // Only a category leaves this machine; see funnel.ts.
+      if (!hasFunnel(db, "first_generation_completed")) {
+        recordFunnel(db, "first_generation_failed", { error: message });
+      }
     });
 
   return job;

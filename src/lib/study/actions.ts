@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { flashcards } from "@/db/schema";
 
 import { editCard, undoCardEdit } from "@/lib/cards/edit";
+import { recordFunnel } from "@/lib/funnel";
 
 import type { Grade } from "./grade";
 import type { QueueFilter } from "./queue";
@@ -26,6 +27,7 @@ import {
  */
 export async function beginStudySession(examId: string, filter: QueueFilter) {
   const session = startSession(db, examId, filter);
+  recordFunnel(db, "first_study_session");
   return {
     id: session.id,
     cardOrder: session.cardOrder,

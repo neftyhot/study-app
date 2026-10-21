@@ -23,6 +23,7 @@ import {
   CreateExamDialog,
 } from "@/components/manage/create-dialogs";
 import { db } from "@/db";
+import { hasFunnel } from "@/lib/funnel";
 import { listCoursesWithExams } from "@/lib/queries";
 import { isAnswerable, isSetupComplete, readProvider } from "@/lib/settings";
 
@@ -31,9 +32,11 @@ export default async function DashboardPage() {
   if (!isSetupComplete(db)) redirect("/welcome");
 
   const courses = await listCoursesWithExams();
-  // Google sign-in is gone; anyone who used it needs a key of their own now.
+  // Studying needs no key, so this waits until the student has reached for
+  // an AI feature once — the reminder is for someone who wants it.
   const provider = readProvider(db);
-  const needsKey = provider !== "local" && !isAnswerable(db);
+  const needsKey =
+    provider !== "local" && !isAnswerable(db) && hasFunnel(db, "key_prompt_shown");
   const courseOptions = courses.map((course) => ({
     id: course.id,
     title: course.title,

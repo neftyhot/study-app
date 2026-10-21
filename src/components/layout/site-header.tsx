@@ -18,11 +18,13 @@ export async function SiteHeader() {
   const download = readDownload(db);
 
   return (
-    <header className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur">
+    <header data-reveal className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-(--content-width) items-center gap-3 px-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold">
-          <GraduationCap className="size-5" />
-          <span className="hidden sm:inline">Megan Study</span>
+        <Link href="/" aria-label="Megan Study, home" className="flex items-center gap-2 font-semibold">
+          <GraduationCap className="size-5" aria-hidden />
+          <span data-launch-target className="hidden sm:inline">
+            Megan Study
+          </span>
         </Link>
 
         <div className="ml-auto flex items-center gap-2">

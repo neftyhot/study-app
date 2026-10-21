@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Check, Cloud, HardDrive, Loader2 } from "lucide-react";
+import { BookOpen, Check, Cloud, FilePlus2, HardDrive, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -22,12 +22,15 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SOURCE_LABELS, SOURCES, type Source } from "@/lib/funnel";
 import type { LocalModel } from "@/lib/llm/catalog";
+import { openSampleDeck } from "@/lib/sample/actions";
 import { PROVIDER_LABELS, type DownloadState } from "@/lib/settings-shared";
 import {
   chooseProvider,
   finishSetup,
   saveApiKey,
+  saveSourceAction,
   type SetupSnapshot,
 } from "@/lib/settings-actions";
 
@@ -39,25 +42,29 @@ const KEY_HELP: Record<(typeof API_PROVIDERS)[number], string> = {
   openai: "platform.openai.com/api-keys",
 };
 
-type Step = "choose" | "local" | "api" | "done";
+type Step = "start" | "choose" | "local" | "api" | "done";
 
 /**
  * First-run setup.
  *
- * One decision, asked once, with the answer most students want up front:
- * Gemini on their own Google account, free and fast. Running a model on the
- * machine is still offered, but as an experimental option behind a warning,
- * and nothing is downloaded unless the student asks for it here.
+ * Studying comes first: the student picks the sample deck or their own, and
+ * nothing about AI is asked until a feature needs it. A student who already
+ * has a key can still set it up here — Gemini on their own Google account up
+ * front, a model on this machine as an experimental option behind a warning,
+ * and nothing downloaded unless they ask for it.
  */
 export function SetupWizard({
   snapshot,
   models,
+  source = null,
 }: {
   snapshot: SetupSnapshot;
   models: LocalModel[];
+  /** Where they heard about the app, if the download link said so. */
+  source?: Source | null;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("choose");
+  const [step, setStep] = useState<Step>("start");
   const [state, setState] = useState(snapshot);
   const [download, setDownload] = useState<DownloadState | null>(
     snapshot.download,
@@ -71,11 +78,67 @@ export function SetupWizard({
     router.refresh();
   }
 
+  async function trySample() {
+    setBusy(true);
+    try {
+      const { examId } = await openSampleDeck();
+      router.push(`/exams/${examId}`);
+      router.refresh();
+    } catch {
+      toast.error("Couldn't open the sample deck. Try again, or make your own.");
+      setBusy(false);
+    }
+  }
+
+  if (step === "start") {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">How do you want to start?</h1>
+          <p className="text-muted-foreground text-sm">
+            No account and no setup. You can study right away.
+          </p>
+        </div>
+        <div className="space-y-3">
+          <Choice
+            icon={<BookOpen className="size-5" />}
+            title="Try the sample deck"
+            body="About forty cards on how memory works, with a study guide. Flashcards, Learn, practice exams — all of it, with nothing to set up."
+            footnote="Yours to keep or delete."
+            onClick={() => void trySample()}
+            disabled={busy}
+            recommended
+          />
+          <Choice
+            icon={<FilePlus2 className="size-5" />}
+            title="Make my own deck"
+            body="Upload your notes or slides and get cards from them, or write your own."
+            footnote="Making cards from files uses a free Google key — we'll walk you through it when you get there."
+            onClick={() => void complete()}
+            disabled={busy}
+          />
+        </div>
+        <SourceChips initial={source} />
+        <p className="text-muted-foreground text-center text-xs">
+          Already have a key?{" "}
+          <button
+            type="button"
+            className="underline underline-offset-2"
+            onClick={() => setStep("choose")}
+            disabled={busy}
+          >
+            Set up AI now
+          </button>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">
-          Set up Megan Study
+          Set up AI
         </h1>
         <p className="text-muted-foreground text-sm">
           One question, then you are done. You can change any of this later.
@@ -105,6 +168,9 @@ export function SetupWizard({
             Either way, studying, reviews, and editing never need a model or a
             network.
           </p>
+          <Button variant="ghost" size="sm" onClick={() => setStep("start")}>
+            Back
+          </Button>
         </div>
       ) : null}
 
@@ -174,6 +240,36 @@ export function SetupWizard({
   );
 }
 
+/** "How did you hear about us?" — optional, one tap, from a fixed list. */
+function SourceChips({ initial }: { initial: Source | null }) {
+  const [picked, setPicked] = useState<Source | null>(initial);
+  return (
+    <div className="space-y-2">
+      <p id="source-label" className="text-muted-foreground text-xs">
+        How did you hear about Megan Study? <span className="opacity-70">(optional)</span>
+      </p>
+      <div role="group" aria-labelledby="source-label" className="flex flex-wrap gap-2">
+        {SOURCES.map((source) => (
+          <Button
+            key={source}
+            size="sm"
+            variant={picked === source ? "default" : "outline"}
+            aria-pressed={picked === source}
+            disabled={picked !== null && picked !== source}
+            onClick={() => {
+              if (picked) return;
+              setPicked(source);
+              void saveSourceAction(source);
+            }}
+          >
+            {SOURCE_LABELS[source]}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Choice({
   icon,
   title,
@@ -181,6 +277,7 @@ function Choice({
   footnote,
   onClick,
   recommended = false,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -188,12 +285,14 @@ function Choice({
   footnote: string;
   onClick: () => void;
   recommended?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`hover:bg-muted/60 focus-visible:ring-ring w-full rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none ${
+      disabled={disabled}
+      className={`hover:bg-muted/60 focus-visible:ring-ring w-full rounded-lg border p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:opacity-60 ${
         recommended ? "border-primary bg-primary/5" : ""
       }`}
     >

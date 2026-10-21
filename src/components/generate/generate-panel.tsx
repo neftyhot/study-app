@@ -47,6 +47,7 @@ import {
   type SourceOption,
 } from "@/lib/generate/selection";
 import { plural } from "@/lib/plural";
+import { NeedsKeyHint, useKeyGate } from "@/components/settings/key-gate";
 
 type GenerateMode = "append" | "replace" | "separate";
 
@@ -148,6 +149,7 @@ export function GeneratePanel({
   existingCards: number;
 }) {
   const router = useRouter();
+  const { withKey } = useKeyGate();
   const [busy, setBusy] = useState(false);
   const [pending, startTransition] = useTransition();
   const [summary, setSummary] = useState<Summary | null>(
@@ -287,8 +289,10 @@ export function GeneratePanel({
 
   /** With an empty deck there is nothing to decide, so do not ask. */
   function start() {
-    if (existingCards === 0) void generate("append");
-    else setAsking(true);
+    withKey(() => {
+      if (existingCards === 0) void generate("append");
+      else setAsking(true);
+    });
   }
 
   const disabled = busy || pending || running || slideCount === 0;
@@ -340,6 +344,8 @@ export function GeneratePanel({
                   : "Generate"}
           </Button>
         </div>
+
+        <NeedsKeyHint />
 
         {/* Right under the button, where the eye already is — below the
             options it was easy to miss a run that finishes in twenty seconds. */}

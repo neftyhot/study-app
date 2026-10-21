@@ -19,7 +19,6 @@ import { readApiKey, readProvider, readSetting, writeSetting } from "@/lib/setti
 import { installId } from "@/lib/telemetry";
 import {
   cardRubrics,
-  cardTypes,
   courses,
   exams,
   flashcards,
@@ -27,6 +26,7 @@ import {
   primerSections,
   primerTopics,
 } from "@/db/schema";
+import { insertDeck } from "@/lib/decks/insert";
 import type { CitedSentence } from "@/lib/primer/types";
 
 import type { CatalogDeck, CatalogDeckDetail, CatalogKind, PublishInput } from "./types";
@@ -297,79 +297,14 @@ export async function addToMyDecks(id: string): Promise<string> {
     cards: CardSnapshot[];
     guide: GuideSnapshot | null;
   }>(`/catalog/${encodeURIComponent(id)}/add`, { method: "POST" });
-  const { cards, guide } = row;
-  if (cards.length === 0) throw new CatalogError("That deck has no cards.");
-  const cite = (text: string): CitedSentence => ({
-    text,
-    source_document_index: null,
-    source_slide_number: null,
-    source_excerpt: null,
-  });
-
-  const examId = db.transaction((tx) => {
-    const course =
-      tx.select().from(courses).where(eq(courses.title, row.course)).get() ??
-      tx.insert(courses).values({ title: row.course, term: row.term }).returning().get();
-    const exam = tx
-      .insert(exams)
-      .values({ courseId: course.id, title: row.title })
-      .returning()
-      .get();
-
-    for (const card of cards) {
-      const inserted = tx
-        .insert(flashcards)
-        .values({
-          examId: exam.id,
-          topic: card.topic,
-          question: card.question,
-          directAnswer: card.directAnswer,
-          fullExplanation: card.fullExplanation,
-          // Whatever the server sends, only a type this app knows is stored.
-          cardType: (cardTypes as readonly string[]).includes(card.cardType)
-            ? (card.cardType as (typeof cardTypes)[number])
-            : "atomic",
-          sourceExcerpt: card.sourceExcerpt,
-        })
-        .returning({ id: flashcards.id })
-        .get();
-      tx.insert(cardRubrics)
-        .values({
-          flashcardId: inserted.id,
-          essentialPoints: card.essentialPoints.length > 0 ? card.essentialPoints : [card.directAnswer],
-        })
-        .run();
-    }
-
-    if (guide) {
-      const created = tx
-        .insert(primerGuides)
-        .values({ examId: exam.id, depth: "balanced", format: "explained", model: "catalog", overview: guide.overview })
-        .returning()
-        .get();
-      let order = 0;
-      guide.topics.forEach((topic, topicIndex) => {
-        const t = tx
-          .insert(primerTopics)
-          .values({ guideId: created.id, orderIndex: topicIndex, title: topic.title, intro: topic.intro })
-          .returning()
-          .get();
-        for (const s of topic.sections) {
-          tx.insert(primerSections)
-            .values({
-              guideId: created.id,
-              topicId: t.id,
-              orderIndex: order++,
-              conceptName: s.conceptName,
-              definition: s.definition.map(cite),
-              breakdown: s.breakdown.map(cite),
-              example: s.example.map(cite),
-            })
-            .run();
-        }
-      });
-    }
-    return exam.id;
+  if (row.cards.length === 0) throw new CatalogError("That deck has no cards.");
+  const examId = insertDeck(db, {
+    title: row.title,
+    course: row.course,
+    term: row.term,
+    cards: row.cards,
+    guide: row.guide,
+    origin: "catalog",
   });
 
   return examId;

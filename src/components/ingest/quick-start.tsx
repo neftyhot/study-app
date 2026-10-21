@@ -31,6 +31,7 @@ import {
 } from "@/lib/ingest/quick-start";
 import { createCourseAction, createExamAction } from "@/lib/manage/actions";
 import { cn } from "@/lib/utils";
+import { useKeyGate } from "@/components/settings/key-gate";
 
 const NEW_SUBJECT = "__new__";
 
@@ -49,6 +50,7 @@ export function QuickStart({
   courses: { id: string; title: string }[];
 }) {
   const router = useRouter();
+  const { withKey } = useKeyGate();
   const inputRef = useRef<HTMLInputElement>(null);
   const [picked, setPicked] = useState<Picked[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -281,7 +283,7 @@ export function QuickStart({
           size="lg"
           className="w-full text-base"
           disabled={picked.length === 0 || busy !== null}
-          onClick={() => void generate()}
+          onClick={() => withKey(() => void generate())}
         >
           {busy ? (
             <Loader2 className="size-5 animate-spin" />

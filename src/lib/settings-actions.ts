@@ -13,6 +13,8 @@ import {
 import { GRADER_MODEL_ID, LOCAL_MODELS, recommendedModel } from "@/lib/llm/catalog";
 import { canGradeLocally, prewarmGrader, unloadLocalGrader } from "@/lib/grade";
 import { maybeSendReport } from "@/lib/telemetry";
+import { recordFunnel, recordSource } from "@/lib/funnel";
+import { readLicenseStatus } from "@/lib/license/status";
 import {
   allKeyStatuses,
   apiKeyStatus,
@@ -86,6 +88,7 @@ export async function saveApiKey(
   key: string,
 ) {
   writeApiKey(provider, key, db);
+  if (key.trim()) recordFunnel(db, "key_added");
   revalidatePath("/settings");
   return apiKeyStatus(provider, db);
 }
@@ -109,7 +112,10 @@ export async function checkGeminiKey(key: string): Promise<KeyCheck> {
         signal: AbortSignal.timeout(10_000),
       },
     );
-    if (response.ok) return "ok";
+    if (response.ok) {
+      recordFunnel(db, "key_validated");
+      return "ok";
+    }
     // 400 API_KEY_INVALID, 401 or 403 (API disabled, key restricted).
     if (response.status >= 400 && response.status < 500 && response.status !== 429) {
       return "invalid";
@@ -185,9 +191,21 @@ export async function setFlashcardFormat(value: string) {
  */
 export async function acceptPrivacyAction() {
   acceptPrivacy(db);
+  recordFunnel(db, "privacy_accepted");
+  if (readLicenseStatus()?.type === "trial") recordFunnel(db, "trial_started");
   void maybeSendReport(db, { force: true });
   revalidatePath("/", "layout");
   return { ok: true as const };
+}
+
+/** The add-a-key prompt appeared because a feature needed AI. */
+export async function noteKeyPromptShown() {
+  recordFunnel(db, "key_prompt_shown");
+}
+
+/** "How did you hear about us?" — one of a fixed list; anything else is ignored. */
+export async function saveSourceAction(source: string) {
+  return recordSource(db, source);
 }
 
 /** Colors, corners, text size and the rest; returns what was actually kept. */

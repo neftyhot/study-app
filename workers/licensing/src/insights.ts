@@ -71,9 +71,59 @@ export type TelemetryRecord = {
   cards: number;
   reviewed: number;
   usage: UsageLine[];
+  /** First steps taken. Missing on records from before 1.x's funnel. */
+  funnel?: FunnelRecord;
   firstSeen: string;
   lastSeen: string;
 };
+
+/**
+ * The funnel's closed sets. Must match src/lib/funnel.ts; anything else in a
+ * report is dropped, so a report can never smuggle in free text this way.
+ */
+export const FUNNEL_EVENTS = [
+  "first_launch",
+  "privacy_accepted",
+  "trial_started",
+  "sample_deck_opened",
+  "key_prompt_shown",
+  "key_added",
+  "key_validated",
+  "first_deck_created",
+  "first_generation_started",
+  "first_generation_completed",
+  "first_generation_failed",
+  "first_study_session",
+  "returned_day_1",
+  "returned_day_7",
+  "purchased",
+] as const;
+const GENERATION_BUCKETS = ["<1m", "1-3m", "3-10m", ">10m"] as const;
+const GENERATION_ERRORS = ["key", "quota", "network", "file", "model", "other"] as const;
+const SOURCES = ["poster", "friend", "professor", "social", "other"] as const;
+
+export type FunnelRecord = {
+  events: string[];
+  generationBucket: string | null;
+  generationError: string | null;
+  source: string | null;
+};
+
+function oneOf<T extends string>(list: readonly T[], value: unknown): T | null {
+  return list.includes(value as T) ? (value as T) : null;
+}
+
+/** Only known names and categories survive. */
+export function sanitizeFunnel(value: unknown): FunnelRecord {
+  const raw = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const events = Array.isArray(raw.events) ? raw.events : [];
+  return {
+    events: FUNNEL_EVENTS.filter((event) => events.includes(event)),
+    generationBucket: oneOf(GENERATION_BUCKETS, raw.generationBucket),
+    generationError: oneOf(GENERATION_ERRORS, raw.generationError),
+    source: oneOf(SOURCES, raw.source),
+  };
+}
 
 function num(value: unknown, max = 1e12): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(0, value)) : 0;
@@ -102,7 +152,8 @@ export function shouldWrite(previous: TelemetryRecord | null, next: TelemetryRec
     previous.subjects === next.subjects &&
     previous.decks === next.decks &&
     previous.cards === next.cards &&
-    previous.reviewed === next.reviewed;
+    previous.reviewed === next.reviewed &&
+    (previous.funnel?.events.length ?? 0) === (next.funnel?.events.length ?? 0);
   return age >= (same ? UNCHANGED_WRITE_MS : CHANGED_WRITE_MS);
 }
 
@@ -152,6 +203,7 @@ export async function handleTelemetry(request: Request, env: InsightsEnv): Promi
     cards: num(body.cards),
     reviewed: num(body.reviewed),
     usage,
+    funnel: sanitizeFunnel(body.funnel),
     firstSeen: previous?.firstSeen ?? now,
     lastSeen: now,
   };
@@ -260,7 +312,22 @@ export function aggregate(records: TelemetryRecord[], now = Date.now()) {
     costUsd: 0,
   };
 
+  // How many installs reached each step, and the breakdowns that go with it.
+  const funnel = Object.fromEntries(FUNNEL_EVENTS.map((event) => [event, 0])) as Record<string, number>;
+  const generationBuckets = new Map<string, number>();
+  const generationErrors = new Map<string, number>();
+  const sources = new Map<string, number>();
+  const bump = (map: Map<string, number>, key: string | null | undefined) => {
+    if (key) map.set(key, (map.get(key) ?? 0) + 1);
+  };
+
   for (const record of records) {
+    for (const event of record.funnel?.events ?? []) {
+      if (event in funnel) funnel[event] += 1;
+    }
+    bump(generationBuckets, record.funnel?.generationBucket);
+    bump(generationErrors, record.funnel?.generationError);
+    bump(sources, record.funnel?.source);
     versions.set(record.version, (versions.get(record.version) ?? 0) + 1);
     totals.focusedSeconds += record.focusedSeconds;
     totals.backgroundSeconds += record.backgroundSeconds;
@@ -295,7 +362,15 @@ export function aggregate(records: TelemetryRecord[], now = Date.now()) {
     byFeature: sorted(byFeature, (v) => v.inputTokens + v.outputTokens),
     byModel: sorted(byModel, (v) => v.inputTokens + v.outputTokens),
     byAuth: [...byAuth.entries()].map(([name, calls]) => ({ name, calls })).sort((a, b) => b.calls - a.calls),
+    funnel: FUNNEL_EVENTS.map((event) => ({ event, installs: funnel[event] })),
+    generationBuckets: counted(generationBuckets),
+    generationErrors: counted(generationErrors),
+    sources: counted(sources),
   };
+}
+
+function counted(map: Map<string, number>) {
+  return [...map.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
 }
 
 export async function handleAdmin(request: Request, env: InsightsEnv, path: string): Promise<Response> {

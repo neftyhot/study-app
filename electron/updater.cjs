@@ -19,6 +19,8 @@ const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { promisify } = require("node:util");
 
+const { backupBeforeUpdate } = require("./backup.cjs");
+
 const run = promisify(execFile);
 
 const REPO = "neftyhot/study-app";
@@ -184,6 +186,10 @@ async function installUpdate(app) {
     }
     await run("ditto", [source, staged]);
     await run("xattr", ["-dr", "com.apple.quarantine", staged]).catch(() => undefined);
+
+    // The new version may migrate the database on its first launch; keep a
+    // copy of it exactly as this version left it.
+    await backupBeforeUpdate(process.env.DATABASE_URL, app.getVersion());
 
     const old = `${bundle}.old`;
     fs.rmSync(old, { recursive: true, force: true });

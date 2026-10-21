@@ -613,8 +613,8 @@ function RevealPanel({
           ) : null}
           {reveal.grade.provisional ? (
             <p className="text-muted-foreground text-xs">
-              Matched on keywords, not meaning — add an API key in Settings
-              for semantic grading.
+              Checked by matching keywords, not meaning. Compare with the
+              answer below — were you right?
             </p>
           ) : null}
         </div>
@@ -703,7 +703,7 @@ function RevealPanel({
               setBusy(false);
             }}
           >
-            My answer was correct
+            {reveal.grade?.provisional ? "Yes, I was right" : "My answer was correct"}
           </Button>
         ) : null}
 

@@ -318,6 +318,38 @@ describe("telemetry and admin", () => {
     expect(stats.byFeature[0]).toMatchObject({ name: "generate", calls: 10 });
   });
 
+  it("keeps only known funnel steps and categories, and counts them", async () => {
+    await report({
+      funnel: {
+        events: ["first_launch", "privacy_accepted", "my card about mitochondria", "first_launch"],
+        generationBucket: "1-3m",
+        generationError: "the file said: secret text",
+        source: "poster",
+        note: "anything else",
+      },
+    });
+    await call("/telemetry", {
+      method: "POST",
+      body: JSON.stringify({ installId: "a1b2c3d4-0000-4000-8000-000000000000", version: "0.2.0" }),
+    }, null);
+
+    const stored = [...kv.data.entries()].find(([key]) => key === `telemetry:${INSTALL}`)![1];
+    expect(JSON.parse(stored).funnel).toEqual({
+      events: ["first_launch", "privacy_accepted"],
+      generationBucket: "1-3m",
+      generationError: null,
+      source: "poster",
+    });
+
+    const stats = await (await call("/admin/stats?fresh=1")).json();
+    const steps = Object.fromEntries(stats.funnel.map((s: { event: string; installs: number }) => [s.event, s.installs]));
+    expect(steps.first_launch).toBe(1);
+    expect(steps.privacy_accepted).toBe(1);
+    expect(steps.purchased).toBe(0);
+    expect(stats.sources).toEqual([{ name: "poster", count: 1 }]);
+    expect(stats.generationBuckets).toEqual([{ name: "1-3m", count: 1 }]);
+  });
+
   it("refuses a report without a proper install id", async () => {
     expect((await report({ installId: "../../etc" })).status).toBe(400);
   });

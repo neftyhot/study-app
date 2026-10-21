@@ -13,6 +13,7 @@ import { count, sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { usageEvents } from "@/db/schema";
 import { APP_VERSION, serverUrl } from "@/lib/app-info";
+import { funnelReport, noteReturns } from "@/lib/funnel";
 import { readSetting, writeSetting } from "@/lib/settings";
 import { loadStats } from "@/lib/stats";
 import { isUsageLoggingEnabled } from "@/lib/usage";
@@ -62,12 +63,14 @@ export function buildReport(db: Db) {
     cards: stats.cards,
     reviewed: stats.reviewed,
     usage,
+    // First steps taken, by name only; see funnel.ts.
+    funnel: funnelReport(db),
   };
 }
 
-/** What the dashboard's headline tiles show; a change here is worth sending soon. */
+/** The dashboard's headline tiles and the funnel; a change here is worth sending soon. */
 function countsKey(report: ReturnType<typeof buildReport>): string {
-  return `${report.subjects}/${report.decks}/${report.cards}`;
+  return `${report.subjects}/${report.decks}/${report.cards}/${report.funnel.events.length}`;
 }
 
 /**
@@ -97,6 +100,7 @@ export async function maybeSendReport(db: Db, { force = false } = {}): Promise<b
     const base = serverUrl();
     if (!base) return false;
 
+    noteReturns(db);
     const report = buildReport(db);
     const counts = countsKey(report);
     if (

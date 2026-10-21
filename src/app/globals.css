@@ -506,3 +506,128 @@
     @apply font-sans;
   }
 }
+/* ── Launch splash (src/components/layout/launch-splash.tsx) ──────────────
+   Hidden unless the boot script marked <html data-splash>. Everything
+   here is time-limited: if script never runs, the 4 s animations end and
+   the app is simply there. Once script takes over it sets data-splash=exit
+   and drives the rest with the Web Animations API. */
+.launch-splash {
+  display: none;
+}
+html[data-splash] .launch-splash,
+.launch-splash-welcome {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+  overflow: hidden;
+  cursor: default;
+}
+html[data-splash=""] .launch-splash {
+  animation: launch-cover 4s step-end;
+}
+html[data-splash=""] [data-reveal],
+html[data-splash=""] [data-launch-target] {
+  animation: launch-hidden 4s step-end;
+}
+html[data-splash="exit"] [data-launch-target] {
+  opacity: 0;
+}
+.launch-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--background);
+}
+.launch-flip {
+  transform-origin: 0 0;
+}
+.launch-mark {
+  position: relative;
+  text-align: center;
+  color: var(--foreground);
+}
+.launch-words {
+  display: flex;
+  gap: 0.25em;
+  font-size: clamp(3rem, 13vw, 11rem);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 1;
+  white-space: nowrap;
+}
+.launch-line {
+  display: inline-block;
+  overflow: hidden;
+  /* Room for descenders inside the clip. */
+  padding-bottom: 0.08em;
+}
+.launch-word {
+  display: inline-block;
+  animation: launch-rise 450ms cubic-bezier(0.2, 0.7, 0.1, 1) both;
+}
+.launch-tagline {
+  margin-top: 1.25rem;
+  font-size: clamp(1rem, 2.2vw, 1.375rem);
+  color: var(--muted-foreground);
+  animation: launch-fade 500ms 350ms ease-out both;
+}
+@keyframes launch-rise {
+  from {
+    transform: translateY(105%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes launch-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes launch-cover {
+  0%,
+  100% {
+    visibility: visible;
+  }
+}
+@keyframes launch-hidden {
+  0%,
+  100% {
+    opacity: 0;
+  }
+}
+.launch-splash:not(.launch-splash-welcome) {
+  visibility: hidden;
+}
+html[data-splash="exit"] .launch-splash {
+  visibility: visible;
+}
+
+/* Motion for those who asked for less: no rises, near-instant transitions.
+   The splash keeps its 200 ms crossfade (driven by script). */
+@media (prefers-reduced-motion: reduce) {
+  .launch-word,
+  .launch-tagline {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Not a motion: how long the splash may cover the page without script. */
+  html[data-splash=""] .launch-splash,
+  html[data-splash=""] [data-reveal],
+  html[data-splash=""] [data-launch-target] {
+    animation-duration: 4s !important;
+  }
+}
