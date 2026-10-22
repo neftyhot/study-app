@@ -37,6 +37,7 @@ import { loadLearn, startLearnSession, submitOutcome } from "../src/lib/learn/se
 import { createKeywordGrader } from "../src/lib/learn/typed";
 import type { LlmProvider, StructuredRequest } from "../src/lib/llm";
 import { createCourse, createExam } from "../src/lib/manage";
+import { ensureSampleDeck } from "../src/lib/sample/open";
 import { buildExamExport } from "../src/lib/manage/export";
 import { addDays, isDue, todayIso } from "../src/lib/srs";
 import { buildQueue } from "../src/lib/study/queue";
@@ -330,6 +331,33 @@ async function main() {
     check("export has the sources", bundle.sourceFiles.length === 3);
     check("export has review history", bundle.flashcards.some((c) => c.progress));
     check("export serializes", JSON.stringify(bundle).length > 1000);
+
+    step("10. Open the sample deck and Learn with no AI key");
+    const sampleId = ensureSampleDeck(db);
+    check("sample deck added", Boolean(sampleId));
+    check("opening it again reuses it", ensureSampleDeck(db) === sampleId);
+    const sampleCards = db.select().from(flashcards).where(eq(flashcards.examId, sampleId)).all();
+    check("sample deck has cards", sampleCards.length > 0, `${sampleCards.length} cards`);
+    const sampleSession = startLearnSession(db, sampleId, { scope: "all", roundSize: 5 });
+    const first = nextStep(loadLearn(db, sampleSession.id)!.state!)!;
+    const firstCard = sampleCards.find((row) => row.id === first.cardId)!;
+    // The keyword grader is what marks typed answers when no key is set.
+    const offline = await createKeywordGrader().grade({
+      question: firstCard.question,
+      expected: firstCard.directAnswer,
+      essentialPoints: [],
+      answer: firstCard.directAnswer,
+    });
+    submitOutcome(db, sampleSession.id, first.cardId, {
+      correct: offline.verdict === "correct",
+      verdict: offline.verdict,
+      metPoints: offline.metPoints,
+    });
+    check("marked without a key", offline.verdict === "correct" && offline.provisional === true);
+    check(
+      "sample progress recorded",
+      db.select().from(studyProgress).where(eq(studyProgress.flashcardId, first.cardId)).get() !== undefined,
+    );
   } finally {
     sqlite.close();
     rmSync(dir, { recursive: true, force: true });

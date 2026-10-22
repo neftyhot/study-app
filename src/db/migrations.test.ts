@@ -96,6 +96,47 @@ describe("upgrading an existing database", () => {
     expect(card).toEqual({ question: "Q", from_scan: 0 });
   });
 
+  it("keeps a last-release library whole: cards, stars, progress and history", () => {
+    // The shipped app stopped at 0030; every migration since is this branch's.
+    const sqlite = new Database(":memory:");
+    sqlite.pragma("foreign_keys = ON");
+    const db = drizzle(sqlite, { schema });
+    migrate(db, { migrationsFolder: folderBefore("0031_sync_ready") });
+
+    sqlite.exec(`
+      INSERT INTO courses (id, title) VALUES ('c1', 'US History');
+      INSERT INTO exams (id, course_id, title) VALUES ('e1', 'c1', 'Unit 4');
+      INSERT INTO flashcards (id, exam_id, question, direct_answer, starred)
+        VALUES ('k1', 'e1', 'Roosevelt Corollary?', 'US may police the hemisphere', 1),
+               ('k2', 'e1', 'Open Door Policy?', 'Equal trade access to China', 0);
+      INSERT INTO study_progress (id, flashcard_id, state, interval_days, next_review_due, ease, lapses, last_reviewed_at)
+        VALUES ('p1', 'k1', 'retention', 12, '2026-11-01', 2.5, 1, '2026-10-20T10:00:00.000Z');
+      INSERT INTO study_sessions (id, exam_id, mode, card_grades, missed_count, easy_count)
+        VALUES ('s1', 'e1', 'flashcards', '{"k1":"easy","k2":"missed"}', 1, 1);
+      INSERT INTO answer_attempts (id, flashcard_id, session_id, answer, verdict, counts_toward_mastery)
+        VALUES ('a1', 'k1', 's1', 'police power', 'correct', 1);
+      INSERT INTO card_revisions (id, flashcard_id, question, direct_answer)
+        VALUES ('r1', 'k1', 'Old question', 'Old answer');
+      INSERT INTO app_settings (key, value) VALUES ('theme', '"dark"');
+    `);
+
+    migrate(db, { migrationsFolder: FOLDER });
+
+    // Read back through today's schema, the way the app does.
+    const cards = db.select().from(schema.flashcards).all();
+    expect(cards.map((c) => [c.id, c.starred, c.fromScan, c.deletedAt])).toEqual([
+      ["k1", true, false, null],
+      ["k2", false, false, null],
+    ]);
+    const progress = db.select().from(schema.studyProgress).get();
+    expect(progress).toMatchObject({ state: "retention", intervalDays: 12, nextReviewDue: "2026-11-01", ease: 2.5, lapses: 1 });
+    const session = db.select().from(schema.studySessions).get();
+    expect(session).toMatchObject({ cardGrades: { k1: "easy", k2: "missed" }, missedCount: 1, easyCount: 1 });
+    expect(db.select().from(schema.answerAttempts).get()).toMatchObject({ sessionId: "s1", verdict: "correct", countsTowardMastery: true });
+    expect(db.select().from(schema.cardRevisions).get()).toMatchObject({ question: "Old question" });
+    expect(db.select().from(schema.appSettings).get()).toMatchObject({ key: "theme", value: '"dark"' });
+  });
+
   it("is a no-op the second time (startup runs it on every launch)", () => {
     const sqlite = new Database(":memory:");
     const db = drizzle(sqlite, { schema });

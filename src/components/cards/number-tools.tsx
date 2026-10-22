@@ -122,8 +122,9 @@ export function cardNumberRows(
 }
 
 /**
- * The one "Math help" button, shown only where there are numbers: it opens
- * the list of them and the calculator together.
+ * The one "Math help" button where there are numbers: it opens the list of
+ * them and the calculator together. With no numbers it is a plain, quiet
+ * "Calculator" button, so the calculator is on every card as before.
  */
 export function NumbersPanel({
   rows,
@@ -141,7 +142,22 @@ export function NumbersPanel({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
-  if (rows.length === 0) return null;
+  if (rows.length === 0) {
+    // No numbers to list, but the calculator is still a press away.
+    if (!onCalculatorChange) return null;
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className={cn("text-muted-foreground", className)}
+        aria-pressed={calculatorOpen}
+        onClick={() => onCalculatorChange(!calculatorOpen)}
+      >
+        <Calculator className="size-4" />
+        Calculator
+      </Button>
+    );
+  }
   return (
     <div className={cn("space-y-2", className)}>
       <Button
