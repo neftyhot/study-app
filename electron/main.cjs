@@ -48,6 +48,7 @@ const { crashLogPath, installCrashLog, logCrash } = require("./crash-log.cjs");
 const { registerLectures } = require("./lectures.cjs");
 const { installShareFileHandlers, registerShareFiles } = require("./share-files.cjs");
 const { registerLoginItem, startReminders } = require("./reminders.cjs");
+const { registerSyncFolder } = require("./sync-folder.cjs");
 
 const isDev = !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_START_URL ?? "http://localhost:3000";
@@ -756,6 +757,18 @@ app.whenReady().then(async () => {
     powerMonitor,
     systemPreferences,
     shell,
+    fromApp,
+    getWindows: () =>
+      BrowserWindow.getAllWindows().filter(
+        (window) =>
+          !window.isDestroyed() && appUrl && sameOrigin(window.webContents.getURL(), appUrl),
+      ),
+  });
+
+  // The folder decks sync through (iCloud Drive or another); see sync-folder.cjs.
+  registerSyncFolder({
+    ipcMain,
+    dialog,
     fromApp,
     getWindows: () =>
       BrowserWindow.getAllWindows().filter(

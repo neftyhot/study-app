@@ -16,6 +16,7 @@ import { canGradeLocally, prewarmGrader, unloadLocalGrader } from "@/lib/grade";
 import { maybeSendReport } from "@/lib/telemetry";
 import { recordFunnel, recordSource } from "@/lib/funnel";
 import { readLicenseStatus } from "@/lib/license/status";
+import { buildKeyLink, KEY_LINK_LIFETIME_MS } from "@megan/core/share/key-link";
 import {
   allKeyStatuses,
   apiKeyStatus,
@@ -27,6 +28,7 @@ import {
   readGradingMode,
   readLocalModel,
   readModelTier,
+  readApiKey,
   readProvider,
   writeApiKey,
   writeModelTier,
@@ -92,6 +94,24 @@ export async function saveApiKey(
   if (key.trim()) recordFunnel(db, "key_added");
   revalidatePath("/settings");
   return apiKeyStatus(provider, db);
+}
+
+export type PhoneKeyLink =
+  | { ok: true; link: string; until: number }
+  | { ok: false; reason: "missing" | "environment" };
+
+/**
+ * The link the "Send to my iPhone" QR code carries: the saved Gemini key
+ * (the only provider the phone uses), good for two minutes. A key that comes
+ * from a developer's environment file is never handed out.
+ */
+export async function phoneKeyLinkAction(): Promise<PhoneKeyLink> {
+  const status = apiKeyStatus("gemini", db);
+  if (status.fromEnvironment) return { ok: false, reason: "environment" };
+  const key = readApiKey("gemini", db);
+  if (!key) return { ok: false, reason: "missing" };
+  const now = Date.now();
+  return { ok: true, link: buildKeyLink(key, now), until: now + KEY_LINK_LIFETIME_MS };
 }
 
 export type KeyCheck = "ok" | "invalid" | "unreachable";

@@ -110,5 +110,24 @@
 			</dict>
 		</dict>
 	</array>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Megan Study records your lectures so you can turn them into notes and flashcards.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Megan Study turns your recorded lectures into text on your phone.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.Christ.meganstudy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meganstudy</string>
+			</array>
+		</dict>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>

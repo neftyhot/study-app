@@ -25,12 +25,22 @@ import { SAMPLE_DECK } from "@megan/core/sample/memory-deck";
 import { parseShareFile, SHARE_FORMAT, SHARE_VERSION } from "@megan/core/share/meganstudy";
 import { todayIso } from "@megan/core/srs/schedule";
 
+import { catalogClient, filterDecks, readCollege, writeCollege, type Http, type HttpRequest } from "./catalog";
 import { loadCards, loadDueCards, loadStarred, recordFlip, recordLearn, setStarred, undoGrade } from "./cards";
 import { prepareDatabase } from "./db";
 import { countAllDue, deleteDeck, listCourses } from "./decks";
 import { buildShareFile } from "./export";
 import { citationLabel, loadGuide } from "./guides";
 import { importShareFile, insertDeck } from "./import";
+import {
+  createLecture,
+  defaultLectureTitle,
+  deleteLecture,
+  getLecture,
+  listLectures,
+  renameLecture,
+  saveTranscript,
+} from "./lectures";
 import { planReminders, readReminders, rescheduleReminders, writeReminders } from "./reminders";
 import { ensureSampleDeck, findSampleDeck } from "./sample";
 import { saveTypedCards } from "./make";
@@ -339,5 +349,132 @@ describe("settings and reminders", () => {
     expect(notifier.cancel).toHaveBeenCalledTimes(1);
     // Nothing due: nothing scheduled.
     expect(notifier.schedule).not.toHaveBeenCalled();
+  });
+});
+
+describe("the shared catalog", () => {
+  const DETAILS = {
+    title: "Unit 1",
+    college: "State",
+    professor: "Dr. Lee",
+    course: "BIO 101",
+    kind: "exam" as const,
+    customKind: null,
+    term: null,
+    description: null,
+  };
+
+  function fakeServer(reply: (request: HttpRequest) => { status: number; data: unknown }) {
+    const requests: HttpRequest[] = [];
+    const http: Http = async (request) => {
+      requests.push(request);
+      return reply(request);
+    };
+    return { requests, client: catalogClient(db, http, "https://server.test") };
+  }
+
+  it("lists with this install's id, and says so when offline", async () => {
+    const { requests, client } = fakeServer(() => ({ status: 200, data: { decks: [] } }));
+    expect(await client.list()).toEqual({ decks: [], offline: null });
+    const id = await readSetting(db, "install_id");
+    expect(id).toBeTruthy();
+    expect(requests[0]).toMatchObject({ url: "https://server.test/catalog", method: "GET", headers: { "X-Install-Id": id } });
+
+    const offline = catalogClient(db, async () => {
+      throw new Error("no network");
+    }, "https://server.test");
+    expect((await offline.list()).offline).toMatch(/Can't reach the catalog/);
+    expect(catalogClient(db, async () => ({ status: 200, data: {} }), "").available).toBe(false);
+  });
+
+  it("adds a shared deck as a deck of the student's own", async () => {
+    const { client } = fakeServer(() => ({
+      status: 200,
+      data: { title: "Cells", course: "BIO 101", term: null, cards: SAMPLE_DECK.cards, guide: null },
+    }));
+    const examId = await client.add("abc");
+    const [course] = await listCourses(db);
+    expect(course.title).toBe("BIO 101");
+    expect(course.decks[0]).toMatchObject({ examId, title: "Cells", cardCount: SAMPLE_DECK.cards.length });
+  });
+
+  it("shares a deck with its cards and the student's key, and refuses without one", async () => {
+    const examId = await insertDeck(db, SAMPLE_DECK);
+    const { requests, client } = fakeServer(() => ({ status: 200, data: { id: "new" } }));
+    const input = { ...DETAILS, examId, uploader: null, includeGuide: false, attested: true };
+    await expect(client.publish(input, null)).rejects.toThrow(/AI key/);
+    await expect(client.publish({ ...input, attested: false }, "k")).rejects.toThrow(/made these cards/);
+    await expect(client.publish({ ...input, professor: " " }, "k")).rejects.toThrow(/professor/);
+    expect(requests).toHaveLength(0);
+
+    await client.publish(input, "k");
+    const body = requests[0].body as Record<string, unknown>;
+    expect(requests[0].method).toBe("POST");
+    expect(body).toMatchObject({ title: "Unit 1", uploader: "A student", guide: null, moderation: { provider: "gemini", key: "k" } });
+    expect((body.cards as unknown[]).length).toBe(SAMPLE_DECK.cards.length);
+  });
+
+  it("shows the server's error", async () => {
+    const { client } = fakeServer(() => ({ status: 403, data: { error: "Not yours." } }));
+    await expect(client.remove("x")).rejects.toThrow("Not yours.");
+  });
+
+  it("remembers the college and filters by it, by words and by owner", async () => {
+    expect(await readCollege(db)).toBeNull();
+    expect(await writeCollege(db, "  Ohio   State ")).toBe("Ohio State");
+    expect(await readCollege(db)).toBe("Ohio State");
+    const deck = (over: Record<string, unknown>) =>
+      ({ ...DETAILS, id: "1", uploader: "", cardCount: 1, sectionCount: 0, adds: 0, status: "live", sourceExamId: null, createdAt: "", mine: false, ...over }) as Parameters<typeof filterDecks>[0][number];
+    const decks = [deck({ id: "a", college: "Ohio State" }), deck({ id: "b", course: "CHEM 2", mine: true })];
+    const ids = (f: Parameters<typeof filterDecks>[1]) => filterDecks(decks, f).map((d) => d.id);
+    expect(ids({ query: "", college: "ohio state", onlyMine: false })).toEqual(["a"]);
+    expect(ids({ query: "chem lee", college: "", onlyMine: false })).toEqual(["b"]);
+    expect(ids({ query: "", college: "", onlyMine: true })).toEqual(["b"]);
+  });
+});
+
+describe("lectures recorded on the phone", () => {
+  it("saves a recording, its transcript and a new title", async () => {
+    const id = await createLecture(db, { title: "  ", audioPath: "a.m4a", durationSeconds: 95 });
+    const fresh = await getLecture(db, id);
+    expect(fresh).toMatchObject({ title: defaultLectureTitle(), audioPath: "a.m4a", durationSeconds: 95, status: "pending" });
+    expect(fresh?.segments).toEqual([]);
+
+    await saveTranscript(db, id, [
+      { id: 7, start: 0, end: 4, text: " Cells are the unit of life. " },
+      { id: 8, start: 4, end: 6, text: "   " },
+      { id: 9, start: 6, end: 12, text: "Mitochondria make energy." },
+    ]);
+    await renameLecture(db, id, "Bio 101 · week 3");
+    await renameLecture(db, id, "   ");
+    const done = await getLecture(db, id);
+    expect(done).toMatchObject({
+      title: "Bio 101 · week 3",
+      status: "done",
+      fullText: "Cells are the unit of life. Mitochondria make energy.",
+    });
+    expect(done?.segments).toEqual([
+      { id: 0, start: 0, end: 4, text: "Cells are the unit of life." },
+      { id: 1, start: 6, end: 12, text: "Mitochondria make energy." },
+    ]);
+  });
+
+  it("lists newest first and hands back the audio file on delete", async () => {
+    const older = await createLecture(db, { title: "Older", audioPath: "old.m4a", durationSeconds: 10 });
+    sqlite.prepare("UPDATE lecture_transcripts SET created_at = '2020-01-01T00:00:00.000Z' WHERE id = ?").run(older);
+    await createLecture(db, { title: "Newer", audioPath: "new.m4a", durationSeconds: 10 });
+    expect((await listLectures(db)).map((l) => l.title)).toEqual(["Newer", "Older"]);
+
+    expect(await deleteLecture(db, older)).toBe("old.m4a");
+    expect(await deleteLecture(db, older)).toBeNull();
+    expect((await listLectures(db)).map((l) => l.title)).toEqual(["Newer"]);
+  });
+
+  it("writes rows the desktop's Lectures tab can read", async () => {
+    const id = await createLecture(db, { title: "Shared", audioPath: "s.m4a", durationSeconds: 30 });
+    await saveTranscript(db, id, [{ id: 0, start: 0, end: 5, text: "Hello class." }]);
+    const row = sqlite.prepare("SELECT * FROM lecture_transcripts WHERE id = ?").get(id) as Record<string, unknown>;
+    expect(row).toMatchObject({ transcript_status: "done", full_text: "Hello class." });
+    expect(JSON.parse(row.segments_json as string)).toEqual([{ id: 0, start: 0, end: 5, text: "Hello class." }]);
   });
 });

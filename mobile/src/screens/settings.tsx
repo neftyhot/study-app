@@ -21,6 +21,8 @@ import { DESKTOP_ONLY_FEATURES, type LicenseAccess } from "@megan/core/platform/
 import type { Reminders } from "@megan/core/reminders/reminders";
 
 import { useApp } from "../context";
+import { readSyncStatus, runSync, setSyncFolder, type SyncStatus } from "../data/sync";
+import { pluginSyncFolder, syncFolderPlugin } from "../platform/sync-folder";
 import { readReminders, rescheduleReminders, writeReminders } from "../data/reminders";
 import { GEMINI_KEY, readApiKey } from "../platform/ai";
 import { readAppearance, readTheme, writeAppearance, writeTheme } from "../theme";
@@ -58,6 +60,106 @@ function announce(theme: ThemePreference, appearance: Appearance) {
   window.dispatchEvent(new CustomEvent("megan:appearance", { detail: { theme, appearance } }));
 }
 
+function syncedText(at: string | null): string {
+  if (!at) return "Not synced yet.";
+  const minutes = Math.round((Date.now() - Date.parse(at)) / 60_000);
+  if (minutes < 1) return "Synced just now.";
+  if (minutes < 60) return `Synced ${minutes} minute${minutes === 1 ? "" : "s"} ago.`;
+  return `Synced ${new Date(at).toLocaleString()}.`;
+}
+
+/** Sync through a folder in iCloud Drive that the Mac app also uses. */
+function SyncSection() {
+  const { db, changed, version } = useApp();
+  const [status, setStatus] = useState<SyncStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+
+  useEffect(() => {
+    void readSyncStatus(db).then(setStatus);
+  }, [db, version]);
+
+  async function syncNow(quiet = false) {
+    setBusy(true);
+    try {
+      const result = await runSync(db, pluginSyncFolder);
+      if (result && result.received > 0) changed();
+      if (!quiet && result) {
+        setMessage({
+          tone: "info",
+          text: result.devices
+            ? `Up to date with ${result.devices} other device${result.devices === 1 ? "" : "s"}.`
+            : "Synced. Turn on sync on your Mac with the same folder to see your decks there.",
+        });
+      }
+    } catch (error) {
+      setMessage({ tone: "error", text: errorText(error) || "The sync folder can't be reached. Is iCloud Drive turned on?" });
+    } finally {
+      setStatus(await readSyncStatus(db));
+      setBusy(false);
+    }
+  }
+
+  async function choose() {
+    setMessage(null);
+    try {
+      const { name } = await syncFolderPlugin.pick();
+      if (!name) return;
+      await setSyncFolder(db, name);
+      await syncNow();
+    } catch (error) {
+      setMessage({ tone: "error", text: errorText(error) });
+    }
+  }
+
+  async function stop() {
+    await syncFolderPlugin.clear();
+    await setSyncFolder(db, null);
+    setStatus(await readSyncStatus(db));
+    setMessage({ tone: "info", text: "Sync is off. Your decks stay on this iPhone." });
+  }
+
+  if (!status) return null;
+  return (
+    <div className="section">
+      <h2 className="section-title">Sync between devices</h2>
+      <div className="panel stack">
+        {status.folder ? (
+          <>
+            <p>
+              Syncing with <strong>{status.folder}</strong>
+            </p>
+            <p className="muted small">{syncedText(status.lastSyncedAt)}</p>
+            <div className="inline">
+              <Button onClick={() => void syncNow()} disabled={busy}>
+                {busy ? "Syncing…" : "Sync now"}
+              </Button>
+              <Button variant="ghost" onClick={() => void stop()} disabled={busy}>
+                Stop syncing
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="muted small">
+              Keep your decks and progress the same on this iPhone and your Mac, free, through your own iCloud Drive.
+            </p>
+            <p className="muted small">
+              First, on your Mac: Settings → Sync between devices → Sync with iCloud Drive. Then tap below and pick the
+              &ldquo;Megan Study Sync&rdquo; folder in iCloud Drive.
+            </p>
+            <div className="inline">
+              <Button onClick={() => void choose()}>Choose folder</Button>
+            </div>
+          </>
+        )}
+        {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+        <p className="muted small">Pictures and source files stay on the device that has them.</p>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsScreen() {
   const { db, platform, ai, reloadAi } = useApp();
   const [theme, setTheme] = useState<ThemePreference>("system");
@@ -74,6 +176,15 @@ export function SettingsScreen() {
   useEffect(() => {
     void runningVersion().then(setAppVersion);
   }, []);
+
+  // A key can also arrive from the desktop's QR code while this screen is open.
+  useEffect(() => {
+    let live = true;
+    void readApiKey(platform.secrets).then((key) => live && setHasKey(Boolean(key)));
+    return () => {
+      live = false;
+    };
+  }, [platform, ai]);
 
   async function checkUpdates() {
     setChecking(true);
@@ -229,6 +340,12 @@ export function SettingsScreen() {
               ? "A Gemini key is saved. The tutor, Snap your notes and typed-answer marking use it."
               : "Add a Gemini API key to use the tutor and Snap your notes. Studying works without one."}
           </p>
+          {hasKey ? null : (
+            <p className="muted small">
+              Already have one on your computer? Open Settings in Megan Study there, press Send to my iPhone, and
+              scan the code with your Camera.
+            </p>
+          )}
           <label className="field">
             <span className="field-label">{hasKey ? "Replace the key" : "Gemini API key"}</span>
             <input
@@ -256,6 +373,8 @@ export function SettingsScreen() {
           <p className="muted small">The key stays in this device&apos;s Keychain. It is not synced or sent anywhere but Google.</p>
         </div>
       </div>
+
+      <SyncSection />
 
       <div className="section">
         <h2 className="section-title">Reminders</h2>

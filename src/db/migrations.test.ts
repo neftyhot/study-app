@@ -96,6 +96,48 @@ describe("upgrading an existing database", () => {
     expect(card).toEqual({ question: "Q", from_scan: 0 });
   });
 
+  it("starts the sync journal without touching existing rows, then records edits and deletes (0033)", () => {
+    const sqlite = new Database(":memory:");
+    sqlite.pragma("foreign_keys = ON");
+    const db = drizzle(sqlite, { schema });
+    migrate(db, { migrationsFolder: folderBefore("0033_sync_journal") });
+
+    sqlite.exec(`
+      INSERT INTO courses (id, title) VALUES ('c1', 'Biology');
+      INSERT INTO exams (id, course_id, title) VALUES ('e1', 'c1', 'Midterm');
+      INSERT INTO flashcards (id, exam_id, question, direct_answer) VALUES ('k1', 'e1', 'Q1', 'A1'), ('k2', 'e1', 'Q2', 'A2');
+      INSERT INTO study_progress (id, flashcard_id, state, last_reviewed_at) VALUES ('p1', 'k1', 'learning', '2026-10-20T10:00:00.000Z');
+    `);
+
+    migrate(db, { migrationsFolder: FOLDER });
+
+    expect(sqlite.prepare("SELECT count(*) AS n FROM flashcards").get()).toEqual({ n: 2 });
+    expect(sqlite.prepare("SELECT count(*) AS n FROM sync_tombstones").get()).toEqual({ n: 0 });
+    expect(sqlite.prepare("SELECT updated_at FROM flashcards WHERE id = 'k1'").get()).toEqual({ updated_at: null });
+
+    // An edit that doesn't set updated_at gets stamped; one that does keeps its own time.
+    sqlite.exec("UPDATE flashcards SET starred = 1 WHERE id = 'k1'");
+    const stamped = sqlite.prepare("SELECT updated_at FROM flashcards WHERE id = 'k1'").get() as { updated_at: string };
+    expect(stamped.updated_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+    sqlite.exec("UPDATE flashcards SET question = 'Q1b', updated_at = '2020-01-01T00:00:00.000Z' WHERE id = 'k1'");
+    expect(sqlite.prepare("SELECT updated_at FROM flashcards WHERE id = 'k1'").get()).toEqual({
+      updated_at: "2020-01-01T00:00:00.000Z",
+    });
+    // Card-order bookkeeping isn't an edit.
+    sqlite.exec("UPDATE flashcards SET document_order_index = 9 WHERE id = 'k2'");
+    expect(sqlite.prepare("SELECT updated_at FROM flashcards WHERE id = 'k2'").get()).toEqual({ updated_at: null });
+
+    // Deleting the exam cascades, and every removed row is remembered.
+    sqlite.exec("DELETE FROM exams WHERE id = 'e1'");
+    const gone = sqlite.prepare("SELECT table_name, row_key FROM sync_tombstones ORDER BY table_name, row_key").all();
+    expect(gone).toEqual([
+      { table_name: "exams", row_key: "e1" },
+      { table_name: "flashcards", row_key: "k1" },
+      { table_name: "flashcards", row_key: "k2" },
+      { table_name: "study_progress", row_key: "k1" },
+    ]);
+  });
+
   it("keeps a last-release library whole: cards, stars, progress and history", () => {
     // The shipped app stopped at 0030; every migration since is this branch's.
     const sqlite = new Database(":memory:");

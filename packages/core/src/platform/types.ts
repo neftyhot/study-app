@@ -129,12 +129,10 @@ export interface Platform {
 
 /** What iOS shows in place of a feature it does not have yet. */
 export const DESKTOP_ONLY_FEATURES = [
-  { id: "lectures", label: "Lecture recording and transcription" },
   { id: "local-ai", label: "Local AI models" },
   { id: "libreoffice", label: "Old .doc and .ppt files (LibreOffice)" },
   { id: "occlusion", label: "Image occlusion editor" },
   { id: "bulk-edit", label: "Bulk editing" },
-  { id: "catalog-publish", label: "Publishing to the catalog" },
 ] as const;
 
 export type DesktopOnlyFeature = (typeof DESKTOP_ONLY_FEATURES)[number]["id"];

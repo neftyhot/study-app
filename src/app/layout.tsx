@@ -5,6 +5,7 @@ import localFont from "next/font/local";
 import { BootScript } from "@/components/boot-script";
 import { StatusBanner, StatusScreen, StatusWatcher } from "@/components/layout/app-status";
 import { LaunchSplash } from "@/components/layout/launch-splash";
+import { SyncRunner } from "@/components/layout/sync-runner";
 import { SiteHeader } from "@/components/layout/site-header";
 import { RecorderProvider } from "@/components/lectures/recorder";
 import { PrivacyGate } from "@/components/privacy/privacy-gate";
@@ -34,7 +35,8 @@ import { appearanceCss, THEME_IDS, themeBootScript } from "@/lib/appearance";
 import { CHANGELOG } from "@/lib/changelog";
 import { recordFunnel } from "@/lib/funnel";
 import { SPLASH_BOOT_SCRIPT } from "@/lib/launch/choreography";
-import { hasAcceptedPrivacy, isAnswerable, readAppearance, readProvider, readTheme } from "@/lib/settings";
+import { hasAcceptedPrivacy, isAnswerable, readAppearance, readProvider, readSetting, readTheme } from "@/lib/settings";
+import { SYNC_SETTINGS } from "@megan/core/sync/folder-sync";
 
 import "./globals.css";
 
@@ -168,6 +170,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               />
               <TimeTracker />
               <ShareFileListener />
+              <SyncRunner enabled={Boolean(readSetting(SYNC_SETTINGS.folder, db))} />
               <UpgradeGuideHost />
               <main data-reveal className="mx-auto w-full max-w-(--content-width) flex-1 px-4 py-8">
                 {children}

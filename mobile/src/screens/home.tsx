@@ -1,5 +1,5 @@
 /** Home: what is due, one tap to start, and every course and deck. */
-import { Camera, FileDown, FilePlus2, GraduationCap } from "lucide-react";
+import { Camera, FileDown, FilePlus2, GraduationCap, Library, Mic } from "lucide-react";
 import { useState } from "react";
 
 import { SHARE_EXTENSION } from "@megan/core/share/meganstudy";
@@ -71,6 +71,16 @@ export function HomeScreen() {
           <FileDown aria-hidden />
           <strong>Open a deck</strong>
           <span>A {SHARE_EXTENSION} file from a friend</span>
+        </button>
+        <button type="button" className="action" onClick={() => navigate({ name: "catalog" })}>
+          <Library aria-hidden />
+          <strong>Catalog</strong>
+          <span>Decks other students shared</span>
+        </button>
+        <button type="button" className="action" onClick={() => navigate({ name: "lectures" })}>
+          <Mic aria-hidden />
+          <strong>Record a lecture</strong>
+          <span>Keeps going with the screen off</span>
         </button>
       </div>
 

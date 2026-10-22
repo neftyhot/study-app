@@ -14,6 +14,7 @@ import { useApp } from "../context";
 import { loadCards, type Card } from "../data/cards";
 import { listCourses } from "../data/decks";
 import { createScanDeck, saveScanCards } from "../data/scan";
+import { Markdown } from "../components/markdown";
 import { Button, Empty, Notice, Screen, plural, useLoad } from "../components/ui";
 
 import { errorText } from "./source";
@@ -39,15 +40,16 @@ function materialText(cards: Card[]) {
   return excerpts.join("\n\n").slice(0, CONTEXT_CHARS);
 }
 
-export function TutorScreen({ examId }: { examId?: string }) {
+export function TutorScreen({ examId, ask }: { examId?: string; ask?: string }) {
   return (
     <Screen title="Tutor">
-      <TutorPanel examId={examId} />
+      <TutorPanel examId={examId} ask={ask} />
     </Screen>
   );
 }
 
-export function TutorPanel({ examId: initialDeck }: { examId?: string }) {
+/** `ask` is a question to send as soon as the deck's cards are in, like "Ask AI" on a flashcard. */
+export function TutorPanel({ examId: initialDeck, ask: initialQuestion }: { examId?: string; ask?: string }) {
   const { db, ai, navigate, selectTab, changed } = useApp();
   const [examId, setExamId] = useState(initialDeck ?? "");
   const [turns, setTurns] = useState<ChatTurn[]>([]);
@@ -70,6 +72,16 @@ export function TutorPanel({ examId: initialDeck }: { examId?: string }) {
   useEffect(() => {
     log.current?.scrollTo({ top: log.current.scrollHeight });
   }, [turns, busy]);
+
+  // Sent once, after the cards load, so "this card" has the deck behind it.
+  const [sentQuestion, setSentQuestion] = useState<string | undefined>();
+  useEffect(() => {
+    if (!initialQuestion || !ai || cards === undefined || sentQuestion === initialQuestion) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSentQuestion(initialQuestion);
+    void ask(initialQuestion);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion, cards, ai]);
 
   if (!ai) {
     return (
@@ -157,20 +169,26 @@ export function TutorPanel({ examId: initialDeck }: { examId?: string }) {
             </div>
           </div>
         ) : null}
-        {turns.map((turn, index) => (
-          <p key={index} className={`bubble bubble-${turn.role}`}>
-            {turn.text}
-          </p>
-        ))}
+        {turns.map((turn, index) =>
+          turn.role === "model" ? (
+            <div key={index} className="bubble bubble-model">
+              <Markdown>{turn.text}</Markdown>
+            </div>
+          ) : (
+            <p key={index} className="bubble bubble-user">
+              {turn.text}
+            </p>
+          ),
+        )}
         {busy === "ask" ? <p className="bubble bubble-model muted">Thinking…</p> : null}
       </div>
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
 
       {suggestions.length > 0 ? (
-        <div className="segmented">
+        <div className="chat-suggestions" aria-label="Suggested questions">
           {suggestions.map((suggestion) => (
-            <button key={suggestion} type="button" className="chip" onClick={() => void ask(suggestion)}>
+            <button key={suggestion} type="button" className="chip chip-wide" onClick={() => void ask(suggestion)}>
               {suggestion}
             </button>
           ))}
@@ -178,9 +196,11 @@ export function TutorPanel({ examId: initialDeck }: { examId?: string }) {
       ) : null}
 
       {turns.length > 0 ? (
-        <Button variant="secondary" onClick={() => void makeCards()} disabled={!!busy}>
-          <Sparkles aria-hidden /> {busy === "cards" ? "Making cards…" : "Make cards from this"}
-        </Button>
+        <div className="chat-tools">
+          <button type="button" className="button button-ghost button-small" onClick={() => void makeCards()} disabled={!!busy}>
+            <Sparkles aria-hidden /> {busy === "cards" ? "Making cards…" : "Make cards from this"}
+          </button>
+        </div>
       ) : null}
 
       <form

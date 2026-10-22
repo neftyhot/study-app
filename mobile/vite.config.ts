@@ -11,6 +11,23 @@ import { bundleMigrations } from "../packages/core/src/platform/migrate";
 const root = resolve(import.meta.dirname, "..");
 
 /**
+ * The app's server (the catalog), the same address the desktop build uses:
+ * the environment first, then the repo's `.env.local`. A web address, not a
+ * secret; without one the catalog says it isn't available in this build.
+ */
+function serverUrl(): string {
+  const fromEnv = process.env.STUDY_APP_SERVER_URL || process.env.LICENSE_SERVER_URL;
+  if (fromEnv) return fromEnv.trim().replace(/\/+$/, "");
+  try {
+    const local = readFileSync(resolve(root, ".env.local"), "utf8");
+    const match = /^(?:STUDY_APP_SERVER_URL|LICENSE_SERVER_URL)=["']?([^"'\n]+)/m.exec(local);
+    return match ? match[1].trim().replace(/\/+$/, "") : "";
+  } catch {
+    return "";
+  }
+}
+
+/**
  * `virtual:migrations`: the desktop's drizzle migrations, read at build time.
  *
  * iOS has no `drizzle/` folder to read at runtime, so the journal and every
@@ -73,6 +90,7 @@ function splashBoot(): Plugin {
 
 export default defineConfig({
   plugins: [react(), migrations(), theme(), splashBoot()],
+  define: { __SERVER_URL__: JSON.stringify(serverUrl()) },
   resolve: {
     alias: { "@megan/core": resolve(root, "packages/core/src") },
   },

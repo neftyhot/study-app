@@ -771,6 +771,53 @@ details[open] > summary.section-title::after {
   gap: 8px;
 }
 
+.card-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.card-nav .icon-button:disabled {
+  opacity: 0.35;
+}
+
+.recorder-clock {
+  font-size: 2.6rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.recorder-level {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--muted);
+}
+
+.recorder-level span {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+  transform-origin: left;
+  transition: transform 0.2s var(--ease);
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  line-height: 1.5;
+}
+
+.transcript-time {
+  margin-right: 4px;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .grade-missed {
   color: var(--destructive);
 }
@@ -803,8 +850,18 @@ details[open] > summary.section-title::after {
 }
 
 .option[aria-pressed="true"] {
-  border-color: var(--accent);
-  box-shadow: inset 0 0 0 1px var(--accent);
+  border-color: var(--primary);
+  background: color-mix(in oklch, var(--primary) 12%, var(--card));
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.option[aria-pressed="true"] .option-key {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.option[aria-pressed="true"] .option-key::after {
+  content: " · Selected";
 }
 
 .option[data-state="correct"] {
@@ -904,7 +961,39 @@ details[open] > summary.section-title::after {
   display: flex;
   flex: 1;
   flex-direction: column;
+  gap: 8px;
   min-height: 0;
+}
+
+.chat > :not(.chat-log) {
+  flex-shrink: 0;
+}
+
+.chat-suggestions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.chip-wide {
+  min-height: 36px;
+  max-width: 100%;
+  padding: 8px 14px;
+  border-radius: 16px;
+  text-align: left;
+  line-height: 1.3;
+}
+
+.chat-tools {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.button-small {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 0.9rem;
 }
 
 .chat-log {
@@ -940,6 +1029,101 @@ details[open] > summary.section-title::after {
   background: var(--muted);
   color: var(--foreground);
   border-bottom-left-radius: 6px;
+  white-space: normal;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+.md > :last-child {
+  margin-bottom: 0;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md blockquote,
+.md pre,
+.md .md-table {
+  margin: 0 0 8px;
+}
+
+.md h3,
+.md h4 {
+  margin: 12px 0 4px;
+  line-height: 1.3;
+}
+
+.md h3 {
+  font-size: 1.05rem;
+}
+
+.md h4 {
+  font-size: 0.98rem;
+}
+
+.md ul,
+.md ol {
+  padding-left: 20px;
+}
+
+.md li + li {
+  margin-top: 2px;
+}
+
+.md blockquote {
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.md code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--background);
+  font-size: 0.88em;
+}
+
+.md pre {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--background);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.md pre code {
+  padding: 0;
+  background: none;
+}
+
+.md hr {
+  margin: 10px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.md a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+.md-table {
+  overflow-x: auto;
+}
+
+.md table {
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.md th,
+.md td {
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
 }
 
 .chat-compose {

@@ -223,6 +223,13 @@ export type RemindersApi = {
   setLoginItem(open: boolean): Promise<LoginItemState | null>;
 };
 
+/** Finding the sync folder (electron/sync-folder.cjs); each returns a path or null. */
+export type SyncFolderApi = {
+  iCloudAvailable(): Promise<boolean>;
+  useICloud(): Promise<string | null>;
+  pickFolder(): Promise<string | null>;
+};
+
 declare global {
   interface Window {
     /** Present only inside the desktop app. */
@@ -234,6 +241,7 @@ declare global {
       lectures?: LecturesApi;
       shareFiles?: ShareFilesApi;
       reminders?: RemindersApi;
+      sync?: SyncFolderApi;
     };
   }
 }

@@ -16,6 +16,24 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "1.10.0",
+    date: "2026-10-22",
+    notes: [
+      "Sync between devices, free: turn on Settings → Sync between devices → Sync with iCloud Drive, then pick the same \"Megan Study Sync\" folder in the iPhone app. Your decks, cards, stars and progress stay the same on both. Pictures and source files stay on the device that has them.",
+      "Send your AI key to your iPhone in one step: Settings → Send to my iPhone shows a code; scan it with the iPhone camera and confirm. The code works for 2 minutes.",
+      "iPhone: record lectures. Recording keeps going with the screen off, and the lecture is transcribed into notes you can turn into cards.",
+      "iPhone: the course catalog is here too, with the same courses as on your computer.",
+      "iPhone flashcards: Ask AI sits under the Missed, Hard and Easy buttons, with arrows below it to go back and forth between cards. The big Undo button is gone (use the back arrow), so it no longer covers your Missed/Hard/Easy tally at the end of a deck.",
+      "iPhone practice exams: the answer you pick is now clearly highlighted.",
+      "iPhone tutor: answers show proper headings, bold text and lists instead of ** and ## symbols, and the Make cards from this button no longer covers the suggested questions.",
+    ],
+    dev: [
+      "Folder sync (packages/core/src/sync/folder-sync.ts): each device writes only <deviceId>.json and merges the others; newest updated_at wins; deletes are tombstones kept by migration 0033 triggers (180-day lifetime); image/slide/source-file columns never leave the device. Mac uses ~/Library/Mobile Documents/com~apple~CloudDocs/Megan Study Sync (electron/sync-folder.cjs); iOS uses a user-picked folder held as a security-scoped bookmark (SyncFolderPlugin.swift). No server, no iCloud entitlements.",
+      "Key hand-off (packages/core/src/share/key-link.ts): a megan-study:// link with an expiry, shown as a QR code; the iPhone app saves the key only after a confirm.",
+      "iOS LectureRecorderPlugin uses the audio background mode so recording survives screen lock; plugins register in MeganBridgeViewController.",
+    ],
+  },
+  {
     version: "1.9.0",
     date: "2026-10-22",
     notes: [

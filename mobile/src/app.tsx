@@ -3,8 +3,10 @@
  * sidebar with a split view on iPad (and in Split View once it is wide
  * enough). The tutor opens beside the content on iPad, as a screen on iPhone.
  */
+import { App as CapacitorApp } from "@capacitor/app";
+import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { BookOpen, Home, Search, Settings as SettingsIcon, Sparkles, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Platform, SqlDriver } from "@megan/core/platform/types";
 import type { LlmProvider } from "@megan/core/llm/types";
@@ -12,7 +14,7 @@ import type { LlmProvider } from "@megan/core/llm/types";
 import { LaunchSplash } from "./components/splash";
 import { UpdateBanner } from "./components/update-banner";
 import { AppContext, TABS, type AppContextValue, type Route, type Tab } from "./context";
-import { createAiClient } from "./platform/ai";
+import { createAiClient, GEMINI_KEY } from "./platform/ai";
 import { CardsScreen } from "./screens/cards";
 import { DeckScreen } from "./screens/deck";
 import { DesktopScreen } from "./screens/desktop";
@@ -20,6 +22,8 @@ import { ExamScreen } from "./screens/exam";
 import { GuideScreen } from "./screens/guide";
 import { HomeScreen } from "./screens/home";
 import { LearnScreen } from "./screens/learn";
+import { LectureScreen, LecturesScreen } from "./screens/lectures";
+import { CatalogScreen } from "./screens/catalog";
 import { MakeScreen } from "./screens/make";
 import { SearchScreen } from "./screens/search";
 import { SettingsScreen } from "./screens/settings";
@@ -65,11 +69,17 @@ function render(route: Route) {
     case "guide":
       return <GuideScreen examId={route.examId} title={route.title} />;
     case "tutor":
-      return <TutorScreen examId={route.examId} />;
+      return <TutorScreen examId={route.examId} ask={route.ask} />;
     case "snap":
       return <SnapScreen />;
+    case "catalog":
+      return <CatalogScreen />;
     case "make":
-      return <MakeScreen />;
+      return <MakeScreen notes={route.notes} />;
+    case "lectures":
+      return <LecturesScreen />;
+    case "lecture":
+      return <LectureScreen id={route.id} />;
     case "desktop":
       return <DesktopScreen feature={route.feature} />;
   }
@@ -102,7 +112,7 @@ export function App({
   });
   const [ai, setAi] = useState(initialAi);
   const [version, setVersion] = useState(0);
-  const [tutor, setTutor] = useState<{ examId?: string } | null>(null);
+  const [tutor, setTutor] = useState<{ examId?: string; ask?: string } | null>(null);
 
   const navigate = useCallback(
     (route: Route) => setStacks((all) => ({ ...all, [tab]: [...all[tab], route] })),
@@ -120,9 +130,9 @@ export function App({
     [tab],
   );
   const openTutor = useCallback(
-    (examId?: string) => {
-      if (wide) setTutor({ examId });
-      else setStacks((all) => ({ ...all, [tab]: [...all[tab], { name: "tutor", examId }] }));
+    (examId?: string, ask?: string) => {
+      if (wide) setTutor({ examId, ask });
+      else setStacks((all) => ({ ...all, [tab]: [...all[tab], { name: "tutor", examId, ask }] }));
     },
     [wide, tab],
   );
@@ -155,11 +165,38 @@ export function App({
     return () => window.removeEventListener("keydown", onKey);
   }, [selectTab, back, tutor]);
 
+  // AI key links scanned from the desktop's "Send to my iPhone" code. Each
+  // link is handled once, even when the launch URL and the listener both see it.
+  const seenKeyLinks = useRef(new Set<string>());
+  const saveKeyFromLink = useCallback(
+    async (url: string) => {
+      if (seenKeyLinks.current.has(url)) return;
+      seenKeyLinks.current.add(url);
+      const { parseKeyLink } = await import("@megan/core/share/key-link");
+      const result = parseKeyLink(url);
+      if (!result.ok) {
+        window.alert(
+          result.reason === "expired"
+            ? "That code has expired. On your computer, open Settings and press Send to my iPhone again."
+            : "That code isn't one this version of Megan Study understands.",
+        );
+        return;
+      }
+      if (!window.confirm("Save the AI key from your computer on this iPhone?")) return;
+      await platform.secrets.set(GEMINI_KEY, result.key);
+      await reloadAi();
+      window.alert("Your AI key is saved. AI features are ready on this iPhone.");
+    },
+    [platform, reloadAi],
+  );
+
   // Shared decks: the file the app was opened with, then any opened later.
   useEffect(() => {
     let cleanup = () => {};
     void import("./share-intake").then(({ listenForSharedDecks, importFromUrl }) => {
       const open = async (url: string) => {
+        const { isKeyLink } = await import("@megan/core/share/key-link");
+        if (isKeyLink(url)) return saveKeyFromLink(url);
         const deck = await importFromUrl(db, url);
         if (!deck) return;
         changed();
@@ -170,7 +207,43 @@ export function App({
       cleanup = listenForSharedDecks((url) => void open(url));
     });
     return () => cleanup();
-  }, [db, changed, pendingImport]);
+  }, [db, changed, pendingImport, saveKeyFromLink]);
+
+  // Folder sync, when a folder is chosen in Settings: on opening, coming back
+  // to the app, leaving it, every minute, and a few seconds after an edit.
+  const syncRound = useCallback(async () => {
+    if (!Capacitor.isNativePlatform()) return;
+    const [{ runSync }, { pluginSyncFolder }] = await Promise.all([
+      import("./data/sync"),
+      import("./platform/sync-folder"),
+    ]);
+    try {
+      const result = await runSync(db, pluginSyncFolder);
+      if (result && result.received > 0) changed();
+    } catch {
+      // Offline or the folder is unavailable; the next round tries again.
+    }
+  }, [db, changed]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void syncRound();
+    const timer = window.setInterval(() => void syncRound(), 60_000);
+    let handle: Promise<PluginListenerHandle> | null = null;
+    if (Capacitor.isNativePlatform()) {
+      handle = CapacitorApp.addListener("appStateChange", () => void syncRound());
+    }
+    return () => {
+      window.clearInterval(timer);
+      void handle?.then((h) => h.remove());
+    };
+  }, [syncRound]);
+
+  useEffect(() => {
+    if (version === 0) return;
+    const timer = window.setTimeout(() => void syncRound(), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [version, syncRound]);
 
   const stack = stacks[tab];
   const current = stack[stack.length - 1];
@@ -221,7 +294,7 @@ export function App({
                 <X aria-hidden />
               </button>
             </div>
-            <TutorPanel examId={tutor.examId} />
+            <TutorPanel key={tutor.ask ?? tutor.examId ?? ""} examId={tutor.examId} ask={tutor.ask} />
           </aside>
         ) : null}
         {wide ? null : (

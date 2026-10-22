@@ -232,6 +232,13 @@
       "when": 1792603473188,
       "tag": "0032_scanned_cards",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792677558675,
+      "tag": "0033_sync_journal",
+      "breakpoints": true
     }
   ]
 }

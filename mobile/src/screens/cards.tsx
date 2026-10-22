@@ -1,9 +1,11 @@
 /**
- * Flashcards, flip or swipe. Swipe right for easy, left for missed, with an
- * undo; the three grade buttons and the keys 1/2/3 do the same without a
- * gesture. Space flips, Z undoes, R reads the card aloud, S stars it.
+ * Flashcards, flip or swipe. Swipe right for easy, left for missed; the three
+ * grade buttons and the keys 1/2/3 do the same without a gesture. Under them,
+ * "Ask AI" opens the tutor on this card, and arrows step back and forward.
+ * Stepping back over a graded card takes the grade off, so it can be graded
+ * again. Space flips, Z steps back, R reads the card aloud, S stars it.
  */
-import { Star, Undo2, Volume2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Sparkles, Star, Volume2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 
 import type { Grade } from "@megan/core/study/grade";
@@ -15,13 +17,16 @@ import { Button, Empty, Notice, Screen, plural } from "../components/ui";
 
 import { errorText, loadSource, shuffled, useKeys } from "./source";
 
+/** One step forward through the deck; a graded step can be taken back. */
+type Step = { from: number; graded?: { undo: Undo; grade: Grade } };
+
 /** How far a card must travel, in pixels, before letting go grades it. */
 const SWIPE_DISTANCE = 96;
 
 const GRADE_LABELS: Record<Grade, string> = { missed: "Missed", difficult: "Hard", easy: "Easy" };
 
 export function CardsScreen({ source, title, swipe = false }: { source: CardSource; title: string; swipe?: boolean }) {
-  const { db, platform } = useApp();
+  const { db, platform, ai, openTutor } = useApp();
   // The deck is read once: grading must not reshuffle the cards under the student.
   const [cards, setCards] = useState<Card[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +45,7 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
 
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
-  const [undo, setUndo] = useState<{ undo: Undo; grade: Grade } | null>(null);
+  const [history, setHistory] = useState<Step[]>([]);
   const [tally, setTally] = useState<Record<Grade, number>>({ missed: 0, difficult: 0, easy: 0 });
   const [drag, setDrag] = useState(0);
   const start = useRef<{ x: number; y: number; id: number } | null>(null);
@@ -63,9 +68,9 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
       const saved = await recordFlip(db, card.id, value);
       graded.current = true;
       void platform.haptics.impact(value === "missed" ? "warning" : value === "easy" ? "success" : "tap");
-      setUndo({ undo: saved, grade: value });
+      setHistory((h) => [...h, { from: index, graded: { undo: saved, grade: value } }]);
       setTally((t) => ({ ...t, [value]: t[value] + 1 }));
-      setIndex((i) => i + 1);
+      setIndex(index + 1);
       setFlipped(false);
       setDrag(0);
       void platform.speech.stop();
@@ -74,13 +79,42 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
     }
   }
 
-  async function revert() {
-    if (!undo) return;
-    await undoGrade(db, undo.undo);
-    setTally((t) => ({ ...t, [undo.grade]: Math.max(0, t[undo.grade] - 1) }));
-    setIndex((i) => Math.max(0, i - 1));
+  /** Back one card. If it was graded, the grade comes off so it can be graded again. */
+  async function goBack() {
+    const last = history.at(-1);
+    if (!last) return;
+    try {
+      if (last.graded) {
+        const { undo, grade: value } = last.graded;
+        await undoGrade(db, undo);
+        setTally((t) => ({ ...t, [value]: Math.max(0, t[value] - 1) }));
+      }
+      setHistory((h) => h.slice(0, -1));
+      setIndex(last.from);
+      setFlipped(false);
+      setDrag(0);
+      void platform.speech.stop();
+    } catch (cause) {
+      setError(errorText(cause));
+    }
+  }
+
+  /** On to the next card without grading this one. */
+  function goForward() {
+    if (!card) return;
+    setHistory((h) => [...h, { from: index }]);
+    setIndex(index + 1);
     setFlipped(false);
-    setUndo(null);
+    setDrag(0);
+    void platform.speech.stop();
+  }
+
+  function askAi() {
+    if (!card) return;
+    openTutor(
+      card.examId,
+      `Help me understand this flashcard.\n\nQuestion: ${card.question}\nAnswer: ${card.directAnswer}`,
+    );
   }
 
   async function toggleStar() {
@@ -97,7 +131,7 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
 
   useKeys((event) => {
     if (!card) {
-      if (event.key.toLowerCase() === "z" && undo) void revert();
+      if (event.key.toLowerCase() === "z") void goBack();
       return;
     }
     const key = event.key.toLowerCase();
@@ -109,7 +143,7 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
     else if (key === "3") void grade("easy");
     else if (key === "arrowleft" && swipe) void grade("missed");
     else if (key === "arrowright" && swipe) void grade("easy");
-    else if (key === "z" && undo) void revert();
+    else if (key === "z") void goBack();
     else if (key === "r") readAloud();
     else if (key === "s") void toggleStar();
   });
@@ -216,10 +250,6 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
             )}
           </div>
 
-          <p className="muted small" aria-live="polite">
-            Card {index + 1} of {cards?.length}
-          </p>
-
           {flipped || swipe ? (
             <div className="grades">
               {(["missed", "difficult", "easy"] as const).map((value, i) => (
@@ -232,6 +262,24 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
           ) : (
             <Button onClick={() => setFlipped(true)}>Show answer</Button>
           )}
+
+          {ai ? (
+            <Button variant="ghost" onClick={askAi}>
+              <Sparkles aria-hidden /> Ask AI about this card
+            </Button>
+          ) : null}
+
+          <div className="card-nav">
+            <button type="button" className="icon-button" aria-label="Previous card" onClick={() => void goBack()} disabled={history.length === 0}>
+              <ChevronLeft aria-hidden />
+            </button>
+            <span className="muted small" aria-live="polite">
+              Card {index + 1} of {cards?.length}
+            </span>
+            <button type="button" className="icon-button" aria-label="Next card, without grading" onClick={goForward}>
+              <ChevronRight aria-hidden />
+            </button>
+          </div>
         </>
       ) : null}
 
@@ -257,20 +305,16 @@ export function CardsScreen({ source, title, swipe = false }: { source: CardSour
             onClick={() => {
               setIndex(0);
               setTally({ missed: 0, difficult: 0, easy: 0 });
-              setUndo(null);
+              setHistory([]);
             }}
           >
             Go through again
           </Button>
-        </div>
-      ) : null}
-
-      {undo ? (
-        <div className="toast" role="status">
-          <span>Marked {GRADE_LABELS[undo.grade].toLowerCase()}</span>
-          <button type="button" className="button button-ghost" onClick={() => void revert()}>
-            <Undo2 aria-hidden /> Undo
-          </button>
+          {history.length > 0 ? (
+            <Button variant="ghost" onClick={() => void goBack()}>
+              <ChevronLeft aria-hidden /> Back to the last card
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </Screen>

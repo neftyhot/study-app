@@ -48,11 +48,12 @@ function baseName(name: string): string {
   return name.replace(/\.[^.]+$/, "").trim();
 }
 
-export function MakeScreen() {
+/** `notes` opens straight on "Paste text", filled in (a lecture transcript, say). */
+export function MakeScreen({ notes }: { notes?: { title: string; text: string } } = {}) {
   const { db, ai, platform, navigate, selectTab, changed } = useApp();
-  const [step, setStep] = useState<Step>({ name: "start" });
-  const [title, setTitle] = useState("");
-  const [pasted, setPasted] = useState("");
+  const [step, setStep] = useState<Step>(notes ? { name: "paste" } : { name: "start" });
+  const [title, setTitle] = useState(notes?.title ?? "");
+  const [pasted, setPasted] = useState(notes?.text ?? "");
   const [rows, setRows] = useState<ImportedCard[]>(BLANK_ROWS);
   const [progress, setProgress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

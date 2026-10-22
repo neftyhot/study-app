@@ -161,7 +161,7 @@ describe("in-memory adapters", () => {
     const ids = DESKTOP_ONLY_FEATURES.map((f) => f.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids).toEqual(
-      expect.arrayContaining(["lectures", "local-ai", "libreoffice", "occlusion", "bulk-edit", "catalog-publish"]),
+      expect.arrayContaining(["local-ai", "libreoffice", "occlusion", "bulk-edit"]),
     );
   });
 });

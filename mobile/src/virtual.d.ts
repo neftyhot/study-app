@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+/** The app's server, baked in at build time (vite.config.ts). Empty when the build has none. */
+declare const __SERVER_URL__: string;
+
 declare module "virtual:migrations" {
   import type { BundledMigration } from "@megan/core/platform/migrate";
   const migrations: BundledMigration[];

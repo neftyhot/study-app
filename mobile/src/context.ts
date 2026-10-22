@@ -16,9 +16,12 @@ export type Route =
   | { name: "learn"; source: CardSource; title: string }
   | { name: "exam"; examId: string; title: string }
   | { name: "guide"; examId: string; title: string }
-  | { name: "tutor"; examId?: string }
+  | { name: "tutor"; examId?: string; ask?: string }
   | { name: "snap" }
-  | { name: "make" }
+  | { name: "make"; notes?: { title: string; text: string } }
+  | { name: "lectures" }
+  | { name: "lecture"; id: string }
+  | { name: "catalog" }
   | { name: "desktop"; feature?: string };
 
 export const TABS = ["home", "study", "search", "settings"] as const;
@@ -38,7 +41,7 @@ export type AppContextValue = {
   version: number;
   changed(): void;
   /** Opens the tutor beside the content on iPad, or as a screen on iPhone. */
-  openTutor(examId?: string): void;
+  openTutor(examId?: string, ask?: string): void;
   wide: boolean;
 };
 

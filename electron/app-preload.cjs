@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld("studyApp", {
     loginItem: () => ipcRenderer.invoke("reminders:login-item"),
     setLoginItem: (open) => ipcRenderer.invoke("reminders:set-login-item", open),
   },
+  // The folder decks sync through; see sync-folder.cjs.
+  sync: {
+    iCloudAvailable: () => ipcRenderer.invoke("sync:icloud-available"),
+    useICloud: () => ipcRenderer.invoke("sync:use-icloud"),
+    pickFolder: () => ipcRenderer.invoke("sync:pick-folder"),
+  },
   // Lecture transcription, which runs in the main process; see lectures.cjs.
   lectures: {
     state: () => ipcRenderer.invoke("lectures:state"),

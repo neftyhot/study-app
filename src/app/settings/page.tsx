@@ -6,6 +6,8 @@ import { AppearanceSettings } from "@/components/settings/appearance-settings";
 import { FlashcardFormatSettings } from "@/components/settings/flashcard-format-settings";
 import { ReminderSettings } from "@/components/settings/reminder-settings";
 import { FeedbackCard } from "@/components/settings/feedback-card";
+import { PhoneKeyCard } from "@/components/settings/phone-key-card";
+import { SyncCard } from "@/components/settings/sync-card";
 import { StatsCard } from "@/components/settings/stats-card";
 import { APP_VERSION } from "@/lib/app-info";
 import { CHANGELOG } from "@/lib/changelog";
@@ -30,6 +32,7 @@ import { expiryLabel, readLicenseStatus, TIER_LABELS } from "@/lib/license/statu
 import { readAppearance, readFlashcardFormat, readGradingStrictness } from "@/lib/settings";
 import { db } from "@/db";
 import { installId } from "@/lib/telemetry";
+import { readSyncStatus } from "@/lib/sync/desktop";
 import { readReminders } from "@/lib/reminders/reminders";
 import { DeleteStatistics } from "@/components/settings/delete-statistics";
 import { getGradingSnapshot, getSetupSnapshot } from "@/lib/settings-actions";
@@ -100,6 +103,10 @@ export default async function SettingsPage() {
           </>
         }
       />
+
+      <PhoneKeyCard />
+
+      <SyncCard initial={readSyncStatus()} />
 
       <Card id="privacy" className="scroll-mt-20">
         <CardHeader>
