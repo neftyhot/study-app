@@ -73,7 +73,7 @@ function render(route: Route) {
     case "snap":
       return <SnapScreen />;
     case "catalog":
-      return <CatalogScreen />;
+      return <CatalogScreen share={route.share} />;
     case "make":
       return <MakeScreen notes={route.notes} />;
     case "lectures":

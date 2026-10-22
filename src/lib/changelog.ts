@@ -25,6 +25,8 @@ export const CHANGELOG: ChangelogEntry[] = [
       "iPhone: the course catalog is here too, with the same courses as on your computer.",
       "iPhone flashcards: Ask AI sits under the Missed, Hard and Easy buttons, with arrows below it to go back and forth between cards. The big Undo button is gone (use the back arrow), so it no longer covers your Missed/Hard/Easy tally at the end of a deck.",
       "iPhone practice exams: the answer you pick is now clearly highlighted.",
+      "iPhone: delete a deck from the bottom of its page (Delete this deck, in red).",
+      "iPhone: share a deck to the catalog from its page (Share to the catalog), or with Share one of your decks at the top of the catalog.",
       "iPhone tutor: answers show proper headings, bold text and lists instead of ** and ## symbols, and the Make cards from this button no longer covers the suggested questions.",
     ],
     dev: [

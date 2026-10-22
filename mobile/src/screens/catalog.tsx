@@ -37,7 +37,7 @@ const BLANK: Details = {
   description: null,
 };
 
-export function CatalogScreen() {
+export function CatalogScreen({ share }: { share?: string }) {
   const { db, platform, navigate, changed } = useApp();
   const client = useMemo(() => catalogClient(db), [db]);
   const [decks, setDecks] = useState<CatalogDeck[] | null>(null);
@@ -47,7 +47,9 @@ export function CatalogScreen() {
   const [scope, setScope] = useState<"college" | "all" | "mine">("college");
   const [message, setMessage] = useState<Message>(null);
   const [preview, setPreview] = useState<CatalogDeckDetail | null>(null);
-  const [sharing, setSharing] = useState<{ editing: CatalogDeck | null } | null>(null);
+  const [sharing, setSharing] = useState<{ editing: CatalogDeck | null; examId?: string } | null>(
+    share ? { editing: null, examId: share } : null,
+  );
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -161,6 +163,10 @@ export function CatalogScreen() {
       }
     >
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+
+      <Button variant="secondary" onClick={() => setSharing({ editing: null })}>
+        <Share2 aria-hidden /> Share one of your decks
+      </Button>
 
       {college === null ? (
         <div className="panel stack">
@@ -282,6 +288,7 @@ export function CatalogScreen() {
           client={client}
           college={college}
           editing={sharing.editing}
+          initialExamId={sharing.examId}
           onClose={() => setSharing(null)}
           onDone={(text) => {
             setSharing(null);
@@ -299,19 +306,22 @@ function ShareSheet({
   client,
   college,
   editing,
+  initialExamId,
   onClose,
   onDone,
 }: {
   client: ReturnType<typeof catalogClient>;
   college: string | null;
   editing: CatalogDeck | null;
+  /** A deck chosen already, from its own page. */
+  initialExamId?: string;
   onClose: () => void;
   onDone: (message: string) => void;
 }) {
   const { db, platform } = useApp();
   const { data: courses } = useLoad(() => listCourses(db), []);
   const decks = courses?.flatMap((course) => course.decks.map((deck) => ({ ...deck, course: course.title, term: course.term }))) ?? [];
-  const [examId, setExamId] = useState("");
+  const [examId, setExamId] = useState(initialExamId ?? "");
   const [details, setDetails] = useState<Details>(() =>
     editing
       ? {
@@ -337,6 +347,14 @@ function ShareSheet({
     const deck = decks.find((d) => d.examId === id);
     if (deck) setDetails((d) => ({ ...d, title: d.title || deck.title, course: d.course || deck.course, term: d.term || deck.term }));
   }
+
+  // Coming from a deck's page: fill in its title and course once the decks load.
+  const preset = decks.find((d) => d.examId === initialExamId);
+  useEffect(() => {
+    if (!preset) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDetails((d) => ({ ...d, title: d.title || preset.title, course: d.course || preset.course, term: d.term || preset.term }));
+  }, [preset?.examId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const field = (key: keyof Details) => ({
     value: (details[key] as string | null) ?? "",

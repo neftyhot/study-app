@@ -1,5 +1,5 @@
 /** One deck: its numbers, every way to study it, sharing, and the desktop-only extras. */
-import { BookOpenText, Brain, ClipboardList, Hand, Layers, Share, Sparkles, Trash2 } from "lucide-react";
+import { BookOpenText, Brain, ClipboardList, Hand, Layers, Library, Share, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { SHARE_MIME, shareFilename } from "@megan/core/share/meganstudy";
@@ -134,6 +134,13 @@ export function DeckScreen({ examId }: { examId: string }) {
               <span className="row-sub">AirDrop, Messages or Files — no review history goes with them</span>
             </span>
           </button>
+          <button type="button" className="row" onClick={() => navigate({ name: "catalog", share: examId })}>
+            <Library aria-hidden />
+            <span className="row-main">
+              <span className="row-title">Share to the catalog</span>
+              <span className="row-sub">List it for other students at your college</span>
+            </span>
+          </button>
           {summary?.hasGuide ? (
             <button type="button" className="row" disabled={sharing} onClick={() => void share(true)}>
               <Share aria-hidden />
@@ -151,21 +158,26 @@ export function DeckScreen({ examId }: { examId: string }) {
           {DESKTOP_EXTRAS.map((label) => (
             <DesktopOnly key={label} label={label} />
           ))}
-          <button type="button" className="row" onClick={() => setConfirming(true)}>
+        </div>
+      </details>
+
+      <div className="section">
+        <div className="list">
+          <button type="button" className="row row-danger" onClick={() => setConfirming(true)}>
             <Trash2 aria-hidden />
             <span className="row-main">
               <span className="row-title">Delete this deck</span>
             </span>
           </button>
         </div>
-      </details>
+      </div>
 
       {confirming ? (
         <Sheet title="Delete this deck?" onClose={() => setConfirming(false)}>
           <div className="stack">
             <p>
-              “{title}” and its {plural(summary?.cardCount ?? 0, "card")} will be removed from this device, with their review
-              history. Decks on your computer aren&apos;t affected.
+              “{title}” and its {plural(summary?.cardCount ?? 0, "card")} will be deleted, with their review history. If
+              you sync with your computer, it&apos;s deleted there too.
             </p>
             <Button variant="danger" onClick={() => void remove()}>
               Delete

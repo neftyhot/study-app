@@ -623,6 +623,10 @@ details[open] > summary.section-title::after {
   font-size: 0.95rem;
 }
 
+.row-danger {
+  color: var(--destructive);
+}
+
 .mark {
   background: color-mix(in oklch, var(--warning) 35%, transparent);
   color: inherit;

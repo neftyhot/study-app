@@ -21,7 +21,7 @@ export type Route =
   | { name: "make"; notes?: { title: string; text: string } }
   | { name: "lectures" }
   | { name: "lecture"; id: string }
-  | { name: "catalog" }
+  | { name: "catalog"; share?: string }
   | { name: "desktop"; feature?: string };
 
 export const TABS = ["home", "study", "search", "settings"] as const;

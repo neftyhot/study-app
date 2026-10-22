@@ -35,6 +35,17 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.Christ.meganstudy</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>meganstudy</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -43,10 +54,14 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Megan Study uses the camera to photograph your notes and turn them into flashcards.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Megan Study records your lectures so you can turn them into notes and flashcards.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Megan Study can save images you choose to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Megan Study reads the photos you choose to turn your notes into flashcards.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Megan Study turns your recorded lectures into text on your phone.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -66,6 +81,10 @@
 			</array>
 		</dict>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -109,25 +128,6 @@
 				</array>
 			</dict>
 		</dict>
-	</array>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Megan Study records your lectures so you can turn them into notes and flashcards.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Megan Study turns your recorded lectures into text on your phone.</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleURLName</key>
-			<string>com.Christ.meganstudy</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>meganstudy</string>
-			</array>
-		</dict>
-	</array>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>audio</string>
 	</array>
 </dict>
 </plist>
