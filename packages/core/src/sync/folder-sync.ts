@@ -70,6 +70,12 @@ export type SyncFile = {
   deviceName: string;
   writtenAt: string;
   tables: Record<string, SyncTable>;
+  /**
+   * The desktop's bought license key, so the student's phone opens with it
+   * (packages/core/src/license/companion.ts). Optional: older files have
+   * none, and older apps ignore it.
+   */
+  license?: string;
 };
 
 /** The folder, as each platform reaches it: Node's fs on desktop, a native plugin on iOS. */
@@ -81,7 +87,12 @@ export interface SyncFolder {
   write(name: string, text: string): Promise<void>;
 }
 
-export type SyncDevice = { id: string; name: string };
+export type SyncDevice = {
+  id: string;
+  name: string;
+  /** This device's license key to share with the others; the desktop's, when bought. */
+  license?: string | null;
+};
 
 export type SyncResult = {
   /** Rows added, changed or removed here from other devices. */
@@ -92,6 +103,8 @@ export type SyncResult = {
   devices: number;
   /** Rows that couldn't be applied (a missing parent, say); tried again next time. */
   skipped: number;
+  /** License keys other devices shared, newest file first. */
+  licenses: string[];
 };
 
 /**
@@ -300,7 +313,9 @@ export async function syncWithFolder(
   });
 
   const tables = await exportSync(db, now);
-  const sent = !previous || JSON.stringify(previous.tables) !== JSON.stringify(tables);
+  const license = device.license?.trim() || undefined;
+  const sent =
+    !previous || JSON.stringify(previous.tables) !== JSON.stringify(tables) || (previous.license || undefined) !== license;
   if (sent) {
     const file: SyncFile = {
       format: SYNC_FORMAT,
@@ -309,11 +324,17 @@ export async function syncWithFolder(
       deviceName: device.name,
       writtenAt: new Date(now).toISOString(),
       tables,
+      ...(license ? { license } : {}),
     };
     await folder.write(own, JSON.stringify(file));
   }
 
-  return { ...merged, sent, devices: others.length };
+  const licenses = others
+    .filter((file) => typeof file.license === "string" && file.license.trim() !== "")
+    .sort((a, b) => String(b.writtenAt).localeCompare(String(a.writtenAt)))
+    .map((file) => file.license!.trim());
+
+  return { ...merged, sent, devices: others.length, licenses };
 }
 
 /** The app_settings keys both apps keep sync's state under. */

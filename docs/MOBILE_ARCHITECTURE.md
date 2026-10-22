@@ -112,20 +112,40 @@ they are shared over.
 
 ## 6. Licensing on iOS (5f)
 
-No purchasing is built. `mobile/src/platform/license.ts` returns full access
-and Settings → Access says "Full access (test build)". Every screen asks
-`platform.license.access()`, so whichever option below is picked replaces that
-one object. The desktop's trial, purchase, 45-day check and offline grace are
-unchanged.
+Built as option **C, unlock with a desktop license**. The App Store app is
+free and sells nothing: no in-app purchase, no buy link, no price. Apple takes
+nothing because nothing is bought in the app (App Review 3.1.3(b): an app may
+unlock what was bought elsewhere as long as it doesn't point people there).
 
-| Option | What it takes | Notes |
-| --- | --- | --- |
-| **A. In-app purchase** (StoreKit 2) | Product setup in App Store Connect, a StoreKit plugin, receipt checks, restore purchases, about 1–2 weeks of work | Apple takes 15% (Small Business Program). Required if the iOS app itself sells access. |
-| **B. Free companion** | Nothing beyond review notes | Works as a study companion for decks made on the desktop. Simplest to get through App Review. Generation on iOS uses the student's own key. |
-| **C. Unlock with a desktop license** | The app asks for the license key, checks it against the licensing Worker, and caches the result with the same grace rules (`source: "desktop-link"` already exists in the type), about 3–5 days | Under App Review 3.1.3(b), an app may unlock content bought elsewhere only if it does not also point students to buy outside the app. No "buy" link on iOS. |
+How the phone gets a key:
 
-Recommendation for campus launch: **B** now, and **C** if students ask for it.
-**A** only if iOS-only students become a real group.
+1. **From the computer.** The desktop writes its license token into its sync
+   device file (`license` in `packages/core/src/sync/folder-sync.ts`; only
+   bought or admin keys, never a trial). When the phone syncs, it takes the
+   first token that checks out (`takeDesktopLicense` in `mobile/src/app.tsx`).
+2. **Pasted in.** Settings → License takes a key, and a
+   `meganstudy://license?token=…` link saves one. For someone who wants only
+   the phone app: they buy on the web (the Payment Link). With no computer's
+   id to bind to, the licensing Worker mints the key for `phone-<uuid>`, and
+   its success page shows the key and an "Open in Megan Study" link.
+
+The rules (`packages/core/src/license/companion.ts`) mirror the desktop's
+`electron/license/verify.cjs` and `gate.cjs`, with one difference: a lifetime
+key works on the phone whatever machine it was bought for.
+
+- The Ed25519 signature is checked natively (`LicensePlugin.swift`, CryptoKit),
+  since iOS 15's WebCrypto has no Ed25519. It uses the same public key as the desktop.
+- 7-day trial from first open. Moving the clock back doesn't stretch it.
+- Once a day the phone asks `GET /revoked/:id`. A revoked key locks the app,
+  and so does a key the server hasn't confirmed in 45 days (admin keys excepted).
+- State is kept in the Keychain (`megan_license`).
+- Locked, the app shows `LockedScreen` (sync, or enter a key). Settings stays
+  open, and nothing a student made is deleted.
+
+For App Review: give the reviewer a license key in the review notes, and
+describe the app as a companion to the desktop app.
+
+The desktop's trial, purchase, 45-day check and offline grace are unchanged.
 
 ## 7. Two-way sync: design only (5g)
 

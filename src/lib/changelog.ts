@@ -28,11 +28,13 @@ export const CHANGELOG: ChangelogEntry[] = [
       "iPhone: delete a deck from the bottom of its page (Delete this deck, in red).",
       "iPhone: share a deck to the catalog from its page (Share to the catalog), or with Share one of your decks at the top of the catalog.",
       "iPhone tutor: answers show proper headings, bold text and lists instead of ** and ## symbols, and the Make cards from this button no longer covers the suggested questions.",
+      "Your license now covers your iPhone too: once both devices sync, the iPhone app unlocks with the license from your computer. The iPhone app has a 7-day free trial, and Settings → License takes a pasted license key.",
     ],
     dev: [
       "Folder sync (packages/core/src/sync/folder-sync.ts): each device writes only <deviceId>.json and merges the others; newest updated_at wins; deletes are tombstones kept by migration 0033 triggers (180-day lifetime); image/slide/source-file columns never leave the device. Mac uses ~/Library/Mobile Documents/com~apple~CloudDocs/Megan Study Sync (electron/sync-folder.cjs); iOS uses a user-picked folder held as a security-scoped bookmark (SyncFolderPlugin.swift). No server, no iCloud entitlements.",
       "Key hand-off (packages/core/src/share/key-link.ts): a megan-study:// link with an expiry, shown as a QR code; the iPhone app saves the key only after a confirm.",
       "iOS LectureRecorderPlugin uses the audio background mode so recording survives screen lock; plugins register in MeganBridgeViewController.",
+      "iPhone licensing (packages/core/src/license/companion.ts): the desktop's token rides in its sync device file (`license`); the phone verifies the Ed25519 signature natively (LicensePlugin.swift, CryptoKit), accepts lifetime keys for any machine id, checks /revoked/:id daily, and locks after 45 days unconfirmed. No purchasing on iOS. Web purchases without a client_reference_id now mint a phone-<uuid> key and the success page offers a meganstudy://license link.",
     ],
   },
   {

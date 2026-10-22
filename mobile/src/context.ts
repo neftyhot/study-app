@@ -2,7 +2,7 @@
 import { createContext, useContext } from "react";
 
 import type { LlmProvider } from "@megan/core/llm/types";
-import type { Platform, SqlDriver } from "@megan/core/platform/types";
+import type { LicenseAccess, Platform, SqlDriver } from "@megan/core/platform/types";
 
 export type CardSource = { kind: "deck"; examId: string } | { kind: "due" } | { kind: "starred" };
 
@@ -43,6 +43,10 @@ export type AppContextValue = {
   /** Opens the tutor beside the content on iPad, or as a screen on iPhone. */
   openTutor(examId?: string, ask?: string): void;
   wide: boolean;
+  /** Whether the app is open (license, trial or a key from the computer); null while it's read. */
+  access: LicenseAccess | null;
+  /** Reads access again, after a key is added or removed. */
+  refreshAccess(): Promise<void>;
 };
 
 export const AppContext = createContext<AppContextValue | null>(null);

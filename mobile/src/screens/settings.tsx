@@ -17,6 +17,7 @@ import {
   type FontId,
   type ThemePreference,
 } from "@megan/core/appearance";
+import { LOCK_MESSAGES } from "@megan/core/license/companion";
 import { DESKTOP_ONLY_FEATURES, type LicenseAccess } from "@megan/core/platform/types";
 import type { Reminders } from "@megan/core/reminders/reminders";
 
@@ -48,12 +49,102 @@ function updateText(state: UpdateState): string {
 }
 
 const ACCESS_TEXT: Record<LicenseAccess["source"], string> = {
-  license: "Licensed",
+  license: "Unlocked with your license key",
   trial: "Free trial",
   development: "Full access (test build)",
-  "desktop-link": "Unlocked with your desktop license",
-  none: "No access",
+  "desktop-link": "Unlocked with the license from your computer",
+  none: "Locked",
 };
+
+/**
+ * The license: the one from the student's computer arrives through sync on
+ * its own, or a key can be pasted here. Nothing is sold in the app.
+ */
+function LicenseSection() {
+  const { platform, access, refreshAccess } = useApp();
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const keyed = access?.source === "license" || access?.source === "desktop-link";
+  const canActivate = !!platform.license.activate;
+
+  async function activate() {
+    if (!platform.license.activate || !draft.trim()) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await platform.license.activate(draft, "key");
+      if (result.ok) {
+        setDraft("");
+        setMessage({ tone: "info", text: "Your license is active on this device." });
+      } else {
+        setMessage({ tone: "error", text: result.message });
+      }
+      await refreshAccess();
+    } catch (cause) {
+      setMessage({ tone: "error", text: errorText(cause) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!platform.license.deactivate) return;
+    if (!window.confirm("Remove the license from this device? You can add it again any time.")) return;
+    setMessage(null);
+    await platform.license.deactivate();
+    await refreshAccess();
+  }
+
+  return (
+    <div className="section" id="license">
+      <h2 className="section-title">License</h2>
+      <div className="panel stack">
+        <p>{access ? ACCESS_TEXT[access.source] : "…"}</p>
+        {access?.trialDaysLeft != null ? (
+          <p className="muted small">
+            {access.trialDaysLeft} {access.trialDaysLeft === 1 ? "day" : "days"} left in the trial.
+          </p>
+        ) : null}
+        {access && !access.full && access.reason ? <p className="muted small">{LOCK_MESSAGES[access.reason]}</p> : null}
+        {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
+        {canActivate ? (
+          <>
+            {access?.source === "desktop-link" ? null : (
+              <p className="muted small">
+                Licensed on your computer? Turn on Sync between devices above, with the same folder your computer
+                uses, and this device unlocks by itself.
+              </p>
+            )}
+            <label className="field">
+              <span className="field-label">{keyed ? "Use a different license key" : "License key"}</span>
+              <textarea
+                className="textarea"
+                rows={3}
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                value={draft}
+                placeholder="Paste your license key"
+                onChange={(e) => setDraft(e.target.value)}
+              />
+            </label>
+            <div className="inline">
+              <Button onClick={() => void activate()} disabled={busy || !draft.trim()}>
+                Activate
+              </Button>
+              {keyed && platform.license.deactivate ? (
+                <Button variant="ghost" onClick={() => void remove()}>
+                  Remove license
+                </Button>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 /** Tells main.tsx to restyle the app at once. */
 function announce(theme: ThemePreference, appearance: Appearance) {
@@ -165,7 +256,6 @@ export function SettingsScreen() {
   const [theme, setTheme] = useState<ThemePreference>("system");
   const [appearance, setAppearance] = useState<Appearance | null>(null);
   const [reminders, setReminders] = useState<Reminders | null>(null);
-  const [access, setAccess] = useState<LicenseAccess | null>(null);
   const [hasKey, setHasKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [message, setMessage] = useState<{ tone: "info" | "error"; text: string } | null>(null);
@@ -196,13 +286,12 @@ export function SettingsScreen() {
 
   useEffect(() => {
     let live = true;
-    void Promise.all([readTheme(db), readAppearance(db), readReminders(db), platform.license.access(), readApiKey(platform.secrets)]).then(
-      ([t, a, r, l, key]) => {
+    void Promise.all([readTheme(db), readAppearance(db), readReminders(db), readApiKey(platform.secrets)]).then(
+      ([t, a, r, key]) => {
         if (!live) return;
         setTheme(t);
         setAppearance(a);
         setReminders(r);
-        setAccess(l);
         setHasKey(!!key);
       },
       (cause) => live && setMessage({ tone: "error", text: errorText(cause) }),
@@ -404,13 +493,7 @@ export function SettingsScreen() {
         ) : null}
       </div>
 
-      <div className="section">
-        <h2 className="section-title">Access</h2>
-        <div className="panel">
-          <p>{access ? ACCESS_TEXT[access.source] : "…"}</p>
-          {access?.trialDaysLeft != null ? <p className="muted small">{access.trialDaysLeft} days left in the trial.</p> : null}
-        </div>
-      </div>
+      <LicenseSection />
 
       {updatesSupported() ? (
         <div className="section">

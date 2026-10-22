@@ -178,4 +178,22 @@ describe("syncing decks through a shared folder", () => {
     expect(result).toMatchObject({ devices: 1, received: 0, skipped: 1 });
     expect(cards(phone.sqlite)).toEqual([]);
   });
+
+  it("passes the computer's license key to the other devices, and reads files without one", async () => {
+    const mac = device("mac");
+    const phone = device("phone");
+    const cloud = folder();
+    // An older Mac's file, from before keys were shared: no license field.
+    await syncWithFolder(mac.db, cloud.io, mac.info, T0);
+    expect(JSON.parse(cloud.files.get("mac.json")!)).not.toHaveProperty("license");
+    expect((await syncWithFolder(phone.db, cloud.io, phone.info, T0)).licenses).toEqual([]);
+
+    const before = cloud.writes();
+    await syncWithFolder(mac.db, cloud.io, { ...mac.info, license: "KEY-1" }, T0 + 1000);
+    expect(cloud.writes()).toBe(before + 1);
+    const result = await syncWithFolder(phone.db, cloud.io, phone.info, T0 + 2000);
+    expect(result.licenses).toEqual(["KEY-1"]);
+    // The phone shares none of its own.
+    expect(JSON.parse(cloud.files.get("phone.json")!)).not.toHaveProperty("license");
+  });
 });

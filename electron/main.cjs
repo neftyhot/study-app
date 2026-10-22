@@ -40,6 +40,7 @@ const fs = require("node:fs");
 
 const gate = require("./license/gate.cjs");
 const purchase = require("./license/purchase.cjs");
+const licenseStore = require("./license/store.cjs");
 const { registerGoogleAuth } = require("./google-auth.cjs");
 const updater = require("./updater.cjs");
 const { installSystemFetch } = require("./network.cjs");
@@ -502,6 +503,12 @@ function publishLicense(license) {
     expiresAt: license.payload.expiresAt ?? null,
     daysRemaining: license.daysRemaining,
   });
+  // A bought key also goes into the sync folder, so the student's iPhone
+  // opens with it (packages/core/src/license/companion.ts). Never a trial.
+  const token =
+    license.valid && !license.trial ? licenseStore.readToken(app.getPath("userData")) : null;
+  if (token) process.env.STUDY_APP_LICENSE_TOKEN = token;
+  else delete process.env.STUDY_APP_LICENSE_TOKEN;
 }
 
 /** Starts the real app: migrate, serve, open a window. */

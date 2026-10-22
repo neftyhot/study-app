@@ -1324,3 +1324,15 @@ details[open] > summary.section-title::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* The lock screen (screens/locked.tsx). */
+.locked {
+  align-items: center;
+  text-align: center;
+}
+
+.locked-icon {
+  width: 32px;
+  height: 32px;
+  color: var(--muted-foreground);
+}

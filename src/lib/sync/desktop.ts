@@ -93,6 +93,8 @@ export function runSync(): Promise<SyncResult | null> {
       const result = await syncWithFolder(betterSqliteDriver(db.$client), fsSyncFolder(dir), {
         id: deviceId(),
         name,
+        // The bought key, for the student's phone; set by electron/main.cjs.
+        license: process.env.STUDY_APP_LICENSE_TOKEN || null,
       });
       writeSetting(SYNC_SETTINGS.lastSyncedAt, new Date().toISOString(), db);
       return result;

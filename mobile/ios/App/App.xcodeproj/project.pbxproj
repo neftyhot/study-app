@@ -19,6 +19,7 @@
 		A1D0C0012FF0000100000001 /* LectureRecorderPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0022FF0000100000001 /* LectureRecorderPlugin.swift */; };
 		A1D0C0032FF0000100000001 /* MeganBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0042FF0000100000001 /* MeganBridgeViewController.swift */; };
 		A1D0C0052FF0000100000001 /* SyncFolderPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0062FF0000100000001 /* SyncFolderPlugin.swift */; };
+		A1D0C0072FF0000100000001 /* LicensePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1D0C0082FF0000100000001 /* LicensePlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		A1D0C0022FF0000100000001 /* LectureRecorderPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LectureRecorderPlugin.swift; sourceTree = "<group>"; };
 		A1D0C0042FF0000100000001 /* MeganBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeganBridgeViewController.swift; sourceTree = "<group>"; };
 		A1D0C0062FF0000100000001 /* SyncFolderPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncFolderPlugin.swift; sourceTree = "<group>"; };
+		A1D0C0082FF0000100000001 /* LicensePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicensePlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -74,6 +76,7 @@
 				A1D0C0042FF0000100000001 /* MeganBridgeViewController.swift */,
 				A1D0C0022FF0000100000001 /* LectureRecorderPlugin.swift */,
 				A1D0C0062FF0000100000001 /* SyncFolderPlugin.swift */,
+				A1D0C0082FF0000100000001 /* LicensePlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -172,6 +175,7 @@
 				A1D0C0032FF0000100000001 /* MeganBridgeViewController.swift in Sources */,
 				A1D0C0012FF0000100000001 /* LectureRecorderPlugin.swift in Sources */,
 				A1D0C0052FF0000100000001 /* SyncFolderPlugin.swift in Sources */,
+				A1D0C0072FF0000100000001 /* LicensePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

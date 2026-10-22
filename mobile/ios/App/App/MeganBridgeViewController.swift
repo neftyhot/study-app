@@ -6,5 +6,6 @@ class MeganBridgeViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(LectureRecorderPlugin())
         bridge?.registerPluginInstance(SyncFolderPlugin())
+        bridge?.registerPluginInstance(LicensePlugin())
     }
 }

@@ -8,7 +8,7 @@ import { Capacitor, type PluginListenerHandle } from "@capacitor/core";
 import { BookOpen, Home, Search, Settings as SettingsIcon, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import type { Platform, SqlDriver } from "@megan/core/platform/types";
+import type { LicenseAccess, Platform, SqlDriver } from "@megan/core/platform/types";
 import type { LlmProvider } from "@megan/core/llm/types";
 
 import { LaunchSplash } from "./components/splash";
@@ -23,6 +23,7 @@ import { GuideScreen } from "./screens/guide";
 import { HomeScreen } from "./screens/home";
 import { LearnScreen } from "./screens/learn";
 import { LectureScreen, LecturesScreen } from "./screens/lectures";
+import { LockedScreen } from "./screens/locked";
 import { CatalogScreen } from "./screens/catalog";
 import { MakeScreen } from "./screens/make";
 import { SearchScreen } from "./screens/search";
@@ -139,9 +140,30 @@ export function App({
   const reloadAi = useCallback(async () => setAi(await createAiClient(platform.secrets)), [platform]);
   const changed = useCallback(() => setVersion((v) => v + 1), []);
 
+  // Every screen but Settings waits on this: see platform/license.ts.
+  const [access, setAccess] = useState<LicenseAccess | null>(null);
+  const refreshAccess = useCallback(async () => {
+    try {
+      setAccess(await platform.license.access());
+    } catch {
+      // The Keychain is locked for a moment; the next read tries again.
+    }
+  }, [platform]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refreshAccess();
+  }, [refreshAccess, version]);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    const handle = CapacitorApp.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) void refreshAccess();
+    });
+    return () => void handle.then((h) => h.remove());
+  }, [refreshAccess]);
+
   const value: AppContextValue = useMemo(
-    () => ({ platform, db, ai, reloadAi, navigate, back, selectTab, version, changed, openTutor, wide }),
-    [platform, db, ai, reloadAi, navigate, back, selectTab, version, changed, openTutor, wide],
+    () => ({ platform, db, ai, reloadAi, navigate, back, selectTab, version, changed, openTutor, wide, access, refreshAccess }),
+    [platform, db, ai, reloadAi, navigate, back, selectTab, version, changed, openTutor, wide, access, refreshAccess],
   );
 
   // Hardware keyboards on iPad: ⌘1–4 for the tabs, / to search, Esc to go back.
@@ -190,6 +212,23 @@ export function App({
     [platform, reloadAi],
   );
 
+  // License links from the web purchase page (meganstudy://license?token=…).
+  const seenLicenseLinks = useRef(new Set<string>());
+  const saveLicenseFromLink = useCallback(
+    async (url: string) => {
+      if (seenLicenseLinks.current.has(url) || !platform.license.activate) return;
+      seenLicenseLinks.current.add(url);
+      const { tokenFromLicenseLink } = await import("@megan/core/license/companion");
+      const token = tokenFromLicenseLink(url);
+      const result = token
+        ? await platform.license.activate(token, "key")
+        : { ok: false as const, message: "That link doesn't hold a license key." };
+      await refreshAccess();
+      window.alert(result.ok ? "Your license is active. Megan Study is unlocked on this device." : result.message);
+    },
+    [platform, refreshAccess],
+  );
+
   // Shared decks: the file the app was opened with, then any opened later.
   useEffect(() => {
     let cleanup = () => {};
@@ -197,6 +236,8 @@ export function App({
       const open = async (url: string) => {
         const { isKeyLink } = await import("@megan/core/share/key-link");
         if (isKeyLink(url)) return saveKeyFromLink(url);
+        const { isLicenseLink } = await import("@megan/core/license/companion");
+        if (isLicenseLink(url)) return saveLicenseFromLink(url);
         const deck = await importFromUrl(db, url);
         if (!deck) return;
         changed();
@@ -207,7 +248,22 @@ export function App({
       cleanup = listenForSharedDecks((url) => void open(url));
     });
     return () => cleanup();
-  }, [db, changed, pendingImport, saveKeyFromLink]);
+  }, [db, changed, pendingImport, saveKeyFromLink, saveLicenseFromLink]);
+
+  // The license the student's computer put in the sync folder. A key typed
+  // in on this device is kept; otherwise the newest one that checks out wins.
+  const takeDesktopLicense = useCallback(
+    async (licenses: string[]) => {
+      if (!platform.license.activate) return;
+      const now = await platform.license.access();
+      if (now.source === "license") return;
+      for (const token of licenses) {
+        if ((await platform.license.activate(token, "desktop")).ok) break;
+      }
+      await refreshAccess();
+    },
+    [platform, refreshAccess],
+  );
 
   // Folder sync, when a folder is chosen in Settings: on opening, coming back
   // to the app, leaving it, every minute, and a few seconds after an edit.
@@ -220,10 +276,11 @@ export function App({
     try {
       const result = await runSync(db, pluginSyncFolder);
       if (result && result.received > 0) changed();
+      if (result?.licenses.length) await takeDesktopLicense(result.licenses);
     } catch {
       // Offline or the folder is unavailable; the next round tries again.
     }
-  }, [db, changed]);
+  }, [db, changed, takeDesktopLicense]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -284,9 +341,9 @@ export function App({
           </p>
         )}
         <main className="content" key={`${tab}:${stack.length}`}>
-          {render(current)}
+          {access && !access.full && tab !== "settings" ? <LockedScreen /> : render(current)}
         </main>
-        {wide && tutor ? (
+        {wide && tutor && access?.full !== false ? (
           <aside className="tutor-panel" aria-label="Tutor">
             <div className="tutor-panel-head">
               <h2>Tutor</h2>

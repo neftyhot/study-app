@@ -27,7 +27,7 @@ import type {
   SqlValue,
 } from "@megan/core/platform/types";
 
-import { developmentLicense } from "./license";
+import { nativeVerifier, phoneLicense } from "./license";
 import { pickWithInput, toBase64 } from "./shared";
 
 export const DATABASE_NAME = "study-app";
@@ -239,6 +239,6 @@ export async function createIosPlatform(): Promise<Platform> {
     notifications: iosNotifier,
     speech: iosSpeech,
     haptics: iosHaptics,
-    license: developmentLicense,
+    license: phoneLicense(iosSecrets, nativeVerifier, typeof __SERVER_URL__ === "string" ? __SERVER_URL__ : ""),
   };
 }

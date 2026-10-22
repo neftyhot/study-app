@@ -165,17 +165,19 @@ describe("the Stripe webhook", () => {
     expect(kv.data.has(`machine:${MACHINE}`)).toBe(true);
   });
 
-  it("acknowledges but does not mint without a usable machine id", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      for (const bad of [null, "", "has spaces", "x".repeat(201)]) {
-        const response = await webhook(checkoutEvent({ client_reference_id: bad }));
-        expect(response.status).toBe(200);
-      }
-      expect(kv.data.size).toBe(0);
-    } finally {
-      error.mockRestore();
+  it("mints a phone-only key when bought on the web with no usable machine id", async () => {
+    for (const [i, bad] of [null, "", "has spaces", "x".repeat(201)].entries()) {
+      const id = `cs_test_web${i}`;
+      const response = await webhook(checkoutEvent({ id, client_reference_id: bad }));
+      expect(response.status).toBe(200);
+      const record = JSON.parse(kv.data.get(`session:${id}`)!) as { machineId: string };
+      expect(record.machineId).toMatch(/^phone-[0-9a-f-]{36}$/);
     }
+
+    const page = await (await get("/success?session_id=cs_test_web0")).text();
+    expect(page).toContain('href="meganstudy://license?token=');
+    expect(page).toContain("Settings → License");
+    expect(page).not.toContain("Already have a license?");
   });
 
   it("ignores other events, and other payment links when one is pinned", async () => {

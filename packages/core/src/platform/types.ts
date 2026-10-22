@@ -103,15 +103,25 @@ export type LicenseAccess = {
   source: "license" | "trial" | "development" | "desktop-link" | "none";
   /** Days left in a trial, when there is one. */
   trialDaysLeft?: number;
+  /** Why access is closed, when it is: see LOCK_MESSAGES in license/companion.ts. */
+  reason?: "trial_ended" | "revoked" | "unconfirmed" | "expired" | "clock";
 };
+
+/** The outcome of offering a key: `message` says why one was refused. */
+export type LicenseActivation = { ok: true; access: LicenseAccess } | { ok: false; message: string };
 
 /**
  * Who may use the app. The desktop answers from its existing license and
- * trial code, unchanged; iOS has no purchasing yet and answers "full" in
- * development (see docs/MOBILE_ARCHITECTURE.md for the options).
+ * trial code, unchanged. iOS sells nothing: it opens with the desktop's key,
+ * synced from the computer or pasted in after buying on the web (see
+ * packages/core/src/license/companion.ts).
  */
 export interface LicenseProvider {
   access(): Promise<LicenseAccess>;
+  /** Takes a key from the computer's sync file or typed in. iOS only. */
+  activate?(token: string, from: "desktop" | "key"): Promise<LicenseActivation>;
+  /** Removes a typed-in key from this device. iOS only. */
+  deactivate?(): Promise<void>;
 }
 
 /* ------------------------------------------------------------------- Bundle */

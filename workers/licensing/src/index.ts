@@ -3,7 +3,8 @@
  *
  *   POST /stripe/webhook   Stripe → here. On a paid checkout, mint a
  *                          `lifetime` key for the machine id Stripe carried
- *                          back as `client_reference_id`, and keep it. On a
+ *                          back as `client_reference_id` (or, bought on the
+ *                          web with none, a phone-only key), and keep it. On a
  *                          full refund or a dispute, revoke that key.
  *   GET  /license/:machine The app polls this after opening checkout, and
  *                          activates with whatever it gets — after verifying
@@ -110,6 +111,8 @@ const SIGNATURE_TOLERANCE_S = 300;
 
 /** Stripe's own limit for client_reference_id, and what a machine id looks like. */
 const MACHINE_ID = /^[A-Za-z0-9_-]{1,200}$/;
+/** Marks a key bought on the web for the phone app alone (no computer's id). */
+const PHONE_PREFIX = "phone-";
 const SESSION_ID = /^cs_[A-Za-z0-9_]{1,250}$/;
 
 export type IssuedLicense = {
@@ -291,17 +294,15 @@ async function handleWebhook(request: Request, env: Env): Promise<Response> {
     return json({ received: true, ignored: "other payment link" });
   }
 
-  const machineId = session.client_reference_id?.trim() ?? "";
-  if (!MACHINE_ID.test(machineId)) {
-    // Paid, but with no machine to bind to (the link was opened outside the
-    // app). Acknowledged so Stripe stops retrying; it needs a hand-minted key.
-    console.error(`[licensing] ${session.id} paid with no usable client_reference_id`);
-    return json({ received: true, unbound: true });
-  }
-
   // Stripe retries and may deliver twice; one purchase is one key.
   const existing = await env.LICENSES.get(`session:${session.id}`);
   if (existing) return json({ received: true, duplicate: true });
+
+  // Bought on the web with no computer to bind to — someone who wants only
+  // the iPhone app, which sells nothing itself. The phone takes any lifetime
+  // key, so this one is minted for a made-up id the success page recognises.
+  const reference = session.client_reference_id?.trim() ?? "";
+  const machineId = MACHINE_ID.test(reference) ? reference : `${PHONE_PREFIX}${crypto.randomUUID()}`;
 
   const issued = await mintLifetimeLicense(env.LICENSE_PRIVATE_KEY, {
     machineId,
@@ -678,7 +679,18 @@ async function handleSuccess(sessionId: string, env: Env): Promise<Response> {
     );
   }
 
-  const { token } = JSON.parse(record) as IssuedLicense;
+  const { token, machineId } = JSON.parse(record) as IssuedLicense;
+  if (machineId.startsWith(PHONE_PREFIX)) {
+    const link = `meganstudy://license?token=${encodeURIComponent(token)}`;
+    return page(
+      "Thank you — Megan Study is yours",
+      `<p>On your iPhone, tap the button below to open Megan Study with your license. Or open Megan Study, go to <b>Settings → License</b> and paste this key:</p>
+<p><a class="button" href="${escapeHtml(link)}">Open in Megan Study</a></p>
+<textarea id="key" readonly rows="6">${escapeHtml(token)}</textarea>
+<p><button type="button" onclick="navigator.clipboard.writeText(document.getElementById('key').value);this.textContent='Copied'">Copy key</button></p>
+<p class="muted">Keep a copy somewhere safe — you can paste it again on a new phone.</p>`,
+    );
+  }
   return page(
     "Thank you — Megan Study is yours",
     `<p>Megan Study should unlock by itself within a few seconds. If it has not, click <b>Already have a license?</b> in the app and paste this key:</p>
@@ -713,6 +725,7 @@ ${head}
   main { max-width: 34rem; margin: 0 auto; }
   textarea { width: 100%; box-sizing: border-box; font: 12px/1.4 ui-monospace, Menlo, monospace; padding: 8px; }
   button { font: inherit; padding: 6px 14px; cursor: pointer; }
+  a.button { display: inline-block; padding: 10px 18px; border-radius: 8px; background: #2563eb; color: #fff; text-decoration: none; font-weight: 600; }
   .muted { opacity: 0.7; font-size: 14px; }
 </style>
 </head>
