@@ -17,7 +17,8 @@ import {
 } from "@/db/schema";
 import { MINUTES } from "@/lib/plan/estimate";
 
-import { qualityForGrade, scheduleFor } from "@/lib/srs";
+import { scheduleFor } from "@/lib/srs";
+import { flipGradeRow } from "@megan/core/study/record";
 
 import { applyFlashcardGrade, type Grade } from "./grade";
 import { buildQueue, type QueueCard, type QueueFilter } from "./queue";
@@ -378,16 +379,9 @@ export function gradeCard(
     .where(eq(studyProgress.flashcardId, cardId))
     .get();
 
-  const update = applyFlashcardGrade(current, grade);
-
   // A flip-card grade is given after the answer was revealed, so it moves the
   // review schedule but can never establish multi-day retention (PRD §6).
-  const schedule = scheduleFor(current, update.state, {
-    quality: qualityForGrade(grade),
-    retentionEligible: false,
-  });
-
-  const row = { ...update, ...schedule };
+  const row = flipGradeRow(current, grade);
 
   if (current) {
     db.update(studyProgress)

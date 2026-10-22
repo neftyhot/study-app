@@ -81,6 +81,8 @@ export function snapshotGuide(db: Db, examId: string): DeckGuide | null {
     definition: texts(s.definition),
     breakdown: texts(s.breakdown),
     example: texts(s.example),
+    // The "common mistake" box, which insertDeck writes back on the other end.
+    misconception: s.counterExample ?? null,
   });
 
   const grouped = topics.map((t) => ({

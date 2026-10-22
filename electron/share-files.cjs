@@ -9,8 +9,14 @@
  * The window is only ever given the file's text, never a path, and only for a
  * file with this extension and a sane size. Turning it into a deck happens on
  * the server through the same check as a file picked by hand.
+ *
+ * The other direction, "Send to my iPhone/iPad": the window hands over a
+ * deck's text and a name, it is written to a private temporary folder, and
+ * macOS's share menu offers AirDrop (and Messages, Mail, Notes). Where there
+ * is no share menu the student saves it instead and moves it over by hand.
  */
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const EXTENSION = ".meganstudy";
@@ -56,6 +62,46 @@ function installShareFileHandlers({ app, singleInstance }) {
   return true;
 }
 
+/** A name safe to write: no folders, always this extension. */
+function outgoingName(name) {
+  const base = path.basename(typeof name === "string" ? name : "").replace(/[^\w .()-]/g, "").trim();
+  const stem = base.toLowerCase().endsWith(EXTENSION) ? base.slice(0, -EXTENSION.length) : base;
+  return `${stem || "deck"}${EXTENSION}`;
+}
+
+/**
+ * Hands a deck to the share menu. Resolves "shared" once the menu closes
+ * (macOS does not say which target was picked), "saved" after the save
+ * dialog, or "cancelled".
+ */
+async function sendShareFile({ electron, window, name, text }) {
+  if (typeof text !== "string" || !text || Buffer.byteLength(text) > MAX_BYTES) {
+    return { result: "error", message: "That deck is too large to send." };
+  }
+  const fileName = outgoingName(name);
+
+  if (process.platform === "darwin" && electron.ShareMenu) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "megan-send-"));
+    const filePath = path.join(dir, fileName);
+    fs.writeFileSync(filePath, text, "utf8");
+    const menu = new electron.ShareMenu({ filePaths: [filePath] });
+    await new Promise((resolve) => menu.popup({ window, callback: resolve }));
+    // AirDrop copies the file before the menu reports closing; tidy up later
+    // rather than race a slow transfer.
+    setTimeout(() => fs.rm(dir, { recursive: true, force: true }, () => {}), 10 * 60 * 1000).unref?.();
+    return { result: "shared" };
+  }
+
+  const { canceled, filePath } = await electron.dialog.showSaveDialog(window, {
+    title: "Save the deck to move to your iPhone or iPad",
+    defaultPath: path.join(electron.app.getPath("downloads"), fileName),
+    filters: [{ name: "Megan Study deck", extensions: [EXTENSION.slice(1)] }],
+  });
+  if (canceled || !filePath) return { result: "cancelled" };
+  fs.writeFileSync(filePath, text, "utf8");
+  return { result: "saved" };
+}
+
 /** Hooks the app window up once it exists. */
 function registerShareFiles({ app, ipcMain, fromApp, getWindows }) {
   const focus = () => {
@@ -91,6 +137,17 @@ function registerShareFiles({ app, ipcMain, fromApp, getWindows }) {
       }
     });
   });
+
+  ipcMain.handle("share:send", async (event, request) => {
+    if (!fromApp(event)) return { result: "error", message: "Not allowed." };
+    const electron = require("electron");
+    const window = electron.BrowserWindow.fromWebContents(event.sender) ?? getWindows()[0];
+    try {
+      return await sendShareFile({ electron, window, name: request?.name, text: request?.text });
+    } catch {
+      return { result: "error", message: "The deck couldn't be sent." };
+    }
+  });
 }
 
-module.exports = { installShareFileHandlers, registerShareFiles };
+module.exports = { installShareFileHandlers, registerShareFiles, outgoingName };

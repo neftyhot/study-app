@@ -1,0 +1,13 @@
+{
+  "name": "@megan/core",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The study logic shared by the desktop and iOS apps: scheduling, Learn, grading, plans, sharing formats.",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "dependencies": {
+    "@google/genai": "^2.23.0"
+  }
+}

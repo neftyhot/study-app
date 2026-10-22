@@ -9,7 +9,7 @@
  * who has already rebuilt a deck elsewhere cannot get the detail back.
  */
 import { useState } from "react";
-import { Check, Copy, Download, FileDown, Loader2 } from "lucide-react";
+import { Check, Copy, Download, FileDown, Loader2, Smartphone } from "lucide-react";
 import { toast } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
@@ -112,8 +112,11 @@ export function ExportDialog({
   const [text, setText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const target = TARGETS.find((item) => item.id === format)!;
+  // Only the desktop app can open the share menu; a browser just downloads.
+  const canSendToPhone = typeof window !== "undefined" && Boolean(window.studyApp?.shareFiles?.send);
 
   function href(inline = false) {
     if (format === "backup") return `/api/exams/${examId}/export`;
@@ -152,6 +155,32 @@ export function ExportDialog({
     } catch {
       // Clipboard permission can be refused; the textarea is still selectable.
       toast.error("Could not reach the clipboard. Select the text and copy it.");
+    }
+  }
+
+  /** "Send to my iPhone/iPad": the desktop app's share menu, where AirDrop is. */
+  async function sendToPhone() {
+    const send = window.studyApp?.shareFiles?.send;
+    if (!send) return;
+    setSending(true);
+    try {
+      const response = await fetch(href());
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? "The deck couldn't be prepared.");
+      }
+      const name =
+        /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ??
+        "deck.meganstudy";
+      const sent = await send({ name, text: await response.text() });
+      if (sent.result === "error") throw new Error(sent.message);
+      if (sent.result === "saved") {
+        toast.success("Saved. Open it on your iPhone or iPad from the Files app.");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "The deck couldn't be sent.");
+    } finally {
+      setSending(false);
     }
   }
 
@@ -291,12 +320,25 @@ export function ExportDialog({
               </span>
             </label>
           ) : null}
-          <Button asChild className="w-fit">
-            <a href={href()} download>
-              <Download className="size-4" />
-              Download {target.extension === "paste" ? ".txt" : target.extension}
-            </a>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild className="w-fit">
+              <a href={href()} download>
+                <Download className="size-4" />
+                Download {target.extension === "paste" ? ".txt" : target.extension}
+              </a>
+            </Button>
+            {format === "share" && canSendToPhone ? (
+              <Button
+                variant="outline"
+                className="w-fit"
+                disabled={sending}
+                onClick={() => void sendToPhone()}
+              >
+                {sending ? <Loader2 className="size-4 animate-spin" /> : <Smartphone className="size-4" />}
+                Send to my iPhone/iPad
+              </Button>
+            ) : null}
+          </div>
           </>
         )}
       </DialogContent>

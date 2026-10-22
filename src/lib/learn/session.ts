@@ -37,7 +37,8 @@ import {
   type RoundState,
   type Step,
 } from "./ladder";
-import { addDays, qualityForVerdict, scheduleFor, todayIso } from "@/lib/srs";
+import { scheduleFor } from "@/lib/srs";
+import { forMode, learnOutcomeRow } from "@megan/core/study/record";
 
 import { applyLearnResult } from "./progress";
 import type { TypedGrade } from "./typed";
@@ -223,24 +224,7 @@ export type SubmitResult = {
   roundComplete: boolean;
 };
 
-/**
- * Cramming brings every card back tomorrow.
- *
- * The interval and ease are kept, so once the exam is over the card carries on
- * spacing out from where the scheduler put it; only the next date is pulled in.
- */
-export function forMode<T extends { nextReviewDue: string | null }>(
-  schedule: T,
-  mode: LearnMode | undefined,
-  today = todayIso(),
-): T {
-  if (mode !== "cram") return schedule;
-  const tomorrow = addDays(today, 1);
-  const due = schedule.nextReviewDue;
-  return due !== null && due <= tomorrow
-    ? schedule
-    : { ...schedule, nextReviewDue: tomorrow };
-}
+export { forMode };
 
 /**
  * Records one answer: progress first, then the ladder.
@@ -274,25 +258,7 @@ export function submitOutcome(
     .where(eq(studyProgress.flashcardId, cardId))
     .get();
 
-  const update = applyLearnResult(current, {
-    stage: step.stage,
-    correct: outcome.correct,
-    guessed: outcome.guessed,
-    countsTowardMastery: step.countsTowardMastery,
-    metPoints: outcome.metPoints,
-  });
-
-  const schedule = scheduleFor(current, update.state, {
-    quality: qualityForVerdict(
-      outcome.verdict ?? (outcome.correct ? "correct" : "incorrect"),
-    ),
-    // Only an unaided recall after other concepts intervened can prove
-    // multi-day retention; an MCQ or a just-revealed answer cannot.
-    retentionEligible: step.countsTowardMastery,
-    guessed: outcome.guessed,
-  });
-
-  const row = { ...update, ...forMode(schedule, session.roundState.mode) };
+  const row = learnOutcomeRow(current, step, outcome, session.roundState.mode);
 
   if (current) {
     db.update(studyProgress)

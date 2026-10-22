@@ -19,10 +19,10 @@ export async function SiteHeader() {
 
   return (
     <header data-reveal className="border-b sticky top-0 z-40 bg-background/80 backdrop-blur">
-      <div className="mx-auto flex h-14 w-full max-w-(--content-width) items-center gap-3 px-4">
-        <Link href="/" aria-label="Megan Study, home" className="flex items-center gap-2 font-semibold">
+      <div className="flex h-14 w-full items-center gap-3 px-4">
+        <Link href="/" aria-label="Megan Study, home" className="flex items-center gap-2">
           <GraduationCap className="size-5" aria-hidden />
-          <span data-launch-target className="hidden sm:inline">
+          <span data-launch-target className="wordmark text-2xl leading-none whitespace-nowrap">
             Megan Study
           </span>
         </Link>

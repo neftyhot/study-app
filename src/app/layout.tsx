@@ -69,6 +69,19 @@ const atkinson = localFont({
   ],
 });
 
+/**
+ * Dancing Script, the launch wordmark and header logo's handwriting. Shipped
+ * in the app (OFL, see fonts/dancing-script/OFL.txt) like Atkinson.
+ */
+const script = localFont({
+  variable: "--font-script",
+  display: "block",
+  src: [
+    { path: "./fonts/dancing-script/dancing-script-latin-600-normal.woff2", weight: "600", style: "normal" },
+    { path: "./fonts/dancing-script/dancing-script-latin-700-normal.woff2", weight: "700", style: "normal" },
+  ],
+});
+
 export const metadata: Metadata = {
   title: "Megan Study",
   description:
@@ -104,7 +117,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${nunito.variable} ${atkinson.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${nunito.variable} ${atkinson.variable} ${script.variable} h-full antialiased`}
     >
       <head>
         {/* The student's colors, corners and sizes, in place before first

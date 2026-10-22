@@ -31,7 +31,12 @@
     "license-manager:selftest": "electron tools/license-manager/selftest.js",
     "tutor:check": "tsx --env-file=.env.local scripts/tutor-check.ts",
     "generate:bench": "tsx --env-file=.env.local scripts/generate-bench.ts",
-    "coverage:bench": "tsx --env-file=.env.local scripts/coverage-bench.ts"
+    "coverage:bench": "tsx --env-file=.env.local scripts/coverage-bench.ts",
+    "mobile:build": "npm --prefix mobile run build",
+    "mobile:check": "npm --prefix mobile run typecheck && npm --prefix mobile run build",
+    "mobile:sync": "npm --prefix mobile run sync",
+    "mobile:open": "npm --prefix mobile run open",
+    "mobile:ios": "npm --prefix mobile run ios"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.3.0",

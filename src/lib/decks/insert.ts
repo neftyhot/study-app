@@ -19,43 +19,10 @@ import {
   primerSections,
   primerTopics,
 } from "@/db/schema";
-import type { CitedSentence, CounterExample } from "@/lib/primer/types";
+import type { DeckSnapshot } from "@megan/core/decks/types";
+import type { CitedSentence } from "@/lib/primer/types";
 
-export type DeckCard = {
-  topic: string | null;
-  question: string;
-  directAnswer: string;
-  fullExplanation: string | null;
-  cardType: string;
-  sourceExcerpt: string | null;
-  essentialPoints: string[];
-  /** Wrong answers students give; a paper's multiple-choice options without a model. */
-  misconceptions?: string[];
-};
-
-export type DeckSection = {
-  conceptName: string;
-  definition: string[];
-  breakdown: string[];
-  example: string[];
-  /** A common mistake about the concept, shown in the guide. */
-  misconception?: CounterExample | null;
-};
-
-export type DeckGuide = {
-  overview: string | null;
-  topics: { title: string; intro: string; sections: DeckSection[] }[];
-};
-
-export type DeckSnapshot = {
-  title: string;
-  course: string;
-  term: string | null;
-  cards: DeckCard[];
-  guide: DeckGuide | null;
-  /** Recorded as the guide's model, so it is clear where the guide came from. */
-  origin: string;
-};
+export type { DeckCard, DeckGuide, DeckSection, DeckSnapshot } from "@megan/core/decks/types";
 
 const cite = (text: string): CitedSentence => ({
   text,

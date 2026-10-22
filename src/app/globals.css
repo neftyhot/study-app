@@ -549,20 +549,27 @@ html[data-splash="exit"] [data-launch-target] {
   text-align: center;
   color: var(--foreground);
 }
+/* The handwritten wordmark: the splash and the header logo it lands on
+   share it, so the hand-off is the same letters at a smaller size. */
+.wordmark,
+.launch-words {
+  font-family: var(--font-script), "Snell Roundhand", "Apple Chancery", cursive;
+  font-weight: 700;
+  letter-spacing: 0;
+}
 .launch-words {
   display: flex;
-  gap: 0.25em;
-  font-size: clamp(3rem, 13vw, 11rem);
-  font-weight: 800;
-  letter-spacing: -0.055em;
-  line-height: 1;
+  gap: 0.3em;
+  font-size: clamp(3.25rem, 14vw, 11.5rem);
+  line-height: 1.1;
   white-space: nowrap;
 }
 .launch-line {
   display: inline-block;
   overflow: hidden;
-  /* Room for descenders inside the clip. */
-  padding-bottom: 0.08em;
+  /* Room inside the clip for the script's loops and descenders. */
+  padding: 0.05em 0.12em 0.18em;
+  margin: -0.05em -0.12em -0.18em;
 }
 .launch-word {
   display: inline-block;

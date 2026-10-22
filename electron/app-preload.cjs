@@ -40,6 +40,8 @@ contextBridge.exposeInMainWorld("studyApp", {
   // never a path. See share-files.cjs.
   shareFiles: {
     take: () => ipcRenderer.invoke("share:take"),
+    // "Send to my iPhone/iPad": the share menu (AirDrop) on a Mac, a save dialog elsewhere.
+    send: (request) => ipcRenderer.invoke("share:send", request),
     onAvailable: (listener) => {
       const forward = () => listener();
       ipcRenderer.on("share:available", forward);

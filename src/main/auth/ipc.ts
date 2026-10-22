@@ -208,7 +208,13 @@ export type ShareFilesApi = {
   take(): Promise<OpenedShareFile[]>;
   /** Called when another file arrives; returns an unsubscribe. */
   onAvailable(listener: () => void): () => void;
+  /** Offers a deck to AirDrop and the share menu (macOS) or a save dialog. */
+  send?(request: { name: string; text: string }): Promise<SendShareResult>;
 };
+
+export type SendShareResult =
+  | { result: "shared" | "saved" | "cancelled" }
+  | { result: "error"; message: string };
 
 /** "Open at login" (electron/reminders.cjs). Unsupported outside a packaged app. */
 export type LoginItemState = { supported: boolean; openAtLogin: boolean };

@@ -21,6 +21,10 @@ const eslintConfig = defineConfig([
     "tools/**",
     // Packaged admin tooling: built artifacts, not source.
     "dist-admin/**",
+    // The iOS app's build output, native project and its own dependencies.
+    "mobile/dist/**",
+    "mobile/ios/**",
+    "mobile/node_modules/**",
   ]),
 ]);
 

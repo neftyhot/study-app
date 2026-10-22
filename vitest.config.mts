@@ -4,10 +4,13 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    alias: { "@": resolve(import.meta.dirname, "./src") },
+    alias: {
+      "@megan/core": resolve(import.meta.dirname, "./packages/core/src"),
+      "@": resolve(import.meta.dirname, "./src"),
+    },
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts", "workers/**/src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "packages/**/src/**/*.test.ts", "workers/**/src/**/*.test.ts", "mobile/src/**/*.test.ts"],
   },
 });
