@@ -89,12 +89,16 @@ export async function scanImage(provider: LlmProvider, image: ChatImage): Promis
   return cleanCards(data?.cards ?? []);
 }
 
-export function cleanCards(cards: Partial<ExtractedCard>[]): ExtractedCard[] {
+export function cleanCards(
+  cards: Partial<ExtractedCard>[],
+  limit = CARDS_PER_IMAGE,
+  fallbackTopic = SCAN_TOPIC,
+): ExtractedCard[] {
   return cards
     .filter((card) => card.question?.trim() && card.directAnswer?.trim())
-    .slice(0, CARDS_PER_IMAGE)
+    .slice(0, limit)
     .map((card) => ({
-      topic: card.topic?.trim() || SCAN_TOPIC,
+      topic: card.topic?.trim() || fallbackTopic,
       question: card.question!.trim(),
       directAnswer: card.directAnswer!.trim(),
       fullExplanation: card.fullExplanation?.trim() || undefined,

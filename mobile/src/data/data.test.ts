@@ -17,6 +17,7 @@ import * as schema from "@/db/schema";
 import { insertDeck as desktopInsertDeck } from "@/lib/decks/insert";
 import { buildShareFile as desktopBuildShareFile } from "@/lib/share/meganstudy";
 import { betterSqliteDriver } from "@/lib/platform/sqlite";
+import { createManualCards as desktopCreateManualCards } from "@/lib/cards/manual";
 import { saveScanCards as desktopSaveScanCards } from "@/lib/scan/scan";
 import { bundleMigrations } from "@megan/core/platform/migrate";
 import type { Notifier, SqlDriver } from "@megan/core/platform/types";
@@ -32,7 +33,8 @@ import { citationLabel, loadGuide } from "./guides";
 import { importShareFile, insertDeck } from "./import";
 import { planReminders, readReminders, rescheduleReminders, writeReminders } from "./reminders";
 import { ensureSampleDeck, findSampleDeck } from "./sample";
-import { createScanDeck, saveScanCards } from "./scan";
+import { saveTypedCards } from "./make";
+import { createNotesDeck, createScanDeck, saveExtractedCards, saveScanCards } from "./scan";
 import { searchCards } from "./search";
 import { readSetting, writeSetting } from "./settings";
 
@@ -261,6 +263,40 @@ describe("snap your notes", () => {
     const query =
       "SELECT f.topic, f.question, f.direct_answer, f.full_explanation, f.card_type, f.source_excerpt, f.has_ai_supplement, f.from_scan, r.essential_points, r.optional_points, r.common_misconceptions FROM flashcards f JOIN card_rubrics r ON r.flashcard_id = f.id WHERE f.from_scan = 1 ORDER BY f.question";
     expect(sqlite.prepare(query).all()).toEqual(desktop.raw.prepare(query).all());
+  });
+});
+
+describe("make a deck", () => {
+  it("saves typed cards the way the desktop's card-set editor does", async () => {
+    const cards = [
+      { front: "Capital of France", back: "Paris" },
+      { front: "  half filled ", back: "" },
+      { front: "Largest planet", back: " Jupiter " },
+    ];
+    const examId = await createNotesDeck(db, "  ", "My cards");
+    expect(await saveTypedCards(db, examId, cards)).toBe(2);
+    expect(sqlite.prepare("SELECT title FROM exams WHERE id = ?").get(examId)).toEqual({ title: "My cards" });
+
+    const desktop = desktopDb();
+    const desktopExam = desktopInsertDeck(desktop.db, { ...SAMPLE_DECK, cards: SAMPLE_DECK.cards.slice(0, 1) });
+    desktopCreateManualCards(
+      desktop.db,
+      desktopExam,
+      cards.filter((card) => card.back).map((card) => ({ question: card.front, directAnswer: card.back })),
+    );
+
+    const query =
+      "SELECT f.topic, f.question, f.direct_answer, f.full_explanation, f.card_type, f.source_excerpt, f.has_ai_supplement, f.is_user_edited, f.from_scan, r.essential_points, r.optional_points, r.common_misconceptions FROM flashcards f JOIN card_rubrics r ON r.flashcard_id = f.id WHERE f.exam_id = ? AND f.is_user_edited = 1 ORDER BY f.question";
+    expect(sqlite.prepare(query).all(examId)).toEqual(desktop.raw.prepare(query).all(desktopExam));
+  });
+
+  it("marks AI cards from a file as not scanned", async () => {
+    const examId = await createNotesDeck(db, "Lecture 3", "Notes");
+    await saveExtractedCards(db, examId, [{ question: "Q", directAnswer: "A", essentialPoints: ["A"], fromMaterial: true }], false);
+    expect(sqlite.prepare("SELECT from_scan, has_ai_supplement FROM flashcards WHERE exam_id = ?").get(examId)).toEqual({
+      from_scan: 0,
+      has_ai_supplement: 0,
+    });
   });
 });
 

@@ -11,6 +11,7 @@ import {
   ListChecks,
   MoreHorizontal,
   RotateCcw,
+  Share2,
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -76,7 +77,7 @@ export function DeckActionsMenu({
   return (
     <>
       <DropdownMenu>
-        <Hint label="Maintenance: files, export, repeats, reset">
+        <Hint label="Maintenance: files, share, export, repeats, reset">
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" aria-label="More actions">
               <MoreHorizontal className="size-4" />
@@ -104,6 +105,14 @@ export function DeckActionsMenu({
               <CalendarDays />
               {hasDate ? "Study plan" : "Set an exam date"}
             </Link>
+          </DropdownMenuItem>
+          {/* Both open the same dialog; it starts on the .meganstudy file. */}
+          <DropdownMenuItem
+            disabled={cardCount === 0}
+            onSelect={() => setExporting(true)}
+          >
+            <Share2 />
+            Share deck (.meganstudy file)
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={cardCount === 0}

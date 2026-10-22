@@ -131,8 +131,7 @@ export interface Platform {
 export const DESKTOP_ONLY_FEATURES = [
   { id: "lectures", label: "Lecture recording and transcription" },
   { id: "local-ai", label: "Local AI models" },
-  { id: "libreoffice", label: "Word and PowerPoint conversion (LibreOffice)" },
-  { id: "pptx", label: "PowerPoint import" },
+  { id: "libreoffice", label: "Old .doc and .ppt files (LibreOffice)" },
   { id: "occlusion", label: "Image occlusion editor" },
   { id: "bulk-edit", label: "Bulk editing" },
   { id: "catalog-publish", label: "Publishing to the catalog" },

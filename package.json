@@ -36,7 +36,8 @@
     "mobile:check": "npm --prefix mobile run typecheck && npm --prefix mobile run build",
     "mobile:sync": "npm --prefix mobile run sync",
     "mobile:open": "npm --prefix mobile run open",
-    "mobile:ios": "npm --prefix mobile run ios"
+    "mobile:ios": "npm --prefix mobile run ios",
+    "ios:update": "node scripts/ios-update.mjs"
   },
   "dependencies": {
     "@aiden0z/pptx-renderer": "^1.3.0",

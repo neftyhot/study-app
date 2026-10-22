@@ -11,6 +11,14 @@ export const SCAN_COURSE = "My notes";
 
 /** Adds the cards to a deck and returns how many were saved. */
 export async function saveScanCards(db: SqlDriver, examId: string, cards: ExtractedCard[]): Promise<number> {
+  return saveExtractedCards(db, examId, cards, true);
+}
+
+/**
+ * AI-made cards, from a photo (`fromScan`) or from a file or pasted notes.
+ * The scan marker is the only difference.
+ */
+export async function saveExtractedCards(db: SqlDriver, examId: string, cards: ExtractedCard[], fromScan: boolean): Promise<number> {
   if (cards.length === 0) return 0;
   await db.transaction(async () => {
     for (const card of cards) {
@@ -18,8 +26,17 @@ export async function saveScanCards(db: SqlDriver, examId: string, cards: Extrac
       await db.run(
         `INSERT INTO flashcards (id, exam_id, topic, question, direct_answer, full_explanation, card_type,
            source_excerpt, has_ai_supplement, from_scan)
-         VALUES (?, ?, ?, ?, ?, ?, 'atomic', NULL, ?, 1)`,
-        [cardId, examId, card.topic ?? null, card.question, card.directAnswer, card.fullExplanation ?? null, card.fromMaterial ? 0 : 1],
+         VALUES (?, ?, ?, ?, ?, ?, 'atomic', NULL, ?, ?)`,
+        [
+          cardId,
+          examId,
+          card.topic ?? null,
+          card.question,
+          card.directAnswer,
+          card.fullExplanation ?? null,
+          card.fromMaterial ? 0 : 1,
+          fromScan ? 1 : 0,
+        ],
       );
       await db.run(
         "INSERT INTO card_rubrics (id, flashcard_id, essential_points, optional_points, common_misconceptions) VALUES (?, ?, ?, '[]', ?)",
@@ -32,6 +49,11 @@ export async function saveScanCards(db: SqlDriver, examId: string, cards: Extrac
 
 /** A new, empty deck for a scan, in the "My notes" course. */
 export async function createScanDeck(db: SqlDriver, title: string): Promise<string> {
+  return createNotesDeck(db, title, "Scanned notes");
+}
+
+/** A new, empty deck in the "My notes" course. */
+export async function createNotesDeck(db: SqlDriver, title: string, fallback: string): Promise<string> {
   return db.transaction(async () => {
     const [existing] = await db.all<{ id: string }>("SELECT id FROM courses WHERE title = ? AND deleted_at IS NULL LIMIT 1", [
       SCAN_COURSE,
@@ -39,7 +61,7 @@ export async function createScanDeck(db: SqlDriver, title: string): Promise<stri
     const courseId = existing?.id ?? newId();
     if (!existing) await db.run("INSERT INTO courses (id, title) VALUES (?, ?)", [courseId, SCAN_COURSE]);
     const examId = newId();
-    await db.run("INSERT INTO exams (id, course_id, title) VALUES (?, ?, ?)", [examId, courseId, title.trim() || "Scanned notes"]);
+    await db.run("INSERT INTO exams (id, course_id, title) VALUES (?, ?, ?)", [examId, courseId, title.trim() || fallback]);
     return examId;
   });
 }

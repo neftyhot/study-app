@@ -13,6 +13,7 @@ import { rescheduleReminders } from "./data/reminders";
 import { ensureSampleDeck } from "./data/sample";
 import { createAiClient } from "./platform/ai";
 import { createPlatform } from "./platform";
+import { markStarted } from "./platform/updates";
 import { launchUrl } from "./share-intake";
 import { applyTheme, followSystem, readAppearance, readTheme } from "./theme";
 
@@ -44,6 +45,8 @@ async function start() {
         <App platform={platform} initialAi={ai} pendingImport={pending} />
       </StrictMode>,
     );
+    // This version started: an in-app update that never gets here is rolled back.
+    void markStarted();
   } catch (error) {
     root.render(
       <div className="fatal" role="alert">

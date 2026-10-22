@@ -10,6 +10,7 @@ import type { Platform, SqlDriver } from "@megan/core/platform/types";
 import type { LlmProvider } from "@megan/core/llm/types";
 
 import { LaunchSplash } from "./components/splash";
+import { UpdateBanner } from "./components/update-banner";
 import { AppContext, TABS, type AppContextValue, type Route, type Tab } from "./context";
 import { createAiClient } from "./platform/ai";
 import { CardsScreen } from "./screens/cards";
@@ -19,6 +20,7 @@ import { ExamScreen } from "./screens/exam";
 import { GuideScreen } from "./screens/guide";
 import { HomeScreen } from "./screens/home";
 import { LearnScreen } from "./screens/learn";
+import { MakeScreen } from "./screens/make";
 import { SearchScreen } from "./screens/search";
 import { SettingsScreen } from "./screens/settings";
 import { SnapScreen } from "./screens/snap";
@@ -66,6 +68,8 @@ function render(route: Route) {
       return <TutorScreen examId={route.examId} />;
     case "snap":
       return <SnapScreen />;
+    case "make":
+      return <MakeScreen />;
     case "desktop":
       return <DesktopScreen feature={route.feature} />;
   }
@@ -226,6 +230,7 @@ export function App({
           </nav>
         )}
       </div>
+      <UpdateBanner />
       <LaunchSplash />
     </AppContext.Provider>
   );

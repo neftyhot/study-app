@@ -20,14 +20,30 @@ import {
 import { DESKTOP_ONLY_FEATURES, type LicenseAccess } from "@megan/core/platform/types";
 import type { Reminders } from "@megan/core/reminders/reminders";
 
-import { version as appVersion } from "../../package.json";
 import { useApp } from "../context";
 import { readReminders, rescheduleReminders, writeReminders } from "../data/reminders";
 import { GEMINI_KEY, readApiKey } from "../platform/ai";
 import { readAppearance, readTheme, writeAppearance, writeTheme } from "../theme";
+import { UPDATE_EVENT } from "../components/update-banner";
 import { Button, DesktopOnly, Notice, Screen } from "../components/ui";
+import { checkForUpdate, restartIntoUpdate, runningVersion, supported as updatesSupported, type UpdateState } from "../platform/updates";
 
 import { errorText } from "./source";
+
+function updateText(state: UpdateState): string {
+  switch (state.kind) {
+    case "current":
+      return "You have the latest version.";
+    case "ready":
+      return `Version ${state.version} is downloaded. Restart to use it.`;
+    case "needs-reinstall":
+      return `Version ${state.version} needs a fresh install from Xcode, so it can't be added from here.`;
+    case "error":
+      return `Couldn't check: ${state.message}`;
+    case "unsupported":
+      return "Updates are checked in the iPhone and iPad app.";
+  }
+}
 
 const ACCESS_TEXT: Record<LicenseAccess["source"], string> = {
   license: "Licensed",
@@ -51,6 +67,21 @@ export function SettingsScreen() {
   const [hasKey, setHasKey] = useState(false);
   const [keyDraft, setKeyDraft] = useState("");
   const [message, setMessage] = useState<{ tone: "info" | "error"; text: string } | null>(null);
+  const [appVersion, setAppVersion] = useState("");
+  const [update, setUpdate] = useState<UpdateState | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    void runningVersion().then(setAppVersion);
+  }, []);
+
+  async function checkUpdates() {
+    setChecking(true);
+    const state = await checkForUpdate();
+    setChecking(false);
+    setUpdate(state);
+    window.dispatchEvent(new CustomEvent(UPDATE_EVENT, { detail: state }));
+  }
 
   useEffect(() => {
     let live = true;
@@ -261,6 +292,24 @@ export function SettingsScreen() {
           {access?.trialDaysLeft != null ? <p className="muted small">{access.trialDaysLeft} days left in the trial.</p> : null}
         </div>
       </div>
+
+      {updatesSupported() ? (
+        <div className="section">
+          <h2 className="section-title">Updates</h2>
+          <div className="panel">
+            <p className="muted small">New versions download in the app. Your cards stay as they are.</p>
+            <div className="inline">
+              <Button variant="ghost" onClick={() => void checkUpdates()} disabled={checking}>
+                {checking ? "Checking…" : "Check for updates"}
+              </Button>
+              {update?.kind === "ready" ? (
+                <Button onClick={() => void restartIntoUpdate(update.bundleId)}>Restart now</Button>
+              ) : null}
+            </div>
+            {update ? <p className="small" role="status">{updateText(update)}</p> : null}
+          </div>
+        </div>
+      ) : null}
 
       <details className="section">
         <summary className="section-title">On the desktop app</summary>

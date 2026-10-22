@@ -9,7 +9,8 @@ Branch `prelaunch`, one commit per phase. Recon is in `docs/RECON.md`.
 | 3 | `aaa7eb9` | Deck sharing, read aloud, readable font, reminders, scans, accessibility |
 | 4 | `5ee975d` | Campus-launch safeguards, landing page, signing review |
 | 5 | `03c89c6` | iOS app on a shared core |
-| 6 | this commit | Verification, upgrade and no-key walkthroughs, this report |
+| 6 | `eadcb28` | Verification, upgrade and no-key walkthroughs, this report |
+| Follow-up | this commit | iPhone in-app updates, Make a deck on iOS, Share deck menu item |
 
 Nothing was deleted. Things that moved went under an Advanced disclosure, the
 deck page's Customize section, or appear only when relevant. Licensing logic
@@ -95,8 +96,10 @@ the License Manager's Features tab). Every `where:` path in it exists.
 - **Sync.** Design only (§7). The recommendation is a file-based change log.
   The schema is already sync-ready (0031).
 - **iOS features that wait for the desktop**, shown as "Available on desktop":
-  PDF/PowerPoint ingest and generation, lectures, the catalog, the study
-  guide/primer, diagrams, drills, coverage, and Google sign-in.
+  lectures, the catalog, the study guide/primer, diagrams, drills, coverage,
+  old .doc/.ppt files, and Google sign-in. The phone makes decks from
+  PowerPoint, PDF, Word, text and CSV files (follow-up below), but without
+  the desktop's page ranges, density and coverage options.
 - **iOS show-original-slide** shows the card's source excerpt only. Slide
   images aren't stored on the phone.
 - **iOS history.** The phone records progress, but not `answer_attempts` or
@@ -107,6 +110,27 @@ the License Manager's Features tab). Every `where:` path in it exists.
   iCloud Drive, but has no native document browser.
 - **Reminders** differ by platform: on desktop they come from the running
   app; on iOS they're local notifications planned a week ahead.
+
+## Follow-up: iPhone updates, Make a deck, Share deck
+
+- **In-app updates on iOS** (`@capgo/capacitor-updater`, with stats off).
+  The app checks GitHub prereleases tagged `ios-v…` at launch and from
+  Settings → Updates. It verifies the zip's SHA-256, skips updates that need
+  a newer native app, and rolls back if an update doesn't start. How to ship
+  one: `docs/IOS_UPDATES.md`. Nothing has been published.
+- **Make a deck on iOS** (Home → Make a deck). There are three ways in:
+  - From a file. It uses the desktop's extractors, now in
+    `packages/core/src/ingest`. Word goes through mammoth's browser build.
+  - Paste text, either cards from Quizlet or Anki, or notes.
+  - Type cards by hand.
+
+  A Quizlet/Anki export or a two-column CSV becomes cards with no AI. Other
+  files are split into batches of about 1,500 words, with a cost estimate
+  shown first. A scanned PDF goes to Gemini as a document. Every path ends
+  in a review list. Typed cards are saved row-for-row like the desktop's
+  card editor (tested against `createManualCards`).
+- **Desktop: Deck ••• → Share deck (.meganstudy file)**. A direct way into
+  the existing export dialog, whose default format is already .meganstudy.
 
 ## Needs a human
 
@@ -158,7 +182,7 @@ the License Manager's Features tab). Every `where:` path in it exists.
    stars and history should all be there.
 7. Try the shortcuts on a card: Space/Enter flip, 1–3 grade, Z undo, R read
    aloud, S star. In Learn: 1–4, Enter, K.
-8. Deck ••• → Export as a `.meganstudy` file, then double-click the file in
+8. Deck ••• → **Share deck (.meganstudy file)**, then double-click the file in
    Finder. It should import as a copy.
 
 ### iOS simulator
@@ -171,9 +195,13 @@ the License Manager's Features tab). Every `where:` path in it exists.
    without a key.
 4. Settings → add a key → Tutor → ask about "card 3" → **Make cards from
    this**.
-5. Home → **Snap your notes**. The simulator has no camera, so use the photo
+5. Home → **Make a deck** → **Type cards**, fill two cards, Done, Save.
+   Then **Paste text** with a Quizlet export (term, tab, definition per
+   line) → **These are cards**. With a key, try **From a file** with a
+   .pptx from Files.
+6. Home → **Snap your notes**. The simulator has no camera, so use the photo
    picker.
-6. Turn on reminders, then check the notification permission prompt.
-7. Run on an iPad simulator to see the two-column layout.
-8. For a real device: Xcode → target App → Signing & Capabilities → choose
+7. Turn on reminders, then check the notification permission prompt.
+8. Run on an iPad simulator to see the two-column layout.
+9. For a real device: Xcode → target App → Signing & Capabilities → choose
    your team. Change the bundle ID first (see above).

@@ -26,10 +26,15 @@
     "@capacitor/share": "8.0.3",
     "@capacitor/splash-screen": "8.0.2",
     "@capacitor/status-bar": "8.0.4",
+    "@capgo/capacitor-updater": "8.52.1",
+    "fast-xml-parser": "^5.11.2",
+    "jszip": "^3.10.2",
     "lucide-react": "^1.47.0",
+    "mammoth": "^1.13.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "sql.js": "1.15.1"
+    "sql.js": "1.15.1",
+    "unpdf": "^1.9.1"
   },
   "devDependencies": {
     "@capacitor/cli": "8.5.3",

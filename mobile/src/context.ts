@@ -18,6 +18,7 @@ export type Route =
   | { name: "guide"; examId: string; title: string }
   | { name: "tutor"; examId?: string }
   | { name: "snap" }
+  | { name: "make" }
   | { name: "desktop"; feature?: string };
 
 export const TABS = ["home", "study", "search", "settings"] as const;

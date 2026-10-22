@@ -1,5 +1,5 @@
 /** Home: what is due, one tap to start, and every course and deck. */
-import { Camera, FileDown, GraduationCap } from "lucide-react";
+import { Camera, FileDown, FilePlus2, GraduationCap } from "lucide-react";
 import { useState } from "react";
 
 import { SHARE_EXTENSION } from "@megan/core/share/meganstudy";
@@ -57,6 +57,11 @@ export function HomeScreen() {
       ) : null}
 
       <div className="grid-actions">
+        <button type="button" className="action" onClick={() => navigate({ name: "make" })}>
+          <FilePlus2 aria-hidden />
+          <strong>Make a deck</strong>
+          <span>From slides, a PDF, notes or Quizlet</span>
+        </button>
         <button type="button" className="action" onClick={() => navigate({ name: "snap" })}>
           <Camera aria-hidden />
           <strong>Snap your notes</strong>
@@ -71,7 +76,7 @@ export function HomeScreen() {
 
       {data && decks.length === 0 ? (
         <Empty title="No decks yet">
-          <p>Make decks from your slides on the desktop app, open one a friend shared, or try the sample.</p>
+          <p>Make a deck from your slides or notes, open one a friend shared, or try the sample.</p>
           <Button onClick={openSample}>Try the sample deck</Button>
         </Empty>
       ) : null}

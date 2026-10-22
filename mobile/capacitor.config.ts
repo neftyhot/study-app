@@ -32,6 +32,20 @@ const config: CapacitorConfig = {
     LocalNotifications: {
       iconColor: "#111111",
     },
+    // In-app updates (src/platform/updates.ts). The app checks GitHub itself
+    // and only when asked or at start; nothing goes to Capgo's servers:
+    // statsUrl "" turns off its crash and error reports, which would break
+    // the "counts and event names only" promise.
+    CapacitorUpdater: {
+      autoUpdate: false,
+      updateUrl: "",
+      statsUrl: "",
+      channelUrl: "",
+      // A new version that fails to start within this time rolls back.
+      appReadyTimeout: 15000,
+      // Installing a new build from Xcode drops downloaded versions.
+      resetWhenUpdate: true,
+    },
   },
 };
 
