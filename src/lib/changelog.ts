@@ -16,9 +16,18 @@ export type ChangelogEntry = {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: "1.8.1",
-    date: "2026-10-21",
+    version: "1.9.0",
+    date: "2026-10-22",
     notes: [
+      "Try the sample deck: a ready-made deck to study straight away, with no API key needed.",
+      "Share a deck with a friend: open a deck's ••• menu and choose Share deck (.meganstudy file). They double-click the file to open it in Megan Study.",
+      "Read aloud: press R, or the Read aloud button, to hear a card.",
+      "Scan notes: make cards from photos of your handwritten or printed notes.",
+      "Daily reminders: turn them on in Settings to get one notification a day with how many cards are due.",
+      "An easier-to-read font option in Settings → Appearance → Font.",
+      "Math help on cards with numbers, combining the numbers panel and the calculator. Other cards keep a Calculator button.",
+      "A tidier Settings page and deck page. Less-used options are under Advanced or the deck's Customize button. Nothing was removed.",
+      "Your library is backed up automatically before every update.",
       "Flashcards count correctly: the card number, the total at the top and the Missed/Hard/Easy counts all agree, and going back to change a card's answer moves it to the new count instead of counting it twice.",
       "Pressing No clue again on the same card no longer makes it come back several times in a row. Sessions that already had a card piled up are tidied when you open them.",
       "Fewer repeated cards: new decks drop a card when another card already asks the same thing and says at least as much. To clean up a deck you already have, open its ••• menu and choose Remove repeated cards. Cards you edited yourself are never removed, and stars and progress move to the card that stays.",
